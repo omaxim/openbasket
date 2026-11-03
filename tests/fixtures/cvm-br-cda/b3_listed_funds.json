@@ -1,0 +1,11 @@
+[
+  {"type": "ETF", "id": 1001, "typeName": null, "acronym": "EXAC", "fundName": "EXEMPLO ACOES FUNDO DE ÍNDICE", "tradingName": "EXEMPLO ACOES",
+   "detail": {"idFNET": 1001, "typeFNET": "ETF", "acronym": "EXAC", "tradingCode": "EXAC11", "tradingCodeOthers": "EXAC11T", "cnpj": "11111111000111", "fundName": "EXEMPLO ACOES FUNDO DE ÍNDICE", "positionManager": "EXEMPLO GESTAO"}},
+  {"type": "ETF-RF", "id": 1002, "typeName": null, "acronym": "EXIB", "fundName": "EXEMPLO IMA-B FUNDO DE ÍNDICE", "tradingName": "EXEMPLO IMAB",
+   "detail": {"idFNET": 1002, "typeFNET": "ETF", "acronym": "EXIB", "tradingCode": "EXIB11", "cnpj": "22222222000122", "fundName": "EXEMPLO IMA-B FUNDO DE ÍNDICE", "positionManager": "EXEMPLO GESTAO"}},
+  {"type": "ETF", "id": 1003, "typeName": null, "acronym": "EXSP", "fundName": "EXEMPLO S&P 500 FUTUROS FUNDO DE ÍNDICE", "tradingName": "EXEMPLO SP",
+   "detail": {"idFNET": 1003, "typeFNET": "ETF", "acronym": "EXSP", "tradingCode": "EXSP11", "cnpj": "33333333000133", "fundName": "EXEMPLO S&P 500 FUTUROS FUNDO DE ÍNDICE", "positionManager": "EXEMPLO GESTAO"}},
+  {"type": "ETF", "id": 1004, "typeName": null, "acronym": "EXNO", "fundName": "SEM ISIN", "tradingName": "SEM ISIN",
+   "detail": {"idFNET": 1004, "acronym": "EXNO", "tradingCode": "EXNO11", "cnpj": "44444444000144", "fundName": "SEM ISIN"}},
+  {"type": "ETF", "id": 1005, "typeName": null, "acronym": "EXND", "fundName": "SEM DETALHE", "tradingName": "SEM DETALHE", "detail": null}
+]

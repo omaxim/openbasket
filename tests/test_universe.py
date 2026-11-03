@@ -308,4 +308,5 @@ def test_throttle_spaces_requests_per_host():
         t.wait("https://a.example/x")
     t.wait("https://b.example/x")
     assert time.monotonic() - start >= 0.1
-    assert t.requests == 4 and t.waited_s >= 0.09
+    # Oversleeping on a busy machine shortens the later pauses, so only bound them.
+    assert t.requests == 4 and 0 < t.waited_s <= 0.1 + 1e-6

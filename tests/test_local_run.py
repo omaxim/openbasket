@@ -76,12 +76,19 @@ def test_refuses_to_start_without_an_api(tmp_path, capsys):
     assert serve.main(["--out", str(tmp_path / "out"), "--no-assemble"]) == 1
 
 
-def test_full_pipeline_runs_everything_but_the_single_isin_lookthrough():
+@pytest.mark.parametrize("requested", [None, ["full"]])
+def test_full_pipeline_runs_everything_but_the_single_isin_lookthrough(requested):
     from kedro.framework.project import configure_project, pipelines
 
     configure_project("openbasket")
-    full = pipelines["full"]
+    # `kedro run --pipeline=full` makes Kedro import only the requested pipeline's package.
+    pipelines.set_requested(requested)
+    try:
+        full = pipelines["full"]
+    finally:
+        pipelines.set_requested(None)
     names = {n.name for n in full.nodes}
+    assert {"refresh_cvm_cda", "refresh_cnmv_iic"} <= names
     for node in ("download_nport", "nport_to_parquet", "download_issuer_products", "security_master",
                  "fund_master", "nport_holdings", "build_universe", "run_universe", "publish"):
         assert node in names

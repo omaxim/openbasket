@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FondPatrimDisVar xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="FondPatrimDisVar.xsd">
+  <FechaDatos>202606</FechaDatos>
+  <Entidad>
+    <Tipo>FI</Tipo>
+    <NumeroRegistro>9001</NumeroRegistro>
+    <CodigoDivisaIIC>EUR</CodigoDivisaIIC>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <DPInversionesFinancieras>960.00</DPInversionesFinancieras>
+      <CarteraInterior>600.00</CarteraInterior>
+      <CarteraExterior>350.00</CarteraExterior>
+      <InteresesCartera>10.00</InteresesCartera>
+      <InversionesDudosas>0.00</InversionesDudosas>
+      <Liquidez>45.00</Liquidez>
+      <Resto>-5.00</Resto>
+      <TotalPatrimonio>1000.00</TotalPatrimonio>
+    </Compartimento>
+  </Entidad>
+  <Entidad>
+    <Tipo>FI</Tipo>
+    <NumeroRegistro>9002</NumeroRegistro>
+    <CodigoDivisaIIC>EUR</CodigoDivisaIIC>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <DPInversionesFinancieras>990.00</DPInversionesFinancieras>
+      <InteresesCartera>0.00</InteresesCartera>
+      <Liquidez>10.00</Liquidez>
+      <Resto>0.00</Resto>
+      <TotalPatrimonio>1000.00</TotalPatrimonio>
+    </Compartimento>
+  </Entidad>
+</FondPatrimDisVar>

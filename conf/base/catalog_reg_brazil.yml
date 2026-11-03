@@ -1,0 +1,10 @@
+# reg_brazil -------------------------------------------------------------------
+# The CDA months and the B3 register themselves live under
+# params:reg_brazil.root (raw ZIPs and Parquet), managed by CdaStore.
+reg_brazil_manifest:
+  type: pandas.CSVDataset
+  filepath: data/01_raw/reg_brazil/manifest.csv
+
+reg_brazil_products:
+  type: pandas.ParquetDataset
+  filepath: data/01_raw/reg_brazil/products.parquet

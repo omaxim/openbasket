@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FondCart xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="FondCart.xsd">
+  <FechaDatos>202606</FechaDatos>
+  <Entidad>
+    <Tipo>FI</Tipo>
+    <NumeroRegistro>9001</NumeroRegistro>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <InversionesFinancieras>
+        <ClaseIF>INTERIOR</ClaseIF>
+        <DescripcionIF>Deuda Publica Cotizada Mas 1 Anio</DescripcionIF>
+        <CodigoISIN>ES0100000A08</CodigoISIN>
+        <DescripcionValor>BONO|ESTADO FICTICIO|1,00|2030-04-30</DescripcionValor>
+        <Divisa>EUR</Divisa>
+        <ValorMercado>500.00</ValorMercado>
+      </InversionesFinancieras>
+      <InversionesFinancieras>
+        <ClaseIF>INTERIOR</ClaseIF>
+        <DescripcionIF>Adquisicion Temporal Activos</DescripcionIF>
+        <CodigoISIN>ES0100000B07</CodigoISIN>
+        <DescripcionValor>REPO|BANCO FICTICIO|2,00|2026-07-01</DescripcionValor>
+        <Divisa>EUR</Divisa>
+        <ValorMercado>100.00</ValorMercado>
+      </InversionesFinancieras>
+      <InversionesFinancieras>
+        <ClaseIF>EXTERIOR</ClaseIF>
+        <DescripcionIF>Renta Variable Cotizada</DescripcionIF>
+        <CodigoISIN>US000000AA08</CodigoISIN>
+        <DescripcionValor>ACCIONES|FICTIVE CORP</DescripcionValor>
+        <Divisa>USD</Divisa>
+        <ValorMercado>300.00</ValorMercado>
+      </InversionesFinancieras>
+      <InversionesFinancieras>
+        <ClaseIF>EXTERIOR</ClaseIF>
+        <DescripcionIF>IIC</DescripcionIF>
+        <CodigoISIN>XX0000000000</CodigoISIN>
+        <DescripcionValor>PARTICIPACIONES|FONDO SIN ISIN VALIDO</DescripcionValor>
+        <Divisa>EUR</Divisa>
+        <ValorMercado>50.00</ValorMercado>
+      </InversionesFinancieras>
+    </Compartimento>
+  </Entidad>
+  <Entidad>
+    <Tipo>FI</Tipo>
+    <NumeroRegistro>9002</NumeroRegistro>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <InversionesFinancieras>
+        <ClaseIF>INTERIOR</ClaseIF>
+        <DescripcionIF>Renta Variable Cotizada</DescripcionIF>
+        <CodigoISIN>ES0100000A08</CodigoISIN>
+        <DescripcionValor>ACCIONES|EMPRESA FICTICIA</DescripcionValor>
+        <Divisa>EUR</Divisa>
+        <ValorMercado>990.00</ValorMercado>
+      </InversionesFinancieras>
+    </Compartimento>
+  </Entidad>
+</FondCart>

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FondRegistro xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="FondRegistro.xsd">
+  <FechaDatos>202606</FechaDatos>
+  <Entidad>
+    <Tipo>FI</Tipo>
+    <NumeroRegistro>9001</NumeroRegistro>
+    <Denominacion>FONDO FICTICIO MIXTO, FI</Denominacion>
+    <ETF>NO</ETF>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <DenominacionCompartimento>COMPARTIMENTO 0</DenominacionCompartimento>
+      <Clase>
+        <NumeroClase>1</NumeroClase>
+        <DenominacionClase>CLASE A</DenominacionClase>
+        <ISIN>ES0100000A08</ISIN>
+      </Clase>
+      <Clase>
+        <NumeroClase>2</NumeroClase>
+        <DenominacionClase>CLASE B</DenominacionClase>
+        <ISIN>ES0100000B07</ISIN>
+      </Clase>
+    </Compartimento>
+    <Gestora>
+      <TipoGestora>SGIIC </TipoGestora>
+      <NumeroRegistroGestora>1</NumeroRegistroGestora>
+      <DenominacionGestora>GESTORA FICTICIA, SGIIC, S.A.</DenominacionGestora>
+    </Gestora>
+  </Entidad>
+  <Entidad>
+    <Tipo>FI</Tipo>
+    <NumeroRegistro>9002</NumeroRegistro>
+    <Denominacion>FICTICIO INDICE ETF, FI COTIZADO</Denominacion>
+    <ETF>SI</ETF>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <DenominacionCompartimento>COMPARTIMENTO 0</DenominacionCompartimento>
+      <Clase>
+        <NumeroClase>0</NumeroClase>
+        <DenominacionClase>CLASE 0</DenominacionClase>
+        <ISIN>ES0200000A06</ISIN>
+      </Clase>
+    </Compartimento>
+  </Entidad>
+</FondRegistro>

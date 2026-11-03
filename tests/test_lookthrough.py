@@ -96,3 +96,68 @@ def test_choose_prefers_order_then_coverage():
     b = H("nport", [Line(100, "US0000000001")])
     assert choose([a, b], 90).source == "tickerinside"
     assert choose([a, b], 99).source == "nport"
+
+
+def test_depth_capped_and_empty_sub_funds_are_unexpanded_not_resolved():
+    p = FakeProviders(
+        {
+            "TOP": [H("nport", [Line(40, "US0000000010", ticker="SUB"), Line(30, "US0000000011", ticker="EMPTY"),
+                                Line(30, "US0000000001")])],
+            "SUB": [H("nport", [Line(100, "US0000000020", ticker="DEEP")])],
+            "DEEP": [H("nport", [Line(100, "US0000000002")])],
+            "EMPTY": [],
+        },
+        {"US1111111111": "TOP"},
+    )
+    r = look_through("US1111111111", p, max_depth=1)
+    s = r.summary
+    assert s["resolved_pct"] == pytest.approx(30)
+    assert s["unexpanded_fund_pct"] == pytest.approx(70)
+    assert s["unresolved_pct"] == pytest.approx(0)
+    assert s["max_depth_reached"] is True
+    notes = {x["constituent_isin"]: x["note"] for x in r.leaves}
+    assert "depth limit of 1" in notes["US0000000020"]
+    assert notes["US0000000011"] == "fund, holdings not found"
+    assert {x["asset_class"] for x in r.leaves if x["unexpanded"]} == {"fund"}
+    assert s["status"] == "partial" and "could not be looked through" in s["note"]
+
+
+@pytest.mark.parametrize(
+    "lines, name, status",
+    [
+        ([Line(99.5, "US0000000001"), Line(0.5, None)], "Plain Equity ETF", "ok"),
+        ([Line(121, "US0000000001")], "Core Bond ETF", "over_100"),
+        ([Line(70, "US0000000001")], "Some Fund", "partial"),
+        ([Line(503.95, "US0000000001"), Line(200, None)], "GraniteShares Fund", "leveraged"),
+        ([Line(100, "US0000000001")], "Direxion Daily Semiconductor Bull 3X Shares", "leveraged"),
+        ([Line(100, "US0000000001")], "ProShares UltraPro QQQ", "leveraged"),
+        ([Line(100, "US0000000001")], "iShares Ultra Short-Term Bond ETF", "ok"),
+        ([Line(100, "US0000000001")], "JPMorgan Ultra-Short Income ETF", "ok"),
+    ],
+)
+def test_plausibility_status(lines, name, status):
+    class P(FakeProviders):
+        def resolve(self, isin):
+            return FundRef("F", None, name, "test")
+
+    r = look_through("US1111111111", P({"F": [H("nport", lines)]}, {}))
+    assert r.summary["status"] == status
+    if name == "GraniteShares Fund":
+        assert "703.95%" in r.summary["note"] and "not exposure" in r.summary["note"]
+
+
+def test_unmatched_status_is_no_match():
+    assert look_through("US9999999999", FakeProviders({}, {})).summary["status"] == "no_match"
+
+
+def test_cycle_detected_across_ids():
+    class P(FakeProviders):
+        def resolve_line(self, line):
+            # The same fund, reached by its issuer id while it was entered by series id.
+            if line.ticker == "BACK":
+                return FundRef(None, None, "A again", "test", issuer_id="iss:A")
+            return super().resolve_line(line)
+
+    p = P({"A": [H("nport", [Line(100, "US0000000020", ticker="BACK")])]}, {})
+    r = look_through("X", p, ref=FundRef("A", None, "A", "test", issuer_id="iss:A"))
+    assert r.leaves[0]["note"] == "fund cycle, not expanded"

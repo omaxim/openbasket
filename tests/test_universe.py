@@ -27,8 +27,16 @@ PRODUCTS = pd.DataFrame(
         {"issuer": "spdr", "site": "emea", "portfolio_id": "emea-en-abcdx", "isin": "IE00B6YX5C33", "ticker": "ABCDX",
          "fund_name": "SPDR S&P 500 UCITS ETF", "total_net_assets": None, "product_page_url": None,
          "holdings_url": "https://spdr.example/abcdx.xlsx"},
+        # Two share classes with their own portfolio ids but one name: one fund.
+        {"issuer": "ishares", "site": "uk", "portfolio_id": "287338", "isin": "IE00BYXYYJ35", "ticker": "LQDA",
+         "fund_name": "iShares $ Corp Bond UCITS ETF", "total_net_assets": 5.4e9, "domicile": "Ireland"},
+        {"issuer": "ishares", "site": "uk", "portfolio_id": "251832", "isin": "IE0032895942", "ticker": "LQDE",
+         "fund_name": "iShares\u00a0$ Corp Bond UCITS ETF", "total_net_assets": 3.7e9, "domicile": "Ireland"},
+        # A US ETF whose N-PORT series has no ticker and no known ISIN: matched by name.
+        {"issuer": "ishares", "site": "us", "portfolio_id": "330000", "isin": "US09290C8064", "ticker": "THRO",
+         "fund_name": "iShares U.S. Thematic Rotation Active ETF", "total_net_assets": 5e9, "domicile": "United States"},
     ]
-)
+).assign(listed_on="2026-11-03")
 
 FUND_MASTER = pd.DataFrame(
     [
@@ -38,8 +46,10 @@ FUND_MASTER = pd.DataFrame(
         {"series_id": "S000000002", "series_name": "Some Mutual Fund", "series_lei": "LEI-MF", "ticker": "ABCEX", "has_nport": True, "cik": None},
         {"series_id": "S000000003", "series_name": "Private Feeder", "series_lei": None, "ticker": None, "has_nport": True, "cik": None},
         {"series_id": "S000000009", "series_name": "No Filing Yet", "series_lei": "LEI-NF", "ticker": "NOFX", "has_nport": False, "cik": None},
+        {"series_id": "S000074569", "series_name": "iShares U.S. Thematic Rotation Active ETF", "series_lei": None, "ticker": None,
+         "has_nport": True, "cik": None},
     ]
-)
+).assign(registrant_name=lambda d: d["series_id"].map({"S000000002": "Some Funds Trust"}))
 
 
 def security_master():
@@ -88,6 +98,24 @@ def test_series_keyed_by_isin_when_known_else_series_id(universe):
     assert "S000000009" not in set(universe["series_id"])  # no N-PORT filing
 
 
+def test_same_name_share_classes_are_one_fund(universe):
+    lqd = universe[universe["isins"].map(lambda x: "IE0032895942" in list(x))]
+    assert len(lqd) == 1
+    assert lqd["id"].iloc[0] == "IE00BYXYYJ35" and list(lqd["isins"].iloc[0]) == ["IE00BYXYYJ35", "IE0032895942"]
+    assert list(lqd["share_class_ids"].iloc[0]) == ["ishares-uk:287338", "ishares-uk:251832"]
+
+
+def test_series_without_ticker_or_isin_matches_by_unique_name(universe):
+    thro = universe[universe["id"] == "US09290C8064"].iloc[0]
+    assert (thro["series_id"], thro["series_match"]) == ("S000074569", "name")
+    assert not (universe["id"] == "S000074569").any()
+
+
+def test_nport_fund_issuer_is_the_registrant(universe):
+    mf = universe[universe["series_id"] == "S000000002"].iloc[0]
+    assert mf["issuer"] == "Some Funds Trust"
+
+
 def test_non_us_issuer_ticker_does_not_merge(universe):
     ucits = universe[universe["id"] == "IE00B6YX5C33"].iloc[0]
     assert ucits["series_id"] is None or pd.isna(ucits["series_id"])
@@ -118,7 +146,7 @@ def nport_holdings():
             {"series_id": "S000000002", "report_date": pd.Timestamp("2026-07-31"), "accession_number": "0000000001-26-000001",
              "isin": "US0378331005", "cusip": "037833100", "issuer_name": "Apple Inc", "issuer_title": "Apple Inc",
              "issuer_lei": "L-AAPL", "weight_pct": 60.0, "asset_cat": "EC", "issuer_type": "CORP",
-             "reported_ticker": "AAPL", "isin_source": "reported"},
+             "reported_ticker": "AAPL", "isin_source": "reported", "country": "US"},
             {"series_id": "S000000002", "report_date": pd.Timestamp("2026-07-31"), "accession_number": "0000000001-26-000001",
              "isin": "US4642872000", "cusip": "464287200", "issuer_name": "iShares Core S&P 500 ETF",
              "issuer_title": "iShares Core S&P 500 ETF", "issuer_lei": "LEI-IVV", "weight_pct": 30.0, "asset_cat": "EC",
@@ -144,8 +172,23 @@ SOURCES = {
 }
 
 
-def _run(universe, monkeypatch, tmp_path, **params):
+FAILING_FUND = "US0000000AA2"
+
+
+def _run(universe, monkeypatch, tmp_path, fail: str | None = None, **params):
+    """Run the fake universe; the fund ``fail`` raises inside the engine."""
     monkeypatch.setattr(DataProviders, "_from_issuer", issuer_holdings)
+    if fail:
+        from openbasket.pipelines.universe import nodes as unodes
+
+        real = unodes.look_through
+
+        def engine_that_breaks(isin, *a, **kw):
+            if isin == fail:
+                raise RuntimeError("engine broke")
+            return real(isin, *a, **kw)
+
+        monkeypatch.setattr(unodes, "look_through", engine_that_breaks)
     lt = {"source_order": ["issuer", "nport"], "max_depth": 4, "min_resolved_pct": 90.0, "use_openfigi": False}
     up = {"work_dir": str(tmp_path / "parts"), "rows_per_part": 2, "log_every": 2, **params}
     empty = connection().sql("select null::varchar cusip, null::varchar isin, null::varchar isin_source where false")
@@ -156,13 +199,25 @@ def _run(universe, monkeypatch, tmp_path, **params):
 
 
 def test_one_failing_fund_does_not_stop_the_batch(universe, monkeypatch, tmp_path):
-    funds, constituents, run = _run(universe, monkeypatch, tmp_path)
+    funds, constituents, run = _run(universe, monkeypatch, tmp_path, fail=FAILING_FUND)
     by_id = funds.set_index("id")
     assert len(funds) == len(universe) and run["n_attempted"] == len(universe)
-    # AGG's issuer file raised; with stop_early the series' N-PORT lines are never reached for it.
-    assert "issuer site is down" in by_id.at["US4642872265", "error"]
-    assert "issuer_holdings" in by_id.at["US4642872265", "traceback"]
+    assert "engine broke" in by_id.at[FAILING_FUND, "error"]
+    assert "engine_that_breaks" in by_id.at[FAILING_FUND, "traceback"]
+    assert by_id.at[FAILING_FUND, "status"] == "error"
     assert run["n_failed"] == 1 and run["n_ok"] == len(universe) - 1
+    # AGG's issuer site raised: that is a source failure, not a fund failure.
+    agg = by_id.loc["US4642872265"]
+    assert pd.isna(agg["error"]) and agg["status"] == "no_holdings"
+    assert "issuer=error" in agg["sources_status"]
+    assert agg["note"] == "iShares lists this fund, but no holdings were available"
+    # No holdings: dated the day the list was read, credited as listed only.
+    assert agg["as_of"] == "2026-11-03"
+    assert agg["credit"] == "Fund listed by iShares; no holdings were available from any source"
+    rows = constituents.df()
+    unres = rows[rows["fund_id"] == "US4642872265"].iloc[0]
+    assert pd.isna(unres["constituent_isin"]) and unres["source"] == "ishares" and unres["as_of"] == "2026-11-03"
+    assert unres["note"] == agg["note"] and unres["source_url"]
     assert by_id["seconds"].ge(0).all()
     ivv = by_id.loc["US4642872000"]
     assert ivv["source"] == "ishares" and ivv["resolved_pct"] == pytest.approx(99.0)
@@ -187,7 +242,8 @@ def test_fund_of_funds_rows_and_unresolved_row(universe, monkeypatch, tmp_path):
     credit = funds.set_index("id").at["US0000000AA2", "credit"]
     assert credit.startswith("SEC Form N-PORT") and "iShares" in credit
     feeder = funds.set_index("id").loc["S000000003"]
-    assert feeder["note"] == "no holdings found from any source" and feeder["source"] == "nport"
+    assert feeder["note"] == "the fund's latest N-PORT filing lists no holdings" and feeder["source"] == "nport"
+    assert feeder["status"] == "no_holdings" and feeder["matched_via"] == "series_id"
     assert feeder["source_url"].startswith("https://www.sec.gov/cgi-bin/browse-edgar")
 
 

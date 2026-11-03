@@ -14,6 +14,12 @@ issuers:
   ishares_sites: [uk, us]
   # SPDR fund finders: "us" (US ETFs, including SPY and DIA) and "emea" (UCITS).
   spdr_regions: [us, emea]
+  # Issuer adapters registered in openbasket.sources.issuers are used by
+  # `ingest` (their fund lists join issuer_products) and by the look-through
+  # (their holdings files). null uses every registered adapter; a list uses
+  # only those. `disabled` drops some either way.
+  enabled: null
+  disabled: []
 
 lookthrough:
   # Holdings sources in priority order. "issuer" is iShares and SPDR;
@@ -26,19 +32,25 @@ lookthrough:
   use_openfigi: true
   enrich_openfigi: true
   openfigi_cache: data/03_primary/openfigi_cache.parquet
-  # Issuer responses, one file per fund per day.
+  # Issuer responses, one file per fund per day, written only once they parse.
   issuer_cache_dir: data/01_raw/issuers/holdings
+  # An ISIN or CUSIP that N-PORT reports under more than this many issuer
+  # LEIs is a placeholder or an error and is not used to match a fund.
+  max_issuer_leis_per_isin: 3
   # Funds with no free full holdings, mapped to a fund on the same index.
-  # Output rows from a proxy say so in matched_via and note. Example:
+  # A proxy wins over an issuer listing, so swap ETFs can be shown through a
+  # physical stand-in. Output rows from a proxy say so in matched_via and
+  # note. A proxy ticker is a US ticker. Example:
   #   IE000OY7BDY9:   # iShares MSCI North America Swap UCITS ETF
   #     ticker: IVV
   #     note: "swap-based; physical S&P 500 ETF as a stand-in"
   proxies: {}
 
 universe:
-  # Which fund lists to run: ishares, spdr, nport. A US ETF that is both an
-  # issuer fund and an N-PORT series counts as the issuer's.
-  sources: [ishares, spdr, nport]
+  # Which fund lists to run: ishares, spdr, nport and any issuer adapter's
+  # name. null runs them all. A US fund that is both an issuer fund and an
+  # N-PORT series counts as the issuer's.
+  sources: null
   # Quick runs: only these fund ids or series IDs, `sample` funds per source
   # (seeded), then the first `limit`. null runs everything.
   #   kedro run --pipeline=universe --params=universe.sample=15
@@ -75,6 +87,9 @@ publish:
   # min_constituents) and the cut is logged and put in the quality report.
   site_budget_mb: 800
   min_constituents: 50
+  # The quality report lists constituent ISINs that rows attribute to more
+  # than this many different issuer names.
+  shared_isin_issuers: 20
   # Every source a published row can come from. Each fund file credits the
   # sources its rows came from; meta.json lists them all.
   sources:
@@ -92,7 +107,7 @@ publish:
       name: TickerInside
       url: https://tickerinside.com/
       licence: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
-      credit: TickerInside (https://tickerinside.com/), CC BY 4.0
+      credit: "Holdings from TickerInside (https://tickerinside.com/), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); changed by openbasket: tickers mapped to ISINs through SEC Form N-PORT and OpenFIGI, names taken from N-PORT"
     nport:
       name: SEC Form N-PORT
       url: https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets
@@ -107,4 +122,4 @@ publish:
       name: OpenFIGI
       url: https://www.openfigi.com/
       licence: OpenFIGI API terms; terms not reviewed
-      credit: Names and security types from OpenFIGI
+      credit: Names and security types from OpenFIGI (https://www.openfigi.com/)

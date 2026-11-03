@@ -89,6 +89,12 @@ class IssuerHoldings:
     url: str
 
 
+class NoFullHoldings(ValueError):
+    """The fund page has no full holdings table (index mutual funds publish only the ten largest lines)."""
+
+    plain = "iShares publishes only the ten largest holdings for this fund; see the source link"
+
+
 def _get(url: str, params: dict, timeout: int = 60) -> requests.Response:
     for attempt in range(4):
         THROTTLE.wait(url)
@@ -165,7 +171,7 @@ def parse_holdings(payload: dict) -> tuple[str | None, pd.DataFrame]:
     containers = payload["componentsByNameMap"]["holdings"]["containersByNameMap"]
     if "all" not in containers:
         # Some funds (index mutual funds among them) publish only their ten largest lines.
-        raise ValueError(f"no full holdings table, only {sorted(containers)}")
+        raise NoFullHoldings(f"no full holdings table, only {sorted(containers)}")
     container = containers["all"]
     cols = {k: _column(v) for k, v in container["dataPointsByNameMap"].items()}
     as_of = cols.pop("asOfDate", None)
@@ -205,12 +211,23 @@ def holdings(portfolio_id: str, site: str = "uk", cache_dir: str | Path | None =
     }
     cache = Path(cache_dir) / f"{site}_{portfolio_id}_{date.today().isoformat()}.json" if cache_dir else None
     if cache is not None and cache.exists():
-        payload = json.loads(cache.read_text())
+        as_of, df = parse_holdings(json.loads(cache.read_text()))
     else:
         logger.info("Fetching iShares %s holdings for portfolio %s", site, portfolio_id)
         payload = _get(url, params).json()
-        if cache is not None:
-            cache.parent.mkdir(parents=True, exist_ok=True)
-            cache.write_text(json.dumps(payload))
-    as_of, df = parse_holdings(payload)
+        try:
+            as_of, df = parse_holdings(payload)
+        except NoFullHoldings:
+            # A real answer: keep it, so a rerun the same day does not ask again.
+            _write_cache(cache, json.dumps(payload))
+            raise
+        # Cached only once it parsed: an interstitial page or a changed
+        # payload is fetched again next time instead of failing all day.
+        _write_cache(cache, json.dumps(payload))
     return IssuerHoldings(as_of, df, requests.Request("GET", url, params=params).prepare().url)
+
+
+def _write_cache(path: Path | None, text: str) -> None:
+    if path is not None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)

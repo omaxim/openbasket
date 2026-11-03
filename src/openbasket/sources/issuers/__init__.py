@@ -26,6 +26,7 @@ Identifiers that fail their check digit must be ``None``.
 from __future__ import annotations
 
 import importlib
+import logging
 import pkgutil
 from dataclasses import dataclass, field
 from typing import Callable
@@ -59,6 +60,13 @@ HOLDING_COLUMNS = [
     "asset_class",   # normalised: equity, debt, cash, derivative (...), fund, other
     "currency",
     "country",
+]
+
+#: Columns a holdings frame may add; the pipeline uses them when present and
+#: nothing requires them. ``sector`` is the issuer's own sector label.
+OPTIONAL_HOLDING_COLUMNS = [
+    "sector",
+    "issuer_name",
 ]
 
 
@@ -106,6 +114,21 @@ def discover() -> dict[str, IssuerAdapter]:
         if not mod.name.startswith("_"):
             importlib.import_module(f"{__name__}.{mod.name}")
     return dict(_REGISTRY)
+
+
+def select(
+    adapters: dict[str, IssuerAdapter], enabled: list[str] | None = None, disabled: list[str] | None = None
+) -> dict[str, IssuerAdapter]:
+    """The adapters to use: all of ``adapters`` (or only those named in ``enabled``) minus ``disabled``.
+
+    A name in ``enabled`` that no module registers is logged and skipped.
+    """
+    names = list(adapters) if enabled is None else list(enabled)
+    unknown = [n for n in names if n not in adapters]
+    if unknown:
+        logging.getLogger(__name__).warning("issuers.enabled names unknown adapters %s; known: %s", unknown, sorted(adapters))
+    skip = set(disabled or ())
+    return {n: adapters[n] for n in names if n in adapters and n not in skip}
 
 
 def validate_products(df: pd.DataFrame) -> list[str]:

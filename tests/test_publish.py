@@ -10,19 +10,21 @@ from openbasket.pipelines.publish.nodes import publish, resolution_bucket
 
 from .test_universe import SOURCES, _run, build_universe, FUND_MASTER, PRODUCTS, security_master
 
-META_KEYS = {"api_version", "built_at", "release_tag", "release_url", "full_data_url", "n_funds", "n_isins", "sources"}
+META_KEYS = {"api_version", "contract", "built_at", "release_tag", "release_url", "full_data_url", "n_funds", "n_isins", "sources"}
 SOURCE_KEYS = {"id", "name", "url", "licence", "credit", "n_funds", "as_of_min", "as_of_max"}
 FUND_KEYS = {
     "id", "isin", "isins", "name", "ticker", "issuer", "source", "source_url", "credit", "as_of", "matched_via", "note",
-    "reported_total_pct", "resolved_pct", "unresolved_pct", "unidentified_lines_pct", "n_constituents", "truncated",
-    "fields", "constituents", "unresolved", "full_data_url",
+    "status", "reported_total_pct", "resolved_pct", "unexpanded_fund_pct", "unresolved_pct", "unidentified_lines_pct",
+    "n_constituents", "n_rows", "truncated", "listed_pct", "breakdowns", "fields", "constituents", "unresolved",
+    "full_data_url",
 }
+FIELDS_V11 = ["isin", "name", "weight_pct", "asset_class", "source", "as_of", "depth", "via", "country", "sector"]
 
 
 @pytest.fixture
 def built(monkeypatch, tmp_path):
     universe = build_universe(PRODUCTS, FUND_MASTER, security_master(), {"issuers": {"ishares": "iShares"}})
-    funds, constituents, run = _run(universe, monkeypatch, tmp_path)
+    funds, constituents, run = _run(universe, monkeypatch, tmp_path, fail="US4642872265")
     # Round-trip through the catalog's formats, as Kedro hands them to the publish node.
     funds.to_parquet(tmp_path / "funds.parquet", index=False)
     ds = DuckDBParquetDataset(str(tmp_path / "constituents.parquet"), order_by="fund_id")
@@ -77,7 +79,7 @@ def test_fund_file_matches_contract(built):
     _, api, _ = built()
     doc = _json(api / "funds" / "US0000000AA2.json")
     assert set(doc) == FUND_KEYS
-    assert doc["fields"] == ["isin", "name", "weight_pct", "asset_class", "source", "as_of", "depth", "via"]
+    assert doc["fields"] == FIELDS_V11
     assert doc["source"] == "nport" and doc["source_url"] and doc["credit"] and doc["as_of"] == "2026-07-31"
     weights = [abs(r[2]) for r in doc["constituents"]]
     assert weights == sorted(weights, reverse=True)
@@ -118,3 +120,54 @@ def test_release_files_and_quality_report(built):
 @pytest.mark.parametrize("pct, band", [(-2, "below 0"), (0, "0 to 50"), (92.2, "90 to 99"), (100.0, "99 to 101"), (102.97, "above 101")])
 def test_resolution_bucket(pct, band):
     assert resolution_bucket(pct) == band
+
+
+def test_contract_1_1_counts_and_breakdowns(built):
+    _, api, _ = built()
+    meta = _json(api / "meta.json")
+    assert meta["api_version"] == 1 and meta["contract"] == "1.1"
+    doc = _json(api / "funds" / "US0000000AA2.json")
+    # Apple is one constituent ISIN but two rows (N-PORT direct, iShares through IVV).
+    assert doc["n_constituents"] == 1 and doc["n_rows"] == 2 == len(doc["constituents"])
+    assert doc["listed_pct"] == pytest.approx(sum(r[2] for r in doc["constituents"]))
+    assert doc["status"] in ("ok", "partial", "over_100", "leveraged")
+    bd = doc["breakdowns"]
+    assert set(bd) == {"asset_class", "country", "sector", "source", "top10_pct"}
+    for dim in ("asset_class", "country", "sector", "source"):
+        assert bd[dim][-1] == ["Unresolved", doc["unresolved_pct"]]
+        assert sum(v for _, v in bd[dim]) == pytest.approx(100, abs=1e-3)
+        values = [v for _, v in bd[dim][:-1]]
+        assert values == sorted(values, reverse=True)
+    assert dict(bd["source"][:-1]) == {"nport": pytest.approx(60), "ishares": pytest.approx(29.7)}
+    assert bd["country"][0][0] == "US"  # N-PORT's country code; the iShares line has none here
+    assert bd["top10_pct"] == pytest.approx(89.7)
+
+
+def test_breakdowns_use_the_full_list_when_truncated(built):
+    _, api, _ = built(max_constituents=1)
+    doc = _json(api / "funds" / "US0000000AA2.json")
+    assert doc["truncated"] and doc["n_rows"] == 2 and len(doc["constituents"]) == 1
+    assert doc["listed_pct"] == pytest.approx(60)
+    assert dict(doc["breakdowns"]["source"])["ishares"] == pytest.approx(29.7)
+
+
+def test_no_holdings_fund_file_and_sources(built):
+    _, api, _ = built()
+    feeder = _json(api / "funds" / "S000000003.json")
+    assert feeder["status"] == "no_holdings" and feeder["n_rows"] == 0 and feeder["listed_pct"] == 0
+    assert feeder["breakdowns"]["source"] == [["Unresolved", 100.0]]
+    assert feeder["note"] and feeder["source_url"]
+    meta = _json(api / "meta.json")
+    ids = {s["id"] for s in meta["sources"]}
+    funds = [_json(p) for p in (api / "funds").glob("*.json")]
+    row_sources = {r[4] for f in funds if "constituents" in f for r in f["constituents"]}
+    fund_sources = {f["source"] for f in funds if "source" in f}
+    assert row_sources | fund_sources <= ids
+    assert all(s["name"] and s["credit"] for s in meta["sources"])
+
+
+def test_quality_report_flags_shared_isins_and_statuses(built):
+    report, _, _ = built()
+    assert "shared_constituent_isins" in report and report["shared_constituent_isins"]["n_isins"] == 0
+    assert sum(report["counts"]["status"].values()) == report["run"]["n_attempted"]
+    assert "unexpanded_funds" in report

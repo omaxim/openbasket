@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
 import duckdb
 import pandas as pd
 
 from ...datasets import connection
 from ...sources import nport
+
+logger = logging.getLogger(__name__)
 
 
 def latest_filings(nport_parquet_manifest: pd.DataFrame) -> pd.DataFrame:
@@ -14,7 +18,12 @@ def latest_filings(nport_parquet_manifest: pd.DataFrame) -> pd.DataFrame:
     con = connection()
     submission = nport.table(con, nport_parquet_manifest, "SUBMISSION")
     info = nport.table(con, nport_parquet_manifest, "FUND_REPORTED_INFO")
-    return nport.latest_filings(submission, info).df()
+    try:
+        registrant = nport.table(con, nport_parquet_manifest, "REGISTRANT")
+    except KeyError:
+        logger.warning("No REGISTRANT table in the N-PORT manifest; fund issuers stay empty (rerun ingest to add it)")
+        registrant = None
+    return nport.latest_filings(submission, info, registrant).df()
 
 
 def fund_master(nport_latest_filings: pd.DataFrame, sec_fund_tickers: pd.DataFrame) -> pd.DataFrame:
@@ -22,12 +31,20 @@ def fund_master(nport_latest_filings: pd.DataFrame, sec_fund_tickers: pd.DataFra
 
     Series that file N-PORT but have no ticker keep one row with an empty
     ticker; tickers whose series has no filing in the loaded quarters are kept
-    too, so TickerInside can still be tried for them.
+    too, so TickerInside can still be tried for them. ``registrant_name`` is
+    the N-PORT filer (the trust the series belongs to).
     """
-    f = nport_latest_filings[["series_id", "series_name", "series_lei", "report_date", "net_assets"]]
+    cols = ["series_id", "series_name", "series_lei", "report_date", "net_assets"]
+    cols += [c for c in ("registrant_name", "registrant_cik") if c in nport_latest_filings]
+    f = nport_latest_filings[cols]
     t = sec_fund_tickers[["series_id", "class_id", "ticker", "cik"]]
     out = f.merge(t, on="series_id", how="outer")
     out["has_nport"] = out["report_date"].notna()
+    if "registrant_cik" in out:
+        # Series without a ticker get their CIK from the filing, for the EDGAR link.
+        reg = out["registrant_cik"].map(lambda c: c.strip().zfill(10) if isinstance(c, str) and c.strip().isdigit() else None)
+        out["cik"] = out["cik"].astype(object).where(out["cik"].notna(), reg)
+        out = out.drop(columns="registrant_cik")
     return out.sort_values(["series_id", "ticker"]).reset_index(drop=True)
 
 

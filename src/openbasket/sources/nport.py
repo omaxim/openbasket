@@ -8,6 +8,9 @@ Each quarterly ZIP holds tab-delimited tables. The ones used here:
 ``FUND_REPORTED_INFO``
     The fund series a filing covers: ``SERIES_ID``, ``SERIES_NAME``,
     ``SERIES_LEI`` and ``NET_ASSETS``.
+``REGISTRANT``
+    Who filed: ``CIK`` and ``REGISTRANT_NAME``, the trust or company the
+    series belongs to (``iShares Trust``, ``Goldman Sachs ETF Trust``).
 ``FUND_REPORTED_HOLDING``
     One row per position. ``PERCENTAGE`` is in percent of net assets, and a
     fund's lines can add up to more or less than 100.
@@ -32,7 +35,9 @@ from ..datasets import connection
 
 logger = logging.getLogger(__name__)
 
-TABLES = ("SUBMISSION", "FUND_REPORTED_INFO", "FUND_REPORTED_HOLDING", "IDENTIFIERS")
+TABLES = ("SUBMISSION", "FUND_REPORTED_INFO", "FUND_REPORTED_HOLDING", "IDENTIFIERS", "REGISTRANT")
+#: Tables a quarter may lack without failing the conversion.
+OPTIONAL_TABLES = ("REGISTRANT",)
 
 #: N-PORT asset category codes, grouped into plain asset classes.
 ASSET_CLASS = {
@@ -83,6 +88,9 @@ def zip_to_parquet(
         names = {Path(n).stem.upper(): n for n in zf.namelist()}
         for table in tables:
             member = names.get(table)
+            if member is None and table in OPTIONAL_TABLES:
+                logger.warning("%s missing from %s; skipped", table, zip_path)
+                continue
             if member is None:
                 raise KeyError(f"{table} missing from {zip_path}")
             tsv = extract_dir / Path(member).name
@@ -108,12 +116,25 @@ def table(con: duckdb.DuckDBPyConnection, manifest: pd.DataFrame, name: str) -> 
     return con.read_parquet(paths, union_by_name=True)
 
 
-def latest_filings(submission: duckdb.DuckDBPyRelation, info: duckdb.DuckDBPyRelation) -> duckdb.DuckDBPyRelation:
+def latest_filings(
+    submission: duckdb.DuckDBPyRelation,
+    info: duckdb.DuckDBPyRelation,
+    registrant: duckdb.DuckDBPyRelation | None = None,
+) -> duckdb.DuckDBPyRelation:
     """One filing per fund series: the latest report period, then the latest filing.
 
     An amendment filed later for the same period replaces the original.
+    With ``registrant`` each filing also gets ``registrant_name`` and
+    ``registrant_cik``; without it they are null.
     """
-    return connection().sql(
+    con = connection()
+    if registrant is None:
+        reg = con.sql('select null::varchar "ACCESSION_NUMBER", null::varchar "QUARTER", null::varchar "CIK", '
+                      'null::varchar "REGISTRANT_NAME" where false')
+    else:
+        reg = registrant
+    con.register("_nport_registrant", reg)
+    return con.sql(
         """
         with f as (
             select
@@ -125,9 +146,12 @@ def latest_filings(submission: duckdb.DuckDBPyRelation, info: duckdb.DuckDBPyRel
                 i.SERIES_NAME as series_name,
                 nullif(i.SERIES_LEI, 'N/A') as series_lei,
                 try_cast(i.NET_ASSETS as double) as net_assets,
-                s.QUARTER as quarter
+                s.QUARTER as quarter,
+                nullif(trim(r.REGISTRANT_NAME), '') as registrant_name,
+                nullif(trim(r.CIK), '') as registrant_cik
             from submission s
             join info i using (ACCESSION_NUMBER, QUARTER)
+            left join _nport_registrant r on r.ACCESSION_NUMBER = s.ACCESSION_NUMBER and r.QUARTER = s.QUARTER
             where i.SERIES_ID is not null and i.SERIES_ID <> 'N/A'
         )
         select * from f

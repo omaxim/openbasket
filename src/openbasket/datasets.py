@@ -30,7 +30,7 @@ class DuckDBParquetDataset(AbstractDataset[duckdb.DuckDBPyRelation, duckdb.DuckD
     Example catalog entry::
 
         nport_holdings:
-          type: fund_lookthrough.datasets.DuckDBParquetDataset
+          type: openbasket.datasets.DuckDBParquetDataset
           filepath: data/03_primary/nport_holdings.parquet
           order_by: SERIES_ID
     """

@@ -4,9 +4,9 @@ import openpyxl
 import pandas as pd
 import pytest
 
-from fund_lookthrough.lookthrough import look_through
-from fund_lookthrough.providers import DataProviders
-from fund_lookthrough.sources import spdr
+from openbasket.lookthrough import look_through
+from openbasket.providers import DataProviders
+from openbasket.sources import spdr
 
 
 def _xlsx(rows):
@@ -90,7 +90,7 @@ class FakeFigi:
 
 
 def _providers(monkeypatch, figi):
-    from fund_lookthrough.datasets import connection
+    from openbasket.datasets import connection
 
     empty = connection().sql(
         "select null::varchar as isin, null::varchar as cusip, null::varchar as issuer_lei, null::varchar as series_id where false"
@@ -121,7 +121,7 @@ def test_spdr_isin_order_and_derived_check(monkeypatch):
 
 
 def test_spdr_derived_isin_kept_when_openfigi_knows_it(monkeypatch):
-    from fund_lookthrough.identifiers import cusip_to_isin
+    from openbasket.identifiers import cusip_to_isin
 
     figi = FakeFigi(known={cusip_to_isin("494281900")})
     r = look_through("US78462F1030", _providers(monkeypatch, figi))

@@ -9,7 +9,7 @@ Matching an input ISIN to a fund, in order:
 4. OpenFIGI: the ISIN's US ticker, looked up in SEC's fund ticker list.
 
 Holdings sources are tried in ``source_order``; see
-:func:`fund_lookthrough.lookthrough.choose` for how one is picked.
+:func:`openbasket.lookthrough.choose` for how one is picked.
 """
 
 from __future__ import annotations

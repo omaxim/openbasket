@@ -1,9 +1,9 @@
 import pandas as pd
 import pytest
 
-from fund_lookthrough.lookthrough import Line, look_through
-from fund_lookthrough.providers import DataProviders
-from fund_lookthrough.sources import ishares
+from openbasket.lookthrough import Line, look_through
+from openbasket.providers import DataProviders
+from openbasket.sources import ishares
 
 
 def _dp(value):
@@ -75,7 +75,7 @@ def test_parse_holdings_keeps_cusip_but_does_not_derive():
 
 @pytest.mark.parametrize("known, expected", [(set(), None), ({"US94990LAF58"}, "US94990LAF58")])
 def test_cusip_only_line_needs_openfigi(monkeypatch, known, expected):
-    from fund_lookthrough.datasets import connection
+    from openbasket.datasets import connection
 
     class Figi:
         def map(self, id_type, values, exch_code=None):
@@ -150,7 +150,7 @@ def test_parse_holdings_rejects_ragged_columns():
 
 @pytest.fixture
 def providers(monkeypatch, tmp_path):
-    from fund_lookthrough.datasets import connection
+    from openbasket.datasets import connection
 
     empty = connection().sql(
         "select null::varchar as isin, null::varchar as cusip, null::varchar as issuer_lei, null::varchar as series_id where false"

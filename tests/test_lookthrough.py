@@ -1,6 +1,6 @@
 import pytest
 
-from fund_lookthrough.lookthrough import FundRef, Holdings, Line, choose, look_through
+from openbasket.lookthrough import FundRef, Holdings, Line, choose, look_through
 
 
 class FakeProviders:

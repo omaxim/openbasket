@@ -10,7 +10,7 @@ from ...sources import nport
 
 
 def latest_filings(nport_parquet_manifest: pd.DataFrame) -> pd.DataFrame:
-    """One N-PORT filing per fund series (see :func:`fund_lookthrough.sources.nport.latest_filings`)."""
+    """One N-PORT filing per fund series (see :func:`openbasket.sources.nport.latest_filings`)."""
     con = connection()
     submission = nport.table(con, nport_parquet_manifest, "SUBMISSION")
     info = nport.table(con, nport_parquet_manifest, "FUND_REPORTED_INFO")

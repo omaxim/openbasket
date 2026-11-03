@@ -24,7 +24,7 @@ FUND_TICKERS_URL = "https://www.sec.gov/files/company_tickers_mf.json"
 def user_agent() -> str:
     ua = os.environ.get("SEC_USER_AGENT", "").strip()
     if not ua:
-        raise RuntimeError("Set SEC_USER_AGENT in .env, e.g. 'fund-lookthrough research you@example.org'.")
+        raise RuntimeError("Set SEC_USER_AGENT in .env, e.g. 'openbasket research you@example.org'.")
     return ua
 
 

@@ -1,4 +1,4 @@
-# fund-lookthrough
+# openbasket
 
 Give it the ISIN of an ETF, fund or bond, and it returns the securities behind
 it, each with its ISIN and its weight as a percent of the input's net assets.

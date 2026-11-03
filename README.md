@@ -1,4 +1,4 @@
-# fund-lookthrough
+# openbasket
 
 Look through an ETF, fund or bond by ISIN to the securities behind it, using
 free sources: iShares and SPDR issuer files, SEC Form N-PORT, TickerInside

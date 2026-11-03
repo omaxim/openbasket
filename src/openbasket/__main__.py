@@ -1,5 +1,5 @@
-"""fund-lookthrough file for ensuring the package is executable
-as `fund-lookthrough` and `python -m fund_lookthrough`
+"""openbasket file for ensuring the package is executable
+as `openbasket` and `python -m openbasket`
 """
 import sys
 from pathlib import Path

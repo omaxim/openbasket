@@ -16,7 +16,7 @@ cp .env.example .env   # then fill in the two values
 
 `SEC_USER_AGENT`
 : The SEC asks automated clients to name themselves and give an email
-  address, e.g. `fund-lookthrough research you@example.org`.
+  address, e.g. `openbasket research you@example.org`.
 
 ## Running
 

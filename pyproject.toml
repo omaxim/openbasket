@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 requires-python = ">=3.10"
-name = "fund_lookthrough"
+name = "openbasket"
 readme = "README.md"
 description = "Look through an ETF, fund or bond by ISIN to the securities behind it."
 dynamic = [
@@ -35,12 +35,12 @@ docs = [
 ]
 
 [project.scripts]
-fund-lookthrough = "fund_lookthrough.__main__:main"
+openbasket = "openbasket.__main__:main"
 
 [project.entry-points."kedro.hooks"]
 
 [tool.setuptools.dynamic.version]
-attr = "fund_lookthrough.__version__"
+attr = "openbasket.__version__"
 
 [tool.setuptools.packages.find]
 where = [
@@ -49,8 +49,8 @@ where = [
 namespaces = false
 
 [tool.kedro]
-package_name = "fund_lookthrough"
-project_name = "fund-lookthrough"
+package_name = "openbasket"
+project_name = "openbasket"
 kedro_init_version = "1.7.0"
 tools = "['None']"
 example_pipeline = "False"

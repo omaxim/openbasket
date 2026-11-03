@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 HOST = "https://www.ishares.com"
 SCREENER_URL = HOST + "/varnish-api/blk-product-screener-server/api/v1/product-screener/product-data"
 PRODUCT_DATA_URL = "https://www.blackrock.com/varnish-api/{data_site}/product-data/api/v2/get-product-data"
-USER_AGENT = "Mozilla/5.0 (compatible; fund-lookthrough)"
+USER_AGENT = "Mozilla/5.0 (compatible; openbasket)"
 
 #: Regional sites. ``data_site`` is the product-data service behind the site.
 SITES = {

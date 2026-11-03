@@ -1,6 +1,6 @@
 import pytest
 
-from fund_lookthrough.identifiers import (
+from openbasket.identifiers import (
     cusip_check_digit,
     cusip_to_isin,
     is_valid_cusip,

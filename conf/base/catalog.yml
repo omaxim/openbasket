@@ -17,15 +17,15 @@ issuer_products:
 
 # security_master ------------------------------------------------------------
 nport_positions:
-  type: fund_lookthrough.datasets.DuckDBParquetDataset
+  type: openbasket.datasets.DuckDBParquetDataset
   filepath: data/02_intermediate/nport_positions.parquet
 
 cusip_isin_map:
-  type: fund_lookthrough.datasets.DuckDBParquetDataset
+  type: openbasket.datasets.DuckDBParquetDataset
   filepath: data/03_primary/cusip_isin_map.parquet
 
 security_master:
-  type: fund_lookthrough.datasets.DuckDBParquetDataset
+  type: openbasket.datasets.DuckDBParquetDataset
   filepath: data/03_primary/security_master.parquet
   order_by: isin
 
@@ -47,7 +47,7 @@ fund_master:
   filepath: data/03_primary/fund_master.parquet
 
 nport_holdings:
-  type: fund_lookthrough.datasets.DuckDBParquetDataset
+  type: openbasket.datasets.DuckDBParquetDataset
   filepath: data/03_primary/nport_holdings.parquet
   order_by: series_id
 

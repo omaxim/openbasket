@@ -5,10 +5,10 @@ import zipfile
 import pandas as pd
 import pytest
 
-from fund_lookthrough.datasets import DuckDBParquetDataset, connection
-from fund_lookthrough.pipelines.consolidate.nodes import latest_filings, nport_holdings
-from fund_lookthrough.pipelines.security_master.nodes import cusip_isin_map, nport_positions, security_master
-from fund_lookthrough.sources.nport import zip_to_parquet
+from openbasket.datasets import DuckDBParquetDataset, connection
+from openbasket.pipelines.consolidate.nodes import latest_filings, nport_holdings
+from openbasket.pipelines.security_master.nodes import cusip_isin_map, nport_positions, security_master
+from openbasket.sources.nport import zip_to_parquet
 
 TABLES = {
     "SUBMISSION": [

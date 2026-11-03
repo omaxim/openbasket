@@ -17,5 +17,6 @@ output
 sources
 plan
 data-api
+publishing
 api
 ```

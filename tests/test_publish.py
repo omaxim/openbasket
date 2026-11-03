@@ -1,0 +1,120 @@
+"""The published API and release files against docs/source/data-api.md, from a tiny universe run."""
+
+import json
+
+import pandas as pd
+import pytest
+
+from openbasket.datasets import DuckDBParquetDataset
+from openbasket.pipelines.publish.nodes import publish, resolution_bucket
+
+from .test_universe import SOURCES, _run, build_universe, FUND_MASTER, PRODUCTS, security_master
+
+META_KEYS = {"api_version", "built_at", "release_tag", "release_url", "full_data_url", "n_funds", "n_isins", "sources"}
+SOURCE_KEYS = {"id", "name", "url", "licence", "credit", "n_funds", "as_of_min", "as_of_max"}
+FUND_KEYS = {
+    "id", "isin", "isins", "name", "ticker", "issuer", "source", "source_url", "credit", "as_of", "matched_via", "note",
+    "reported_total_pct", "resolved_pct", "unresolved_pct", "unidentified_lines_pct", "n_constituents", "truncated",
+    "fields", "constituents", "unresolved", "full_data_url",
+}
+
+
+@pytest.fixture
+def built(monkeypatch, tmp_path):
+    universe = build_universe(PRODUCTS, FUND_MASTER, security_master(), {"issuers": {"ishares": "iShares"}})
+    funds, constituents, run = _run(universe, monkeypatch, tmp_path)
+    # Round-trip through the catalog's formats, as Kedro hands them to the publish node.
+    funds.to_parquet(tmp_path / "funds.parquet", index=False)
+    ds = DuckDBParquetDataset(str(tmp_path / "constituents.parquet"), order_by="fund_id")
+    ds.save(constituents)
+
+    def go(**params):
+        p = {"release_tag": "2026-11", "repo": "omaxim/openbasket", "site_dir": str(tmp_path / "site"),
+             "release_dir": str(tmp_path / "release"), "max_constituents": 1000, "site_budget_mb": 800,
+             "sources": {**SOURCES, "spdr": {"name": "SPDR", "url": "https://www.ssga.com/", "licence": "x", "credit": "SPDR"}},
+             **params}
+        report = publish(universe, pd.read_parquet(tmp_path / "funds.parquet"), ds.load(), run, p)
+        api = tmp_path / "site" / "api" / "v1"
+        return report, api, tmp_path / "release"
+
+    return go
+
+
+def _json(path):
+    return json.loads(path.read_text())
+
+
+def test_meta_matches_contract(built):
+    _, api, _ = built()
+    meta = _json(api / "meta.json")
+    assert set(meta) == META_KEYS
+    assert meta["release_url"] == "https://github.com/omaxim/openbasket/releases/tag/2026-11"
+    assert meta["full_data_url"] == "https://github.com/omaxim/openbasket/releases/download/2026-11/openbasket-lookthrough.parquet"
+    assert meta["built_at"].endswith("Z")
+    by_id = {s["id"]: s for s in meta["sources"]}
+    assert all(set(s) == SOURCE_KEYS for s in meta["sources"])
+    # Every source a row came from is listed with its credit.
+    assert {"ishares", "nport"} <= set(by_id)
+    assert by_id["ishares"]["credit"] == "Holdings data from iShares by BlackRock"
+    assert by_id["ishares"]["as_of_min"] == by_id["ishares"]["as_of_max"] == "2026-11-02"
+
+
+def test_index_and_aliases(built):
+    _, api, _ = built()
+    meta, index = _json(api / "meta.json"), _json(api / "index.json")
+    assert index["fields"] == ["id", "isin", "name", "ticker", "issuer", "kind", "source", "as_of", "resolved_pct", "n_constituents"]
+    ids = [r[0] for r in index["rows"]]
+    assert "US4642872265" not in ids  # its run failed
+    assert "S000000003" in ids and "IE00B5BMR087" in ids
+    assert {r[5] for r in index["rows"]} == {"fund"}
+    assert index["aliases"]["IE00BYX5MX67"] == "IE00B5BMR087"
+    assert index["aliases"]["IE00B5BMR087"] == "IE00B5BMR087"
+    assert _json(api / "funds" / "IE00BYX5MX67.json") == {"alias_of": "IE00B5BMR087"}
+    assert meta["n_funds"] == len(ids) and meta["n_isins"] == len(index["aliases"])
+
+
+def test_fund_file_matches_contract(built):
+    _, api, _ = built()
+    doc = _json(api / "funds" / "US0000000AA2.json")
+    assert set(doc) == FUND_KEYS
+    assert doc["fields"] == ["isin", "name", "weight_pct", "asset_class", "source", "as_of", "depth", "via"]
+    assert doc["source"] == "nport" and doc["source_url"] and doc["credit"] and doc["as_of"] == "2026-07-31"
+    weights = [abs(r[2]) for r in doc["constituents"]]
+    assert weights == sorted(weights, reverse=True)
+    assert all(r[4] and r[5] for r in doc["constituents"])  # every row has its own source and as-of
+    assert {r[4] for r in doc["constituents"]} == {"nport", "ishares"}
+    assert doc["unresolved"] == {"weight_pct": doc["unresolved_pct"], "note": doc["note"]}
+    assert doc["truncated"] is False and doc["isins"] == ["US0000000AA2", "US0000000AB1"]
+    feeder = _json(api / "funds" / "S000000003.json")
+    assert feeder["isin"] is None and feeder["constituents"] == [] and feeder["source"] == "nport"
+    assert feeder["unresolved_pct"] == 100
+
+
+def test_cap_and_budget_are_reported(built):
+    report, api, _ = built(max_constituents=1)
+    doc = _json(api / "funds" / "US0000000AA2.json")
+    assert doc["truncated"] is True and len(doc["constituents"]) == 1
+    assert report["api"]["n_funds_truncated"] >= 1 and report["api"]["rows_only_in_release"] >= 1
+
+    report, api, _ = built(site_budget_mb=0.000001, min_constituents=1, max_constituents=3)
+    assert report["api"]["budget_cuts"] and report["api"]["max_constituents_used"] == 1
+    assert report["api"]["over_budget"] is True
+
+
+def test_release_files_and_quality_report(built):
+    report, _, release = built()
+    full = pd.read_parquet(release / "openbasket-lookthrough.parquet")
+    assert {"fund_id", "constituent_isin", "source", "source_ref", "as_of", "name_source"} <= set(full.columns)
+    assert full.groupby("fund_id")["constituent_isin"].apply(lambda s: s.isna().sum()).eq(1).all()
+    funds = pd.read_parquet(release / "openbasket-funds.parquet")
+    assert funds["id"].is_unique and funds["error"].notna().sum() == 1
+    q = _json(release / "quality-report.json")
+    assert q["counts"]["by_universe_source"]["ishares"]["failed"] == 1
+    assert q["top_errors"][0]["examples"] == ["US4642872265"]
+    assert q["release_tag"] == "2026-11" and "seconds_per_fund" in q and "run" in q
+    assert sum(q["resolution"]["resolved_pct_buckets"].values()) == q["resolution"]["n_funds"]
+
+
+@pytest.mark.parametrize("pct, band", [(-2, "below 0"), (0, "0 to 50"), (92.2, "90 to 99"), (100.0, "99 to 101"), (102.97, "above 101")])
+def test_resolution_bucket(pct, band):
+    assert resolution_bucket(pct) == band

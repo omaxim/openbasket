@@ -68,3 +68,31 @@ lookthrough_summary:
 lookthrough:
   type: pandas.CSVDataset
   filepath: data/08_reporting/lookthrough.csv
+
+# universe -------------------------------------------------------------------
+universe:
+  type: pandas.ParquetDataset
+  filepath: data/03_primary/universe.parquet
+
+universe_selected:
+  type: pandas.ParquetDataset
+  filepath: data/07_model_output/universe_selected.parquet
+
+universe_funds:
+  type: pandas.ParquetDataset
+  filepath: data/07_model_output/universe_funds.parquet
+
+universe_constituents:
+  type: openbasket.datasets.DuckDBParquetDataset
+  filepath: data/07_model_output/universe_constituents.parquet
+  order_by: fund_id
+
+universe_run:
+  type: json.JSONDataset
+  filepath: data/08_reporting/universe_run.json
+
+# publish --------------------------------------------------------------------
+# The site and release files go to publish.site_dir and publish.release_dir.
+quality_report:
+  type: json.JSONDataset
+  filepath: data/08_reporting/quality_report.json

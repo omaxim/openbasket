@@ -33,6 +33,12 @@ without any configuration.
 | {doc}`Avantis, First Trust <us-issuers>` (`avantis`, `first_trust`) | Holdings of US ETFs and funds from the issuers' sites | local_only (issuer site terms) | yes | daily |
 | {doc}`Franklin Templeton <franklin>` (`franklin`, `franklin_ca`) | Daily holdings of UCITS and US ETFs, monthly or quarterly for Canada | local_only (issuer site terms) | yes | daily to quarterly |
 | SPDR (`spdr`) | Full holdings of US ETFs, including SPY and DIA (185), and UCITS ETFs (177) | local_only (State Street site terms) | yes | daily |
+| {doc}`J.P. Morgan ETFs <jpmorgan>` (`jpmorgan`) | Daily full holdings of Irish UCITS and US ETFs | local_only (issuer site terms) | yes | daily |
+| {doc}`Global X ETFs Europe <globalx-vaneck>` (`globalx`) | Daily full holdings of Irish UCITS ETFs; synthetic funds list their substitute basket | local_only (issuer site terms) | yes | daily |
+| {doc}`VanEck Europe <globalx-vaneck>` (`vaneck`) | Daily full holdings of UCITS ETFs and ETNs, 25 seconds between requests | local_only (issuer site terms) | yes | daily |
+| {doc}`BNP Paribas Easy <bnp-easy>` (`bnp_easy`) | Holdings inventories of LU, IE and FR ETFs and index funds, private-investor segment only | local_only (issuer site terms) | yes | irregular |
+| {doc}`Asia-Pacific issuers <apac>` (`ssga_apac`, `nomura`, `kodex`, `ishares_au`, `betashares`, `vanguard_au`, `trahk`) | Full holdings of ETFs domiciled in Australia, Japan, Korea, Hong Kong and Singapore | local_only (issuer site terms) | yes | daily |
+| {doc}`Stand-ins <exchange-index>` (`index_proxy`) | A physically replicating peer ETF's holdings, for blocked physical funds on the SMI, SLI, S&P 500, Nasdaq-100 and MSCI EMU | local_only (built from issuer files) | yes | daily |
 | {doc}`EDINET Japan <edinet-japan>` | Japanese investment trust reports; client only, nothing parsed | local_only | no (needs a personal API key) | annual and semi-annual reports |
 
 ## Reference sources (no holdings)

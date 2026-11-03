@@ -1,0 +1,34 @@
+[
+ {
+  "name": "Example Equity Active UCITS ETF",
+  "displayName": "Example Equity Active UCITS ETF",
+  "shareclassName": "JPM Example Equity Active UCITS ETF - USD (dist)",
+  "identifier": "IE000P334X90",
+  "ticker": "JREX",
+  "displayId": "JREX",
+  "assetClass": "Equity",
+  "currencyCode": "USD",
+  "shareclassCurrencyCode": "USD",
+  "domicile": "Ireland",
+  "fundIdentifier": "F1",
+  "fundCmsId": null,
+  "fundTypeCode": "N_ETF",
+  "nav": 10.0
+ },
+ {
+  "name": "Example Premium Income Active UCITS ETF",
+  "displayName": "Example Premium Income Active UCITS ETF",
+  "shareclassName": "JPM Example Premium Income Active UCITS ETF - CHF Hedged (dist)",
+  "identifier": "IE000UPAYVL7",
+  "ticker": "JUSC",
+  "displayId": "JUSC",
+  "assetClass": "Equity",
+  "currencyCode": "USD",
+  "shareclassCurrencyCode": "CHF",
+  "domicile": "Ireland",
+  "fundIdentifier": "F3",
+  "fundCmsId": null,
+  "fundTypeCode": "N_ETF",
+  "nav": 10.0
+ }
+]

@@ -67,8 +67,10 @@ def download_issuer_products(
     ``issuers.disabled`` drops some), each row with ``issuer`` set to the
     adapter's name. An adapter that fails, or returns rows that break the
     product contract, is logged and skipped or cleaned; it never stops the
-    others. An ISIN two lists share stays with the first. ``listed_on`` is
-    the date the list was read.
+    others. An ISIN two lists share stays with the first; stand-in adapters
+    (a peer's holdings for a fund, :attr:`IssuerAdapter.stand_in`) come last,
+    so they never take a fund a direct adapter lists. ``listed_on`` is the
+    date the list was read.
 
     In the public build (``publish.mode: public``) nothing is asked of a
     ``local_only`` source: not the iShares and SPDR lists, not a
@@ -94,7 +96,7 @@ def download_issuer_products(
         adapters = {n: a for n, a in adapters.items() if a.redistribution == issuers.PUBLIC}
         logger.info("Public build: not reading the fund lists of %s (local_only)", sorted(withheld))
     options = products_options(ishares_sites, issuers_params)
-    for name, adapter in sorted(adapters.items()):
+    for name, adapter in sorted(adapters.items(), key=lambda kv: (kv[1].stand_in, kv[0])):
         try:
             df = adapter.products(**options.get(name, {}))
         except Exception as exc:  # one issuer's site must not stop the others

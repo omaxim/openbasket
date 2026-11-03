@@ -1,0 +1,21 @@
+{
+  "componentsByNameMap": {
+    "holdings": {
+      "containersByNameMap": {
+        "all": {
+          "dataPointsByNameMap": {
+            "asOfDate": {"value": "20261030", "formattedValue": "Oct 30, 2026"},
+            "dateList": {"value": "[20261030, 20261029]"},
+            "isin": {"value": "['CH0012005267', 'CH0038863350', '-', '-']"},
+            "ticker": {"value": "['EXA', 'EXB', 'CHF', 'SMIZ6']"},
+            "issueName": {"value": "['EXAMPLE PHARMA AG', 'EXAMPLE FOODS AG', 'CHF CASH', 'SMI INDEX DEC 26']"},
+            "holdingPercent": {"value": "[55.12345, 44.5, 0.37655, 0.0]"},
+            "assetClass": {"value": "['Equity', 'Equity', 'Cash', 'Futures']"},
+            "marketCurrencyCode": {"value": "['CHF', 'CHF', 'CHF', 'CHF']"},
+            "countryOfRisk": {"value": "['Switzerland', 'Switzerland', 'Switzerland', 'Switzerland']"}
+          }
+        }
+      }
+    }
+  }
+}

@@ -100,6 +100,20 @@ def test_ingest_unions_registered_adapters(registry):
     assert set(issuer_adapters({"enabled": ["fakeco", "nosuch"]})) == {"fakeco"}
 
 
+def test_stand_in_adapters_never_take_a_directly_listed_fund(registry):
+    from dataclasses import replace
+
+    def stand_in_products():
+        df = fake_products().iloc[:1].copy()
+        df["issuer"], df["portfolio_id"] = "aaa_stand_in", "SP500:LU0274208692"
+        return df
+
+    registry["aaa_stand_in"] = replace(FAKE, name="aaa_stand_in", products=stand_in_products, stand_in=True)
+    products = download_issuer_products([], [], {})
+    # "aaa_stand_in" sorts first by name, but stand-ins are listed last.
+    assert products.set_index("isin").loc["LU0274208692", "issuer"] == "fakeco"
+
+
 def _tables():
     fm = pd.DataFrame(columns=["series_id", "series_name", "series_lei", "ticker", "has_nport", "cik"])
     nh = connection().from_df(pd.DataFrame({c: pd.Series([], dtype=object) for c in

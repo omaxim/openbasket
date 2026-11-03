@@ -1,0 +1,36 @@
+{
+ "statusCode": 200,
+ "message": "Retrieved fund successfully",
+ "data": [
+  {
+   "ticker": "BHP",
+   "marketValPercent": 60.5,
+   "name": "BHP Group Ltd",
+   "longName": "BHP Group Ltd",
+   "countryCode": "AU",
+   "maturityDate": null,
+   "couponYield": 0,
+   "effectiveDate": "2026-09-30"
+  },
+  {
+   "ticker": "AAPL",
+   "marketValPercent": 30.25,
+   "name": "Apple Inc",
+   "longName": "Apple Inc",
+   "countryCode": "US",
+   "maturityDate": null,
+   "couponYield": 0,
+   "effectiveDate": "2026-09-30"
+  },
+  {
+   "ticker": "ACGB",
+   "marketValPercent": 9.0,
+   "name": "Australia Government Bond",
+   "longName": "Australia Government Bond",
+   "countryCode": "AU",
+   "maturityDate": "2028-11-21",
+   "couponYield": 2.75,
+   "effectiveDate": "2026-09-30"
+  }
+ ]
+}

@@ -20,7 +20,7 @@ import re
 
 import pandas as pd
 
-from . import FetchContext, IssuerAdapter, IssuerHoldings, register
+from . import LOCAL_ONLY, FetchContext, IssuerAdapter, IssuerHoldings, register
 from ._apac import clean, fetch, holdings_frame, number, products_frame
 
 FUND_ISIN = "HK2800008867"
@@ -104,10 +104,12 @@ register(
         licence=(
             "Public daily holdings download linked from the fund's website, free without a "
             "log-in. Terms of reuse have not been reviewed; the file is fetched at most once a day."
+            " Read locally only: the holdings are never republished."
         ),
         regions=("HK",),
         products=products,
         holdings=holdings,
         frequency="daily",
+        redistribution=LOCAL_ONLY,
     )
 )

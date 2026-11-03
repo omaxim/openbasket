@@ -29,7 +29,7 @@ import json
 import pandas as pd
 
 from ... import http
-from . import FetchContext, IssuerAdapter, IssuerHoldings, register
+from . import LOCAL_ONLY, FetchContext, IssuerAdapter, IssuerHoldings, register
 from ._apac import asx_isins, clean, fetch, holdings_frame, number, products_frame
 
 API = "https://www.vanguard.com.au/personal/api"
@@ -130,10 +130,12 @@ register(
             "Public month-end holdings published on Vanguard Australia's website, free without a "
             "log-in. Terms of reuse have not been reviewed; files are fetched at most once per fund "
             "per day."
+            " Read locally only: the holdings are never republished."
         ),
         regions=("AU", "US"),
         products=products,
         holdings=holdings,
         frequency="monthly",
+        redistribution=LOCAL_ONLY,
     )
 )

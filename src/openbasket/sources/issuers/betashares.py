@@ -28,7 +28,7 @@ import re
 import pandas as pd
 
 from ... import http
-from . import FetchContext, IssuerAdapter, IssuerHoldings, register
+from . import LOCAL_ONLY, FetchContext, IssuerAdapter, IssuerHoldings, register
 from ._apac import asx_code, asx_isins, asx_list, clean, fetch, holdings_frame, number, products_frame
 
 HOST = "https://www.betashares.com.au"
@@ -174,10 +174,12 @@ register(
             "states Betashares makes no warranty about the data. ASX ISIN list is a free public "
             "download. Terms of reuse have not been reviewed; files are fetched at most once per "
             "fund per day."
+            " Read locally only: the holdings are never republished."
         ),
         regions=("AU",),
         products=products,
         holdings=holdings,
         frequency="daily",
+        redistribution=LOCAL_ONLY,
     )
 )

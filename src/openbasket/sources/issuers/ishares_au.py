@@ -34,7 +34,7 @@ import re
 import pandas as pd
 
 from ... import http
-from . import FetchContext, IssuerAdapter, IssuerHoldings, register
+from . import LOCAL_ONLY, FetchContext, IssuerAdapter, IssuerHoldings, register
 from ._apac import asx_list, clean, fetch, holdings_frame, number, products_frame
 
 HOST = "https://www.blackrock.com"
@@ -172,13 +172,16 @@ register(
         homepage="https://www.blackrock.com/au",
         credit="Holdings: BlackRock Investment Management (Australia) Limited, iShares (blackrock.com/au); fund ISINs: ASX ISIN list.",
         licence=(
-            "Public holdings data on BlackRock's Australian website, free without a log-in. "
-            "BlackRock's site terms have not been reviewed for automated reuse; each fund's two "
-            "holdings files are fetched at most once per day."
+            "Public holdings data on BlackRock's Australian website, free without a log-in. No open "
+            "licence: BlackRock's site terms (read on its regional sites on 2026-11-03) say the content "
+            "is copyright with all rights reserved, for personal, non-commercial use, and must not be "
+            "reproduced or redistributed. Each fund's two holdings files are fetched at most once per day."
+            " Read locally only: the holdings are never republished."
         ),
         regions=("AU",),
         products=products,
         holdings=holdings,
         frequency="daily",
+        redistribution=LOCAL_ONLY,
     )
 )

@@ -5,6 +5,16 @@ Singapore. Each one reads the issuer's own public files. Shared code (cached
 fetching, the ASX ISIN list, Korean ISINs, frame checks) is in
 `openbasket.sources.issuers._apac`.
 
+**Redistribution: local only.** No issuer here offers an open licence, and
+BlackRock's terms forbid redistribution outright. So all seven adapters are
+registered with `redistribution="local_only"`: openbasket reads their
+holdings only for the person running it. Under the publishing policy the
+public build does not fetch these sources, and none of their rows go to the
+openbasket site, API or releases. A fund that only these sources cover is
+listed there without constituents, with a note that its holdings are
+available when you run openbasket yourself. See
+[Adding a source](adding-a-source.md).
+
 Status as tested on 3 November 2026:
 
 | Adapter | Issuer | Funds | Holdings | Identifier per line | Update |
@@ -75,8 +85,11 @@ parsed, so a block page is never cached.
 
 ### State Street (`ssga_apac`)
 
-- Fund lists: `https://www.ssga.com/bin/v1/ssmp/fund/fundfinder?country=<au|sg|hk|jp>&language=<en_gb|en|en|ja>&role=institutional&product=etfs&ui=fund-finder`.
-  The `intermediary` role used by the US/EMEA module returns nothing outside
+- Fund lists: `https://www.ssga.com/bin/v1/ssmp/fund/fundfinder?country=<au|sg|hk|jp>&language=<en_gb|en|en|ja>&role=individual&product=etfs&ui=fund-finder`,
+  the individual-investor view of each site. On 3 November 2026 it listed
+  the same funds as `role=institutional` on every site (AU 18, SG 2, JP 5
+  local funds), so the adapter never asks for the institutional view; the
+  `intermediary` role used by the US/EMEA module returns nothing outside
   Australia. Only funds domiciled in the site's own country are kept, so SPY,
   GLD and the US funds the Japanese site lists stay with the US module.
 - Fund ISIN: the ISIN in the entry's `keywords`; for Australian funds without
@@ -122,6 +135,12 @@ parsed, so a block page is never cached.
 - The PDF is the creation-unit basket, dated for the next trading day (3
   November in a run on 3 November). Its weights sum to exactly 100% (200% for
   2x funds): it is the basket, scaled.
+- Samsung puts its own codes in the ISIN column for swaps, cash and deposits
+  (`SWAP00000009`, `KRD010010001`). Some pass the ISIN check digit by
+  chance, so lines whose code starts `SWAP`, `KRD` or `CASH` get no ISIN; the
+  code goes to `ticker`. All APAC adapters also reject an ISIN whose first
+  two letters are neither an ISO 3166 country code nor `XS`, `EU`, `QZ` or
+  an `X` derivative prefix.
 
 ### iShares Australia (`ishares_au`)
 
@@ -140,6 +159,13 @@ parsed, so a block page is never cached.
   before `Price`). Two requests per fund.
 - IVV (AU) holds the US iShares Core S&P 500 ETF (US4642872000), which the US
   iShares adapter expands.
+- Overlap: the regional `ishares` adapter (all of BlackRock's regional
+  sites) and the `vanguard` adapter (Vanguard's global API) also list
+  Australian funds. `ingest` lists adapters in name order and an ISIN two
+  lists share stays with the first, so `ishares` and `vanguard` own an
+  Australian fund they list; `ishares_au` and `vanguard_au` add only the
+  funds those adapters miss (and cover Australia on their own where those
+  adapters are not installed).
 
 ### Betashares (`betashares`)
 
@@ -204,11 +230,16 @@ Korean codes
 ## Terms and credit
 
 All files are public downloads on the issuers' or exchanges' websites, with
-no log-in, consent gate or bot challenge. No issuer's terms have been
-reviewed for automated reuse. Each adapter's `credit` names the issuer and,
-where the ASX list supplies ISINs, ASX Limited. robots.txt was checked for
-every host: nothing used is disallowed. The CSOP site disallows URLs with
-query strings, and VanEck Australia asks for a 25-second crawl delay.
+no log-in, consent gate or bot challenge. None has an open licence.
+BlackRock's site terms (read on its regional sites on 3 November 2026) say
+the content is copyright with all rights reserved, for personal,
+non-commercial use, and must not be reproduced or redistributed; the
+`ishares_au` licence text says so. The other issuers' terms have not been
+cleared for republication. Every adapter is therefore `local_only`. Each
+adapter's `credit` names the issuer and, where the ASX list supplies ISINs,
+ASX Limited. robots.txt was checked for every host: nothing used is
+disallowed. The CSOP site disallows URLs with query strings, and VanEck
+Australia asks for a 25-second crawl delay.
 
 ## Known gaps
 
@@ -220,13 +251,16 @@ query strings, and VanEck Australia asks for a 25-second crawl delay.
   Their replication is left unknown.
 - **Synthetic KODEX funds** (`(합성)` in the name, 18 funds) list the total
   return swap (`스왑(...)`) and its collateral, not the index; their
-  replication is `swap`.
+  replication is `swap`, and their securities are labelled `asset_class`
+  `collateral (substitute basket)`.
 - **Ticker-only lines.** Betashares and Vanguard foreign lines and all their
   bonds have no ISIN; they stay unresolved and show in the unresolved weight.
 - **Rounding.** TraHK gives two decimals; Betashares and KODEX weights are
   normalised to exactly 100% by the issuer.
-- **Cash.** KODEX's `KRD010010001` is a KRX pseudo-code for won cash, not an
-  ISIN, and is dropped from the `isin` column.
+- **Cash and swaps.** KODEX's `KRD010010001` (won cash) and `SWAP...`
+  codes are Samsung's pseudo-codes, not ISINs, and are dropped from the
+  `isin` column. Before this was fixed, `SWAP00000009` (8.17% of the KODEX
+  CD-rate synthetic fund) passed the check digit and showed as an ISIN.
 
 ## Not built, with evidence
 

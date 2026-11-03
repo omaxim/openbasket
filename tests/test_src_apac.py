@@ -88,6 +88,24 @@ def test_registered():
     assert reg["nomura"].frequency == "monthly"
     assert reg["vanguard_au"].frequency == "monthly"
     assert reg["kodex"].frequency == "daily"
+    for name in ("ssga_apac", "nomura", "kodex", "betashares", "vanguard_au", "ishares_au", "trahk"):
+        assert reg[name].redistribution == "local_only"
+    assert "must not be reproduced or redistributed" in reg["ishares_au"].licence
+
+
+def test_valid_isin_needs_a_country_prefix():
+    from openbasket.identifiers import is_valid_isin
+
+    assert _apac.valid_isin("KR7005930003") == "KR7005930003"
+    assert _apac.valid_isin("XS2621539910") == "XS2621539910"
+    # Passes the check digit, but "SW" is not a country: a KODEX swap pseudo-code.
+    assert is_valid_isin("SWAP00000009")
+    assert _apac.valid_isin("SWAP00000009") is None
+
+
+def test_ssga_apac_reads_the_individual_investor_view():
+    for site in ssga_apac.SITES:
+        assert ssga_apac._finder_params(site)["role"] == "individual"
 
 
 def test_korea_isin():
@@ -229,6 +247,44 @@ def test_kodex_holdings(tmp_path, fake_http):
     assert df.loc[1, "isin"] == "KR7005930003" and df.loc[1, "weight_pct"] == pytest.approx(60.0)
     assert df.loc[3, "asset_class"] == "derivative (futures)"
     assert weights(df) == pytest.approx(100.0)
+
+
+def _kodex_xlsx(rows) -> bytes:
+    import io
+
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["KODEX EXAMPLE CD RATE ACTIVE (SYNTHETIC)"])
+    ws.append(["2026/11/03"])
+    ws.append(["번호", "종목명", "ISIN", "종목코드", "수량", "비중(%)", "평가금액(원)"])
+    for r in rows:
+        ws.append(r)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_kodex_swap_pseudo_codes_are_not_isins(tmp_path, fake_http):
+    routes, _ = fake_http
+    routes["product-pdf/2ETF99"] = fixture("kodex_pdf.json")
+    routes["excel_pdf.do"] = _kodex_xlsx([
+        [1, "스왑(예시증권)", "SWAP00000009", None, 1, 0.0817, 1],
+        [2, "스왑(예시증권2)", "SWAP00000014", None, 1, 0.05, 1],
+        [3, "예시은행 CD", "KR7005930003", None, 1, 0.8183, 1],
+        [4, "원화예금", "KRD010010001", None, 1, 0.05, 1],
+    ])
+    h = kodex.holdings({"portfolio_id": "2ETF99", "replication": "swap"}, FetchContext(cache_dir=str(tmp_path)))
+    df = h.holdings
+    assert validate_holdings(df) == []
+    assert df.loc[0, "isin"] is None and df.loc[0, "ticker"] == "SWAP00000009"
+    assert df.loc[0, "asset_class"] == "derivative (swap)"
+    assert df.loc[1, "isin"] is None
+    assert df.loc[2, "isin"] == "KR7005930003"
+    assert df.loc[2, "asset_class"] == "collateral (substitute basket)"
+    assert df.loc[3, "asset_class"] == "cash"
+    assert any("substitute basket" in n for n in h.notes)
 
 
 # ------------------------------------------------------------------ Betashares

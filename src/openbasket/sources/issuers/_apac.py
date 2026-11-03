@@ -27,6 +27,7 @@ from typing import Callable, TypeVar
 import pandas as pd
 
 from ... import http
+from ...countries import NAMES as COUNTRY_NAMES
 from ...identifiers import is_valid_cusip, is_valid_isin, isin_check_digit
 from . import HOLDING_COLUMNS, PRODUCT_COLUMNS, FetchContext
 
@@ -127,9 +128,23 @@ def number(v: object) -> float | None:
         return None
 
 
+#: ISIN prefixes that are not ISO 3166 country codes but are issued
+#: (international securities, EU institutions, and the X codes for derivatives).
+NON_COUNTRY_ISIN_PREFIXES = frozenset({"XS", "EU", "QZ", "XA", "XB", "XC", "XD", "XF"})
+
+
 def valid_isin(v: object) -> str | None:
+    """An ISIN whose check digit is right and whose prefix is a country code
+    (or ``XS``, ``EU`` ...), else ``None``.
+
+    The prefix test drops issuer pseudo-codes that pass the check digit by
+    chance, such as KODEX's ``SWAP00000009``.
+    """
     s = clean(v)
-    return s.upper() if s and is_valid_isin(s) else None
+    if not s or not is_valid_isin(s):
+        return None
+    s = s.upper()
+    return s if s[:2] in COUNTRY_NAMES or s[:2] in NON_COUNTRY_ISIN_PREFIXES else None
 
 
 def valid_cusip(v: object) -> str | None:

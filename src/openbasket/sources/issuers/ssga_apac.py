@@ -6,8 +6,10 @@ sites, such as STW (S&P/ASX 200), ES3 (Straits Times Index), the ABF Pan Asia
 Bond Index Fund (2821) and the Japanese-listed SPDR S&P 500 ETFs.
 
 Fund lists
-    ``/bin/v1/ssmp/fund/fundfinder?country=<au|sg|hk|jp>&role=institutional``
-    (the ``intermediary`` role returns nothing outside Australia). Only funds
+    ``/bin/v1/ssmp/fund/fundfinder?country=<au|sg|hk|jp>&role=individual``,
+    the individual-investor view of each site (checked 2026-11-03: it lists
+    the same funds as the institutional view on every site, and the
+    ``intermediary`` role returns nothing outside Australia). Only funds
     domiciled in the site's own country are kept; cross-listed US funds such
     as SPY are left to the US module.
 Fund ISIN
@@ -30,7 +32,7 @@ import pandas as pd
 
 from ... import http
 
-from . import FetchContext, IssuerAdapter, IssuerHoldings, register
+from . import LOCAL_ONLY, FetchContext, IssuerAdapter, IssuerHoldings, register
 from ._apac import asset_class, asx_isins, clean, fetch, holdings_frame, number, products_frame, read_sheets, valid_isin
 
 HOST = "https://www.ssga.com"
@@ -56,7 +58,7 @@ ASSET_CLASSES = {"Equity": "Equity", "Fixed Income": "Fixed Income", "alternativ
 
 def _finder_params(site: str) -> dict:
     s = SITES[site]
-    return {"country": s["country"], "language": s["language"], "role": "institutional", "product": "etfs", "ui": "fund-finder"}
+    return {"country": s["country"], "language": s["language"], "role": "individual", "product": "etfs", "ui": "fund-finder"}
 
 
 def parse_finder(payload: dict, site: str, asx: dict[str, str] | None = None) -> list[dict]:
@@ -218,10 +220,12 @@ register(
             "Public files on State Street's website, free to download without a log-in. "
             "The site terms have not been reviewed for automated reuse; files are fetched "
             "at most once per fund per day."
+            " Read locally only: the holdings are never republished."
         ),
         regions=("AU", "SG", "HK", "JP"),
         products=products,
         holdings=holdings,
         frequency="daily",
+        redistribution=LOCAL_ONLY,
     )
 )

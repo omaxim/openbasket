@@ -29,7 +29,7 @@ from datetime import date
 import pandas as pd
 
 from ... import http
-from . import FetchContext, IssuerAdapter, IssuerHoldings, register
+from . import LOCAL_ONLY, FetchContext, IssuerAdapter, IssuerHoldings, mark_substitute_basket, register
 from ._apac import clean, fetch, holdings_frame, korea_isin, number, products_frame, read_sheets
 
 HOST = "https://www.samsungfund.com"
@@ -101,6 +101,11 @@ def products() -> pd.DataFrame:
     return products_frame(rows)
 
 
+#: Samsung's own codes in the ISIN column for swaps, cash and deposits. They are
+#: not ISINs (some even pass the check digit), so they go to ``ticker``.
+_PSEUDO_CODE = re.compile(r"^(SWAP|KRD|CASH)")
+
+
 def _cash(name: str | None, isin: str | None) -> bool:
     n = name or ""
     return (isin or "").startswith("KRD") or any(w in n for w in ("예금", "현금", "원화", "CASH", "Cash"))
@@ -132,6 +137,7 @@ def parse_holdings(content: bytes) -> tuple[str | None, pd.DataFrame]:
         if name is None:
             continue
         isin = clean(r.iloc[i_isin])
+        pseudo = isin if isin and _PSEUDO_CODE.match(isin.upper()) else None
         weight = number(r.iloc[i_weight])
         cash = _cash(name, isin)
         if cash:
@@ -148,9 +154,9 @@ def parse_holdings(content: bytes) -> tuple[str | None, pd.DataFrame]:
             label = "equity"
         rows.append(
             {
-                # KRD... codes are KRX pseudo-identifiers for cash, not ISINs.
-                "isin": None if cash else isin,
-                "ticker": clean(r.iloc[i_code]) if i_code is not None else None,
+                # KRD..., SWAP... and CASH... are Samsung's own codes, not ISINs.
+                "isin": None if cash or pseudo else isin,
+                "ticker": (clean(r.iloc[i_code]) if i_code is not None else None) or pseudo,
                 "name": name,
                 "weight_pct": weight * 100 if weight is not None else None,
                 "asset_class": label,
@@ -177,7 +183,11 @@ def holdings(product: dict, ctx: FetchContext) -> IssuerHoldings:
     as_of, df = fetch(url, parse_holdings, ctx=ctx, prefix="kodex", key=fid, ext="xls")
     notes = ["Daily creation-unit portfolio (PDF); Samsung gives weights as fractions, converted to percent."]
     if product.get("replication") == "swap":
-        notes.append("Synthetic fund: the file lists the swap and collateral, not the index.")
+        df = mark_substitute_basket(df)
+        notes.append(
+            "Synthetic fund: the file lists the swap and the securities held as collateral "
+            "(labelled as the substitute basket), not the index."
+        )
     return IssuerHoldings(as_of, df, url, notes)
 
 
@@ -191,10 +201,12 @@ register(
             "Public daily PDF files on Samsung Asset Management's KODEX site, free without a "
             "log-in; robots.txt allows /etf. Terms of reuse have not been reviewed; files are "
             "fetched at most once per fund per day."
+            " Read locally only: the holdings are never republished."
         ),
         regions=("KR",),
         products=products,
         holdings=holdings,
         frequency="daily",
+        redistribution=LOCAL_ONLY,
     )
 )

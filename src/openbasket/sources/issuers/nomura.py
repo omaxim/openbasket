@@ -26,7 +26,7 @@ import re
 import pandas as pd
 
 from ... import http
-from . import FetchContext, IssuerAdapter, IssuerHoldings, register
+from . import LOCAL_ONLY, FetchContext, IssuerAdapter, IssuerHoldings, register
 from ._apac import clean, fetch, holdings_frame, number, products_frame, read_sheets, valid_isin
 
 SITE = "https://nextfunds.jp"
@@ -204,10 +204,12 @@ register(
             "Public month-end holdings workbooks on Nomura Asset Management's websites, free to "
             "download without a log-in. Terms of reuse have not been reviewed; files are fetched "
             "at most once per fund per day."
+            " Read locally only: the holdings are never republished."
         ),
         regions=("JP",),
         products=products,
         holdings=holdings,
         frequency="monthly",
+        redistribution=LOCAL_ONLY,
     )
 )

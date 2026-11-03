@@ -95,7 +95,7 @@ publish:
       name: TickerInside
       url: https://tickerinside.com/
       licence: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
-      credit: TickerInside (https://tickerinside.com/), CC BY 4.0
+      credit: "Holdings from TickerInside (https://tickerinside.com/), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Changed by openbasket: tickers mapped to ISINs, names from SEC N-PORT."
     nport:
       name: SEC Form N-PORT
       url: https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets

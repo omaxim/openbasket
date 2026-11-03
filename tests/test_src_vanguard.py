@@ -168,6 +168,50 @@ def test_no_holdings(monkeypatch):
         vanguard.holdings({"port_id": "1"})
 
 
+def test_us_fund_falls_back_to_investor_vanguard(monkeypatch):
+    from openbasket.sources.issuers import vanguard_us
+
+    monkeypatch.setattr(vanguard, "gpx", lambda q, v: {"borHoldings": []})
+    seen = {}
+
+    def us_holdings(product, ctx):
+        seen.update(product)
+        df = pd.DataFrame([{c: None for c in HOLDING_COLUMNS} | {"name": "Apple Inc", "weight_pct": 6.5}])
+        return vanguard.IssuerHoldings("2026-09-30", df, "https://investor.vanguard.com/x", ["two decimals"])
+
+    monkeypatch.setattr(vanguard_us, "holdings", us_holdings)
+    got = vanguard.holdings({"site": "us", "port_id": "3141", "ticker": "VT", "holdings_url": vanguard.GPX_URL})
+    assert seen["ticker"] == "VT" and seen["holdings_url"] is None  # not the GPX URL
+    assert got.holdings["weight_pct"].tolist() == [6.5]
+    assert "read from https://investor.vanguard.com instead" in got.notes[0] and got.notes[1] == "two decimals"
+
+
+def test_canadian_fund_falls_back_to_vanguard_ca(monkeypatch):
+    from openbasket.sources.issuers import vanguard_ca
+
+    def down(q, v):
+        raise vanguard.GraphQLError("GPX HTTP 500")
+
+    monkeypatch.setattr(vanguard, "gpx", down)
+    df = pd.DataFrame([{c: None for c in HOLDING_COLUMNS} | {"sedol": "2046251", "weight_pct": 99.0}])
+    monkeypatch.setattr(vanguard_ca, "holdings",
+                        lambda product, ctx: vanguard.IssuerHoldings("2026-09-30", df, product["product_page_url"], []))
+    got = vanguard.holdings({"site": "ca", "port_id": "9563", "product_page_url": "https://www.vanguard.ca/en/x"})
+    assert got.url == "https://www.vanguard.ca/en/x" and "GraphQLError" in got.notes[0]
+
+
+def test_european_fund_has_no_fallback(monkeypatch):
+    monkeypatch.setattr(vanguard, "gpx", lambda q, v: {"borHoldings": []})
+    with pytest.raises(LookupError):
+        vanguard.holdings({"site": "uk", "port_id": "9503"})
+
+
+def test_regional_readers_are_fallbacks_not_adapters():
+    reg = discover()
+    assert "vanguard" in reg and "vanguard_us" not in reg and "vanguard_ca" not in reg
+    assert reg["vanguard"].redistribution == "local_only" and reg["vanguard"].enabled_by_default
+
+
 def test_graphql_errors_raise(monkeypatch):
     class R:
         status_code = 400

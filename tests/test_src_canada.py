@@ -50,10 +50,9 @@ def offline(monkeypatch):
 
 
 def test_registered():
-    adapter = discover()["vanguard_ca"]
-    assert adapter.frequency == "monthly"
-    assert "Vanguard" in adapter.credit
-    assert "non-commercial" in adapter.licence
+    # The Canadian reader is the vanguard adapter's fallback, not an adapter of its own.
+    assert "vanguard_ca" not in discover() and "vanguard" in discover()
+    assert vg.REDISTRIBUTION == "local_only"
 
 
 def test_parse_port_ids_dedupes():

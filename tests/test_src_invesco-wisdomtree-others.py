@@ -25,7 +25,7 @@ def _json(name):
 def test_registered():
     reg = discover()
     assert reg["franklin"].frequency == "daily"
-    assert reg["franklin_ca"].frequency == "quarterly"
+    assert reg["franklin_ca"].frequency == "monthly"
     for name in ("franklin", "franklin_ca"):
         assert "Franklin Templeton" in reg[name].credit
         assert reg[name].licence

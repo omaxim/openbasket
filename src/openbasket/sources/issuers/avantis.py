@@ -17,6 +17,10 @@ Holdings
     ``cusip``, ``sedol``, ``ticker``, ``securityType``, ``baseMarketValue``
     and ``weight`` (``"5.83%"``), dated ``etfHoldingsAsOfDate``. ETFs are
     updated every business day; the mutual funds' list is month-end.
+
+The site's terms have not been reviewed for redistribution, so the source is
+``local_only``: it runs only for the person using openbasket and is never
+published.
 """
 
 from __future__ import annotations
@@ -43,6 +47,11 @@ from ._us_common import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: No licence allows republication: read only for the person running openbasket.
+REDISTRIBUTION = "local_only"
+#: The terms do not forbid automated access for private use.
+ENABLED_BY_DEFAULT = True
 
 NAME = "avantis"
 HOST = "https://www.avantisinvestors.com"
@@ -256,12 +265,15 @@ ADAPTER = register(
         credit="Holdings data: Avantis Investors (American Century Investment Services, Inc.), avantisinvestors.com",
         licence=(
             "Public data from the Avantis website, read from the page data its fund pages load. "
-            "The site terms have not been reviewed for automated or bulk use; openbasket "
-            "fetches each fund at most once a day and credits Avantis on every row."
+            "No licence allows republication and the site terms have not been reviewed, so openbasket "
+            "reads it only for the person running it (redistribution class local_only) and never "
+            "publishes it. Each fund is fetched at most once a day and every row credits Avantis."
         ),
         regions=("US",),
         products=products,
         holdings=holdings,
         frequency="daily",
+        redistribution=REDISTRIBUTION,
+        enabled_by_default=ENABLED_BY_DEFAULT,
     )
 )

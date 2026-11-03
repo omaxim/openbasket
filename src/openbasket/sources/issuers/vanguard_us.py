@@ -1,5 +1,11 @@
 """Vanguard US funds and ETFs from investor.vanguard.com.
 
+Not a registered adapter: the ``vanguard`` adapter lists every Vanguard fund,
+the US ones included, and reads their holdings from Vanguard's GPX service
+with five-decimal weights. This module is its fallback for a US fund whose
+GPX holdings fail or come back empty (and keeps the US list parser). Its
+rows are credited to Vanguard and are ``local_only`` like the rest.
+
 Fund list
     ``https://investor.vanguard.com/investment-products/list/funddetail/all``
     is the JSON behind the site's "all products" list: one entity per share
@@ -30,7 +36,7 @@ import pandas as pd
 
 from ... import http
 from ...identifiers import cusip_to_isin
-from . import PRODUCT_COLUMNS, FetchContext, IssuerAdapter, IssuerHoldings, register
+from . import PRODUCT_COLUMNS, FetchContext, IssuerHoldings
 from ._us_common import (
     cached,
     clean,
@@ -46,6 +52,8 @@ from ._us_common import (
 logger = logging.getLogger(__name__)
 
 NAME = "vanguard_us"
+#: Vanguard's terms restrict republication: read only for the person running openbasket.
+REDISTRIBUTION = "local_only"
 HOST = "https://investor.vanguard.com"
 LIST_URL = HOST + "/investment-products/list/funddetail/all"
 HOLDINGS_URL = HOST + "/irr/funds/profile/{ticker}-AdditionalFundData"
@@ -208,21 +216,3 @@ def holdings(product: dict, ctx: FetchContext | None = None) -> IssuerHoldings:
     logger.debug("Vanguard %s parsed in %.1fs", ticker, time.monotonic() - t0)
     return IssuerHoldings(as_of, df, url, notes)
 
-
-ADAPTER = register(
-    IssuerAdapter(
-        name=NAME,
-        title="Vanguard (US)",
-        homepage="https://investor.vanguard.com",
-        credit="Holdings data: The Vanguard Group, Inc., investor.vanguard.com",
-        licence=(
-            "Public data from Vanguard's website, read from the JSON its fund pages load. "
-            "Vanguard's site terms have not been reviewed for automated or bulk use; "
-            "openbasket fetches each fund at most once a day and credits Vanguard on every row."
-        ),
-        regions=("US",),
-        products=products,
-        holdings=holdings,
-        frequency="monthly",
-    )
-)

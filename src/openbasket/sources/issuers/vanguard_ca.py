@@ -1,5 +1,12 @@
 """Vanguard Canada (vanguard.ca): Canadian-domiciled Vanguard ETFs and mutual funds.
 
+Not a registered adapter: the ``vanguard`` adapter lists the Canadian funds
+too and reads their direct holdings from Vanguard's GPX service, where a
+fund of funds such as VFV shows the Vanguard ETF it holds with that ETF's
+ISIN (the look-through expands it). This module is its fallback for a
+Canadian fund whose GPX holdings fail or come back empty. Its rows are
+credited to Vanguard and are ``local_only`` like the rest.
+
 Fund list
     ``https://www.vanguard.ca/en/product`` embeds the site configuration, whose
     ``portIds`` string lists every product the Canadian site shows (ETFs and
@@ -30,7 +37,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-import time
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
@@ -43,14 +49,14 @@ from . import (
     HOLDING_COLUMNS,
     PRODUCT_COLUMNS,
     FetchContext,
-    IssuerAdapter,
     IssuerHoldings,
-    register,
 )
 
 logger = logging.getLogger(__name__)
 
 NAME = "vanguard_ca"
+#: Vanguard Canada's terms license content for personal, non-commercial use only.
+REDISTRIBUTION = "local_only"
 HOST = "https://www.vanguard.ca"
 PRODUCT_LIST_URL = HOST + "/en/product"
 GRAPHQL_URL = HOST + "/gpx/graphql"
@@ -406,21 +412,3 @@ def holdings(product: dict, ctx: FetchContext | None = None) -> IssuerHoldings:
     url = _clean(product.get("product_page_url")) or GRAPHQL_URL
     return IssuerHoldings(as_of=as_of, holdings=df, url=url, notes=notes)
 
-
-register(
-    IssuerAdapter(
-        name=NAME,
-        title="Vanguard Canada",
-        homepage=HOST + "/en/product",
-        credit="Holdings data: Vanguard Investments Canada Inc., vanguard.ca",
-        licence=(
-            "Public data from vanguard.ca. The site's terms of use license its content for personal, "
-            "non-commercial use only, with all other rights reserved; no permission for redistribution "
-            "has been obtained. Fetched at most once per fund per day."
-        ),
-        regions=("CA",),
-        products=products,
-        holdings=holdings,
-        frequency="monthly",
-    )
-)

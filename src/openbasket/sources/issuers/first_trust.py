@@ -17,6 +17,16 @@ Holdings
 
 ``/Common/`` is disallowed in robots.txt, which rules out the CUSIP list PDF
 and the "Export to Excel" files; neither is used.
+
+Holdings lines carry CUSIPs only. Foreign shares often carry a CINS code (a
+CUSIP that starts with a letter, e.g. ``P3515D163``), which has no ISIN of its
+own form; the note on each result gives the weight on such lines, which stays
+unresolved unless another source (OpenFIGI, an N-PORT SEDOL or CUSIP map)
+knows the security.
+
+The site's terms have not been reviewed for redistribution; the source is
+``local_only``: it runs only for the person using openbasket and is never
+published.
 """
 
 from __future__ import annotations
@@ -38,6 +48,11 @@ from ._us_common import cached, clean, cusip_or_none, holdings_frame, number, us
 
 logger = logging.getLogger(__name__)
 
+#: No licence allows republication: read only for the person running openbasket.
+REDISTRIBUTION = "local_only"
+#: On by default; switch it off with ``issuers.disabled: [first_trust]``.
+ENABLED_BY_DEFAULT = True
+
 NAME = "first_trust"
 HOST = "https://www.ftportfolios.com"
 LIST_URL = HOST + "/Retail/etf/etflist.aspx"
@@ -45,10 +60,14 @@ SUMMARY_URL = HOST + "/Retail/Etf/EtfSummary.aspx?Ticker={ticker}"
 HOLDINGS_URL = HOST + "/Retail/Etf/EtfHoldings.aspx?Ticker={ticker}"
 
 #: Where the ticker-to-ISIN file is kept when ``products()`` is called
-#: without a ``cache_dir``: ``$OPENBASKET_ISSUER_CACHE`` or the project's
-#: ``data/01_raw/issuers`` (only used if that folder exists).
-DEFAULT_CACHE_DIR = os.environ.get("OPENBASKET_ISSUER_CACHE", "data/01_raw/issuers")
+#: without a ``cache_dir`` (``ingest`` passes ``issuers.options.first_trust.cache_dir``):
+#: ``$OPENBASKET_ISSUER_CACHE``, else the project's ``data/01_raw/issuers``
+#: if that folder exists.
+DEFAULT_CACHE_DIR = "data/01_raw/issuers"
 ISIN_FILE = "first_trust_isins.json"
+#: Summary pages read in one call when there is nowhere to keep the ISINs
+#: found, so a run without a cache does not crawl every fund every time.
+NO_CACHE_LIMIT = 25
 
 EXTRA_COLUMNS = ("market_value", "shares", "classification")
 
@@ -139,9 +158,10 @@ def _fetch_overview(ticker: str) -> dict:
 
 def _isin_file(cache_dir: str | Path | None) -> Path | None:
     if cache_dir:
-        return Path(cache_dir) / ISIN_FILE
-    if Path(DEFAULT_CACHE_DIR).is_dir():
-        return Path(DEFAULT_CACHE_DIR) / ISIN_FILE
+        return Path(cache_dir).resolve() / ISIN_FILE
+    default = Path(os.environ.get("OPENBASKET_ISSUER_CACHE") or DEFAULT_CACHE_DIR)
+    if default.is_dir():
+        return default.resolve() / ISIN_FILE
     return None
 
 
@@ -149,12 +169,18 @@ def products(cache_dir: str | Path | None = None, limit: int | None = None) -> p
     """Every First Trust ETF, one row per ISIN.
 
     ISINs already in the ticker-to-ISIN file are reused; others are read from
-    the fund's summary page (one request each, at most ``limit`` of them).
+    the fund's summary page (one request each, at most ``limit`` of them, and
+    at most :data:`NO_CACHE_LIMIT` when there is no folder to keep the file
+    in). The file is the only thing written.
     """
     r = http.get(LIST_URL)
     r.raise_for_status()
     funds = parse_list(r.text)
     path = _isin_file(cache_dir)
+    if path is None and (limit is None or limit > NO_CACHE_LIMIT):
+        logger.warning("First Trust: no cache folder for the ticker-to-ISIN file; reading at most %d summary pages",
+                       NO_CACHE_LIMIT)
+        limit = NO_CACHE_LIMIT
     known: dict[str, dict] = {}
     if path is not None and path.exists():
         known = json.loads(path.read_text())
@@ -207,6 +233,14 @@ def build_products(funds: pd.DataFrame, known: dict[str, dict]) -> pd.DataFrame:
 #: OCC option symbol, e.g. ``4SPY 270115C00006920`` (root, expiry, C/P, strike).
 _OCC_RE = re.compile(r"\d{6}[CP]\d{8}$")
 _DEBT_RE = re.compile(r"\d%|\bdue\b|\bnotes?\b|\bbonds?\b|\bdebentures?\b|treasury|\bFRN\b", re.I)
+#: Signs of a bond or loan that outrank words such as "flex" or "call" in an
+#: issuer's name: a coupon, a maturity, a floating or variable rate, a term
+#: loan ("TL B 1L") or a loan identifier (LX...).
+_STRONG_DEBT_RE = re.compile(
+    r"\d+(\.\d+)?\s*%|\bdue\b|\b(variable|floating|fixed)[- ]rate\b|\bfix(ed)?[- ]to[- ]float|"
+    r"\bTL\b|\bterm loan\b|\b\d{1,2}/\d{1,2}/\d{4}\b",
+    re.I,
+)
 
 
 def _asset_class(name: str | None, identifier: str | None, cusip: str | None, classification: str | None) -> str:
@@ -221,8 +255,14 @@ def _asset_class(name: str | None, identifier: str | None, cusip: str | None, cl
         return "derivative (swap)"
     if re.search(r"(?i)\bforward\b|\bfx\b", n):
         return "derivative (foreign exchange)"
-    if _OCC_RE.search(identifier or "") or re.search(r"(?i)\boptions?\b|\bflex\b|\bcall\b|\bput\b", n):
+    if _OCC_RE.search(identifier or ""):
         return "derivative (options)"
+    # Option words count only on a line with no CUSIP (FLEX options on SPY
+    # have none); "FLEX INTERMEDIATE HOLDCO" with a CUSIP is a company.
+    if not cusip and re.search(r"(?i)\boptions?\b|\bflex\b|\bcall\b|\bput\b", n):
+        return "derivative (options)"
+    if (identifier or "").upper().startswith("LX") or _STRONG_DEBT_RE.search(n):
+        return "debt"
     if re.search(r"(?i)\bETF\b", n):
         return "fund"
     if classification and classification.lower() not in ("other", "cash"):
@@ -302,6 +342,12 @@ def holdings(product: dict, ctx: FetchContext | None = None) -> IssuerHoldings:
         "Lines carry CUSIPs, not ISINs; weights are two-decimal percentages, "
         f"summing to {df['weight_pct'].sum():.2f}%."
     ]
+    cins = df["cusip"].map(lambda c: isinstance(c, str) and c[:1].isalpha())
+    if cins.any():
+        notes.append(
+            f"{int(cins.sum())} lines ({df.loc[cins, 'weight_pct'].sum():.2f}% of weight) carry a CINS code, "
+            "which has no ISIN of its own; they resolve only where another source knows the security."
+        )
     return IssuerHoldings(as_of, df, url, notes)
 
 
@@ -315,12 +361,15 @@ ADAPTER = register(
             "Public data from First Trust's website. The holdings pages state that CUSIP "
             "identifiers are provided by CUSIP Global Services (FactSet) and may not be used "
             "as a substitute for a CUSIP service; openbasket uses them only to identify the "
-            "holdings shown. Site terms have not been reviewed for automated or bulk use; "
-            "each fund is fetched at most once a day."
+            "holdings shown. No licence allows republication, so openbasket reads the site only for "
+            "the person running it (redistribution class local_only) and never publishes it. "
+            "Each fund is fetched at most once a day."
         ),
         regions=("US",),
         products=products,
         holdings=holdings,
         frequency="daily",
+        redistribution=REDISTRIBUTION,
+        enabled_by_default=ENABLED_BY_DEFAULT,
     )
 )

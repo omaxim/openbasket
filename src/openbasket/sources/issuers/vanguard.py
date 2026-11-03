@@ -31,6 +31,26 @@ Holdings
 Holdings are per portfolio: every share class of a portfolio (hedged ones
 included) returns the same lines, and currency-hedged portfolios list each
 FX forward leg separately, positive and negative.
+
+This is the one Vanguard source in the fund list: it covers the US and
+Canadian funds too (with five-decimal weights and ISINs, and a Canadian fund
+of funds as the Vanguard ETFs it holds, which the look-through then expands).
+For a US or Canadian fund whose GPX holdings fail or come back empty, the
+holdings are read instead from investor.vanguard.com
+(:mod:`~openbasket.sources.issuers.vanguard_us`, two-decimal weights) or
+vanguard.ca (:mod:`~openbasket.sources.issuers.vanguard_ca`, the site's own
+look-through, SEDOLs only), and a note says so.
+
+Every holdings request goes to the UK site's GPX endpoint with the header the
+UK site sends (``x-consumer-id: uk0``), whatever the fund's region.
+
+Terms: Vanguard's UK/Europe and Canadian website terms license site content
+for personal, informational, non-commercial use only, forbid copying,
+publishing or redistributing it without Vanguard's written authorisation, and
+the UK terms also forbid "repeated automated access" by software other than
+what Vanguard makes available. The source is therefore ``local_only``: it runs
+only for the person using openbasket, and the public build never fetches or
+publishes it.
 """
 
 from __future__ import annotations
@@ -49,6 +69,11 @@ from ...identifiers import cusip_to_isin, is_valid_cusip, is_valid_isin
 from . import HOLDING_COLUMNS, PRODUCT_COLUMNS, FetchContext, IssuerAdapter, IssuerHoldings, register
 
 logger = logging.getLogger(__name__)
+
+#: Vanguard's terms restrict republication: read only for the person running openbasket.
+REDISTRIBUTION = "local_only"
+#: On by default; switch it off with ``issuers.disabled: [vanguard]``.
+ENABLED_BY_DEFAULT = True
 
 GPX_URL = "https://www.vanguard.co.uk/gpx/graphql"
 GPX_HEADERS = {"content-type": "application/json", "x-consumer-id": "uk0"}
@@ -410,13 +435,48 @@ def fetch_holdings_items(port_id: str) -> tuple[int | None, list[dict]]:
     return total, items
 
 
+#: Region-specific readers used when GPX gives a fund of that site nothing.
+FALLBACK_SITES = ("us", "ca")
+
+
+def _fallback(product: dict, ctx: FetchContext, why: Exception) -> IssuerHoldings:
+    """Holdings of a US or Canadian fund from its own site's reader."""
+    site = str(product.get("site") or "")
+    if site == "us" and product.get("ticker"):
+        from . import vanguard_us as reader
+
+        row = {**product, "holdings_url": None}
+    elif site == "ca":
+        from . import vanguard_ca as reader
+
+        row = dict(product)
+    else:
+        raise why
+    logger.info("Vanguard GPX for %s failed (%s); reading %s instead", product.get("isin"), why, reader.NAME)
+    got = reader.holdings(row, ctx)
+    if got.holdings.empty:
+        raise why
+    got.notes = [f"GPX holdings unavailable ({type(why).__name__}: {why}); read from {reader.HOST} instead."] + list(got.notes)
+    return got
+
+
 def holdings(product: dict, ctx: FetchContext | None = None) -> IssuerHoldings:
     """Full month-end holdings of one share class's portfolio.
 
     The raw items are cached in ``ctx.cache_dir`` per portId per day, written
-    only after they parse.
+    only after they parse. A US or Canadian fund that GPX cannot give falls
+    back to its own site (see the module docs).
     """
     ctx = ctx or FetchContext()
+    try:
+        return _gpx_holdings(product, ctx)
+    except (GraphQLError, LookupError, OSError) as exc:
+        if str(product.get("site") or "") not in FALLBACK_SITES:
+            raise
+        return _fallback(product, ctx, exc)
+
+
+def _gpx_holdings(product: dict, ctx: FetchContext) -> IssuerHoldings:
     port_id = str(product.get("port_id") or product["portfolio_id"])
     url = product.get("product_page_url") or GPX_URL
     cache = Path(ctx.cache_dir) / f"vanguard_{port_id}_{date.today().isoformat()}.json" if ctx.cache_dir else None
@@ -445,18 +505,22 @@ ADAPTER = register(
         homepage="https://www.vanguard.co.uk",
         credit=(
             "Holdings: Vanguard (The Vanguard Group, Inc. and its regional entities), month-end portfolio "
-            "data from Vanguard's fund pages (vanguard.co.uk, ch.vanguard, de.vanguard, vanguard.ca, "
-            "vanguard.com.au, investor.vanguard.com). © Vanguard."
+            "data from Vanguard's GPX fund-data service, reached through vanguard.co.uk; the US fund list "
+            "comes from investor.vanguard.com. © Vanguard."
         ),
         licence=(
             "No open licence. Vanguard's website terms (UK/Europe and Canada, read 2026-11-03) license site "
             "content for personal, informational, non-commercial use only and forbid copying, publishing or "
-            "redistributing data from the sites without Vanguard's written authorisation. Fetched politely "
-            "(about one request a second, one fetch per fund per day); republication needs Vanguard's permission."
+            "redistributing data from the sites without Vanguard's written authorisation; the UK terms also "
+            "forbid repeated automated access by software other than what Vanguard makes generally available. "
+            "openbasket therefore reads it only for the person running it (redistribution class local_only) "
+            "and never publishes it. Fetched politely: about one request a second, one fetch per fund per day."
         ),
         regions=("GB", "IE", "CH", "DE", "AT", "NL", "US", "AU", "NZ", "CA"),
         products=products,
         holdings=holdings,
         frequency="monthly",
+        redistribution=REDISTRIBUTION,
+        enabled_by_default=ENABLED_BY_DEFAULT,
     )
 )

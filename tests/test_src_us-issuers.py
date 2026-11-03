@@ -72,7 +72,9 @@ def test_cache_written_only_after_parse(tmp_path):
 
 def test_registered():
     reg = discover()
-    for name, freq in (("vanguard_us", "monthly"), ("avantis", "daily"), ("first_trust", "daily")):
+    # vanguard_us is the US fallback of the vanguard adapter, not an adapter of its own.
+    assert "vanguard_us" not in reg
+    for name, freq in (("avantis", "daily"), ("first_trust", "daily")):
         a = reg[name]
         assert a.frequency == freq
         assert a.credit and a.licence and a.homepage.startswith("https://")
@@ -232,6 +234,40 @@ def test_first_trust_holdings():
     assert by_name.loc["US Dollar", "currency"] == "USD"
     assert by_name.loc["US Dollar", "market_value"] == -1000
     assert df["isin"].isna().all()  # First Trust gives CUSIPs only
+
+
+@pytest.mark.parametrize(
+    "name, identifier, cusip, expected",
+    [
+        ("BANK OF AMERICA CORP Series TT, Variable rate", "BAC", "06055HAB9", "debt"),
+        ("FLEX INTERMEDIATE HOLDCO 3.363%, due 06/30/2031", None, "33939HAA7", "debt"),
+        ("TRANSDIGM INC TDG TL J 1L USD", "LX219896", None, "debt"),
+        ("SPY 01/15/2027 690.00 C", "4SPY 270115C00690000", None, "derivative (options)"),
+        ("Option on SPDR S&P 500 ETF Trust", None, None, "derivative (options)"),
+        ("SPY 01/15/2027 690.00 C FLEX", None, None, "derivative (options)"),
+        ("Apple Inc.", "AAPL", "037833100", "equity"),
+    ],
+)
+def test_first_trust_asset_class(name, identifier, cusip, expected):
+    assert first_trust._asset_class(name, identifier, cusip, None) == expected
+
+
+def test_first_trust_caps_summary_pages_without_a_cache(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # no data/01_raw/issuers here
+    monkeypatch.delenv("OPENBASKET_ISSUER_CACHE", raising=False)
+    html = "".join(f"<a href='/Retail/Etf/EtfSummary.aspx?Ticker=T{i}'>Fund {i}</a>" for i in range(40))
+
+    class R:
+        text = html
+
+        def raise_for_status(self):
+            pass
+
+    asked = []
+    monkeypatch.setattr(first_trust.http, "get", lambda url, **kw: R())
+    monkeypatch.setattr(first_trust, "_fetch_overview", lambda t: asked.append(t) or {})
+    first_trust.products()
+    assert len(asked) == first_trust.NO_CACHE_LIMIT and not list(tmp_path.iterdir())
 
 
 # ---------------------------------------------------------------- live

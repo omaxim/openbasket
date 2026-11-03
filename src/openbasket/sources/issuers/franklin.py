@@ -22,6 +22,15 @@ Product pages
 
 The ``cusipnbr`` field holds a CUSIP for North American lines and a SEDOL for
 the rest; each is kept only if its check digit is right.
+
+Canadian series publish full holdings monthly or quarterly, depending on the
+series, about a month after the date; ``franklin_ca`` is registered as
+monthly, the most frequent of them, and each result's notes give the
+series' own frequency.
+
+Franklin's site terms have not been reviewed for redistribution, so both
+adapters are ``local_only``: they run only for the person using openbasket
+and are never published.
 """
 
 from __future__ import annotations
@@ -46,6 +55,11 @@ from . import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: No licence allows republication: read only for the person running openbasket.
+REDISTRIBUTION = "local_only"
+#: The terms do not forbid automated access for private use.
+ENABLED_BY_DEFAULT = True
 
 API_PATH = "/api/pds/price-and-performance"
 
@@ -257,18 +271,31 @@ def parse_products(payload: dict, site: str, pages: dict[tuple[str, str], str] |
 
 
 def products_for(sites: tuple[str, ...]) -> pd.DataFrame:
+    """The ETF lists of ``sites``; a site whose list fails is logged and skipped."""
     frames = []
     for site in sites:
         cfg = SITES[site]
         variables = {"countrycode": cfg["country"], "languagecode": cfg["language"], "productType": "etf"}
-        _, payload = _post(site, "IntlIndentifiers", LIST_QUERY, variables)
+        try:
+            _, payload = _post(site, "IntlIndentifiers", LIST_QUERY, variables)
+        except Exception as exc:  # one site down must not lose the others
+            logger.warning("Franklin %s fund list failed: %s: %s", site, type(exc).__name__, exc)
+            continue
         try:
             pages = parse_sitemap(http.get(_sitemap_url(site)).text)
         except Exception as exc:  # product pages are a nicety; the list is not
             logger.warning("Franklin %s sitemap not read: %s", site, exc)
             pages = {}
-        frames.append(parse_products(payload, site, pages))
-    df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=PRODUCT_COLUMNS)
+        df = parse_products(payload, site, pages)
+        if pages and df["product_page_url"].isna().any():
+            # A fund with no page cannot be checked for closure (closed funds'
+            # pages move under /closed/); list them so they can be reviewed.
+            missing = df.loc[df["product_page_url"].isna(), "isin"].tolist()
+            logger.info("Franklin %s: %d share classes have no product page: %s", site, len(missing), missing[:20])
+        frames.append(df)
+    if not frames:
+        raise RuntimeError(f"No Franklin site returned a fund list ({', '.join(sites)})")
+    df = pd.concat(frames, ignore_index=True)
     return df.drop_duplicates("isin").reset_index(drop=True)
 
 
@@ -347,6 +374,8 @@ def holdings_for(product: dict, ctx: FetchContext | None = None) -> IssuerHoldin
         variables = {"fundid": fid, "countrycode": cfg["country"], "languagecode": cfg["language"]}
         url, payload = _post(site, "Holdings", HOLDINGS_QUERY, variables, extra=f"&fundid={fid}")
     as_of, df, notes = parse_holdings(payload, site)
+    if len(df) and (df["asset_class"] == "cash").all():
+        notes.append("Every line is cash: the fund may have been liquidated.")
     if cache is not None and not cache.exists() and len(df):
         cache.parent.mkdir(parents=True, exist_ok=True)
         cache.write_text(json.dumps(payload))
@@ -366,8 +395,9 @@ def products_ca() -> pd.DataFrame:
 _CREDIT = "Holdings data: Franklin Templeton (franklintempleton.com), as published on its website."
 _LICENCE = (
     "Public data from Franklin Templeton's websites, read through the same API its fund pages use, "
-    "without login. Franklin's site terms have not been reviewed for automated or bulk use; "
-    "requests are throttled and each fund is fetched at most once a day."
+    "without login. No licence allows republication and the site terms have not been reviewed, so "
+    "openbasket reads it only for the person running it (redistribution class local_only) and never "
+    "publishes it. Requests are throttled and each fund is fetched at most once a day."
 )
 
 register(
@@ -381,6 +411,8 @@ register(
         products=products,
         holdings=holdings_for,
         frequency="daily",
+        redistribution=REDISTRIBUTION,
+        enabled_by_default=ENABLED_BY_DEFAULT,
     )
 )
 
@@ -394,6 +426,9 @@ register(
         regions=("CA",),
         products=products_ca,
         holdings=holdings_for,
-        frequency="quarterly",
+        # Some series monthly, some quarterly; the notes give each one's.
+        frequency="monthly",
+        redistribution=REDISTRIBUTION,
+        enabled_by_default=ENABLED_BY_DEFAULT,
     )
 )

@@ -23,9 +23,12 @@ issuers:
   # automated access are off unless named here (e.g. in conf/local).
   enabled: null
   disabled: []
-  # Keyword arguments for an adapter's products(), by adapter name, e.g.
-  #   first_trust: {limit: 20}
-  options: {}
+  # Keyword arguments for an adapter's products(), by adapter name. First
+  # Trust keeps its ticker-to-ISIN file in cache_dir (only new funds cost a
+  # request); `limit` caps the summary pages read in one run.
+  options:
+    first_trust:
+      cache_dir: data/01_raw/issuers
 
 lookthrough:
   # Holdings sources in priority order. "issuer" is SPDR and every enabled issuer adapter;

@@ -79,3 +79,20 @@ def test_a_broken_adapter_module_does_not_change_the_answer(tmp_path, monkeypatc
     assert sources.redistribution("cvm_brazil") == "public"
     assert sources.redistribution("zz_broken_dependency") == "local_only"
     assert "zz_broken_dependency" in issuers.failed_modules()
+
+
+#: Issuer-site adapters whose terms restrict republication but allow private
+#: automated reading: local_only, and on by default.
+ISSUER_SITE_ADAPTERS = ("ishares", "amundi", "vanguard", "avantis", "first_trust", "franklin", "franklin_ca")
+
+
+@pytest.mark.parametrize("name", ISSUER_SITE_ADAPTERS)
+def test_issuer_site_adapters_are_local_only_and_on_by_default(name):
+    import importlib
+
+    a = issuers.safe_discover()[name]
+    assert a.redistribution == "local_only" and a.enabled_by_default is True
+    assert sources.redistribution(name) == "local_only"
+    mod = importlib.import_module(a.products.__module__)
+    assert mod.REDISTRIBUTION == "local_only" and mod.ENABLED_BY_DEFAULT is True
+    assert "local_only" in a.licence

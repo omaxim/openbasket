@@ -1,0 +1,9 @@
+{% extends "!page.html" %}
+{#- Furo's page, with the same aggregator disclaimer as the landing page footer. -#}
+{% block footer %}
+{{ super() }}
+<div class="ob-disclaimer">
+  <p>openbasket is an aggregator and a quick-lookup tool, not investment advice. It is not affiliated with, endorsed by or checked by any fund issuer or data provider. The holdings data belongs to its sources, which are named on every fund and every row; check the source before relying on it.</p>
+  <p><a href="{{ pathto(master_doc)|replace('index.html', '') ~ '../' }}">Search funds</a> · <a href="{{ repo_url }}">GitHub</a> · <a href="https://www.leithresearch.org/">Leith Research</a></p>
+</div>
+{% endblock footer %}

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>openbasket — what an ETF or fund holds, by ISIN, from public sources</title>
+  <meta name="description" content="openbasket is a free look-through aggregator: type an ETF or fund and see the securities it holds, by ISIN and percent of net assets, from issuer files, SEC N-PORT filings and TickerInside, each with its source and date.">
+  <link rel="canonical" href="https://openbasket.leithresearch.org/">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@700;800&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/app.css">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+</head>
+<body id="top" data-api="api/v1" data-docs="docs/">
+
+<nav class="nav">
+  <div class="brand">
+    <a class="wordmark" href="./" aria-label="openbasket home"><span class="wm-open">open</span><span class="wm-basket">basket</span></a>
+    <a class="by" href="https://www.leithresearch.org/">by Leith Research</a>
+  </div>
+  <ul>
+    <li class="nav-search"><a href="#search">Search</a></li>
+    <li><a href="#release">Data</a></li>
+    <li><a href="#api">API</a></li>
+    <li><a href="docs/">Docs</a></li>
+  </ul>
+</nav>
+
+<header class="hero" id="search">
+  <p class="eyebrow">Open fund look-through · free sources</p>
+  <h1>Every fund, <em>opened up.</em></h1>
+  <p class="lede">openbasket is a quick-lookup aggregator. Type an ETF or fund and see the securities it holds, each by ISIN and as a percent of the fund's net assets, gathered from public sources: issuer holdings files, SEC filings and TickerInside. Every figure names its source and the date of that source, so you can check it there.</p>
+
+  <form class="search" role="search" id="search-form" autocomplete="off" novalidate>
+    <label class="search-label" for="q">Find a fund by name, ticker or ISIN</label>
+    <div class="search-box">
+      <div class="search-field">
+        <input id="q" name="q" type="text" inputmode="search" enterkeyhint="search" spellcheck="false" autocapitalize="off"
+               role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggestions"
+               aria-describedby="search-status" placeholder="CSPX, IE00B4L5Y983, SPDR S&amp;P 500…">
+        <ul id="suggestions" class="suggestions" role="listbox" aria-label="Matching funds" hidden></ul>
+      </div>
+      <button class="btn" type="submit">Look through</button>
+    </div>
+    <p class="search-hint" id="search-status" aria-live="polite">Try
+      <a href="?isin=IE00B5BMR087" data-isin="IE00B5BMR087">CSPX</a>,
+      <a href="?isin=US78462F1030" data-isin="US78462F1030">SPY</a> or
+      <a href="?isin=US4642898674" data-isin="US4642898674">AOR</a>, a fund of funds.</p>
+  </form>
+  <noscript><p class="notice">The search and fund view need JavaScript. The data is also available as plain JSON under <a href="api/v1/index.json">api/v1/</a>.</p></noscript>
+</header>
+
+<section class="strip" aria-label="Sources">
+  <p>Holdings from</p>
+  <ul class="source-strip">
+    <li><a href="https://www.ishares.com/">iShares</a></li>
+    <li><a href="https://www.ssga.com/">SPDR</a></li>
+    <li><a href="https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets">SEC Form N-PORT</a></li>
+    <li><a href="https://tickerinside.com/">TickerInside</a></li>
+    <li><a href="https://www.openfigi.com/">OpenFIGI</a> <span>(names)</span></li>
+  </ul>
+</section>
+
+<section id="fund" class="section fund" hidden>
+  <div id="fund-view" aria-live="polite"></div>
+</section>
+
+<section id="how" class="section">
+  <h2>How to read it</h2>
+  <div class="cols">
+    <div>
+      <h3>Weights as the source reports them</h3>
+      <p>Each weight is a percent of the fund's net assets, as the issuer file or filing gives it. A fund of funds is multiplied through its sub-funds. Nothing is rescaled to add up to 100.</p>
+    </div>
+    <div>
+      <h3>What is not explained stays visible</h3>
+      <p>Cash, futures, swaps and lines without an ISIN are not spread over the rest. They are shown as unresolved weight, which can be negative when a fund's positions add up to more than its net assets.</p>
+    </div>
+    <div>
+      <h3>Every row names its source</h3>
+      <p>openbasket only gathers what others publish. Each fund and each row says where it came from and on what date, with a link and the credit the source asks for. Check the source before relying on a figure.</p>
+    </div>
+  </div>
+</section>
+
+<section id="release" class="section section-alt">
+  <div class="inner">
+  <h2>Latest data release</h2>
+  <p class="section-intro">The data is rebuilt every month by a scheduled build. Each build is published here and as a GitHub Release with the full Parquet files, every constituent of every fund, with no rows cut.</p>
+  <div id="release-view">
+    <p class="muted">Loading the release information…</p>
+  </div>
+  </div>
+</section>
+
+<section id="api" class="section">
+  <h2>A static JSON API</h2>
+  <p class="section-intro">The page you are using reads plain JSON files, and so can you. They are rebuilt with each release and served as static files, so there is no key and no rate limit beyond being kind. The format is described in the <a href="docs/data-api.html">Data API documentation</a>.</p>
+  <div class="api-grid">
+    <div class="code">
+      <p class="code-title">Release, build date and the full list of sources</p>
+      <pre><code data-curl="meta.json">curl -s https://openbasket.leithresearch.org/api/v1/meta.json</code></pre>
+    </div>
+    <div class="code">
+      <p class="code-title">Every fund covered, for search</p>
+      <pre><code data-curl="index.json">curl -s --compressed https://openbasket.leithresearch.org/api/v1/index.json</code></pre>
+    </div>
+    <div class="code">
+      <p class="code-title">One fund's constituents, by ISIN</p>
+      <pre><code data-curl="funds/IE00B5BMR087.json">curl -s https://openbasket.leithresearch.org/api/v1/funds/IE00B5BMR087.json</code></pre>
+    </div>
+  </div>
+  <p class="api-note">A share-class ISIN that is not a fund's own file returns <code>{"alias_of": "…"}</code>; follow it. A fund the build does not cover returns HTTP 404. Every file carries its <code>source</code>, <code>source_url</code>, <code>credit</code> and <code>as_of</code>: keep them with anything you publish from it.</p>
+</section>
+
+<footer>
+  <a class="wordmark wordmark-lg" href="#top"><span class="wm-open">open</span><span class="wm-basket">basket</span></a>
+  <p class="disclaimer">openbasket is an aggregator and a quick-lookup tool, not investment advice. It is not affiliated with, endorsed by or checked by any fund issuer or data provider. The holdings data belongs to its sources, which are named on every fund and every row; figures can be late, incomplete or wrong, so check the source before relying on them.</p>
+  <p class="footer-links"><a href="https://github.com/omaxim/openbasket">GitHub</a><a href="docs/">Docs</a><a href="docs/data-api.html">Data API</a><a href="https://www.leithresearch.org/">Leith Research</a></p>
+  <p>© <span id="year">2026</span> Leith Research · Edinburgh, Scotland</p>
+</footer>
+
+<script src="assets/app.js" defer></script>
+</body>
+</html>

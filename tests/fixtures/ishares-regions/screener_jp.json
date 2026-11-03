@@ -1,0 +1,52 @@
+{
+ "data": {
+  "tableData": {
+   "columns": [
+    {
+     "name": "portfolioId"
+    },
+    {
+     "name": "isin"
+    },
+    {
+     "name": "fundName"
+    },
+    {
+     "name": "domicile"
+    },
+    {
+     "name": "aladdinAssetClass"
+    },
+    {
+     "name": "localExchangeTicker"
+    },
+    {
+     "name": "productView"
+    },
+    {
+     "name": "productPageUrl"
+    },
+    {
+     "name": "seriesBaseCurrencyCode"
+    }
+   ],
+   "data": [
+    [
+     900010,
+     "JP3000000004",
+     "iShares Example Japan ETF",
+     "Japan",
+     "Equity",
+     "9999",
+     [
+      "all",
+      "tselisted",
+      "etf"
+     ],
+     "/jp/individual-en/en/products/900010/example-japan",
+     "JPY"
+    ]
+   ]
+  }
+ }
+}

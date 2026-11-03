@@ -1,0 +1,61 @@
+﻿{
+ "columns": [
+  {
+   "name": "portfolioId"
+  },
+  {
+   "name": "isin"
+  },
+  {
+   "name": "fundName"
+  },
+  {
+   "name": "domicile"
+  },
+  {
+   "name": "domicileCode"
+  },
+  {
+   "name": "aladdinAssetClass"
+  },
+  {
+   "name": "productView"
+  },
+  {
+   "name": "productPageUrl"
+  },
+  {
+   "name": "localExchangeTicker"
+  }
+ ],
+ "data": [
+  [
+   900020,
+   "IE00000000E4",
+   "iShares Example World Swap PEA UCITS ETF",
+   "Irlande",
+   "IE",
+   "Actions",
+   [
+    "all",
+    "ishares"
+   ],
+   "/fr/intermediaries/products/900020/example-pea",
+   "EXPEA"
+  ],
+  [
+   900021,
+   "LU0000000000",
+   "BGF Example Fund",
+   "Luxembourg",
+   "LU",
+   "Actions",
+   [
+    "all",
+    "mutualFunds"
+   ],
+   "/fr/intermediaries/products/900021/example-bgf",
+   "-"
+  ]
+ ]
+}

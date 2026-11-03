@@ -1,0 +1,49 @@
+{
+ "productId": 900030,
+ "portfolioType": "ISHARES_FUND_DATA",
+ "fundName": "iShares Example Australia ETF",
+ "currencyCode": "AUD",
+ "aladdinFundTicker": "XYZ",
+ "componentsByNameMap": {
+  "keyFundFacts": {
+   "containersByNameMap": {
+    "default": {
+     "dataPointsByNameMap": {
+      "isin": {
+       "value": "AU000000XYZ2",
+       "formattedValue": "AU000000XYZ2"
+      },
+      "domicile": {
+       "value": "Australia",
+       "formattedValue": "Australia"
+      },
+      "exchangeTicker": {
+       "value": "XYZ",
+       "formattedValue": "XYZ"
+      },
+      "assetClass": {
+       "value": "Equity",
+       "formattedValue": "Equity"
+      },
+      "baseCurrencyCode": {
+       "value": "AUD",
+       "formattedValue": "AUD"
+      },
+      "totalNetAssetsFundLevel": {
+       "value": 100000000.0,
+       "formattedValue": 100000000.0
+      }
+     }
+    }
+   }
+  }
+ },
+ "content": {
+  "disclaimer": [
+   {
+    "metadata": null,
+    "text": "dropped from the cache"
+   }
+  ]
+ }
+}

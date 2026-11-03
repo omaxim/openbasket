@@ -1,0 +1,84 @@
+{
+ "productId": 900003,
+ "componentsByNameMap": {
+  "holdings": {
+   "containersByNameMap": {
+    "all": {
+     "dataPointsByNameMap": {
+      "asOfDate": {
+       "value": "20261102",
+       "formattedValue": "20261102"
+      },
+      "dateList": {
+       "value": "[20261102, 20261030]",
+       "formattedValue": "[20261102, 20261030]"
+      },
+      "isin": {
+       "value": "['-', 'CH10000000A7', 'CH10000000A7', 'US10000000B4', None]",
+       "formattedValue": "['-', 'CH10000000A7', 'CH10000000A7', 'US10000000B4', None]"
+      },
+      "ticker": {
+       "value": "['-', 'AAA', 'AAA', 'BBB', 'EUR']",
+       "formattedValue": "['-', 'AAA', 'AAA', 'BBB', 'EUR']"
+      },
+      "issueName": {
+       "value": "['EXAMPLE 500 TOTAL RETURN INDEX', 'EXAMPLE AG', 'EXAMPLE AG', 'EXAMPLE INC', 'EUR CASH']",
+       "formattedValue": "['EXAMPLE 500 TOTAL RETURN INDEX', 'EXAMPLE AG', 'EXAMPLE AG', 'EXAMPLE INC', 'EUR CASH']"
+      },
+      "holdingPercent": {
+       "value": "[100.01, 60.5, -60.5, -0.02, 0.01]",
+       "formattedValue": "[100.01, 60.5, -60.5, -0.02, 0.01]"
+      },
+      "assetClass": {
+       "value": "['Aktien', 'Aktien', 'Aktien', 'Aktien', 'Barmittel']",
+       "formattedValue": "['Aktien', 'Aktien', 'Aktien', 'Aktien', 'Barmittel']"
+      },
+      "marketCurrencyCode": {
+       "value": "['USD', 'CHF', 'CHF', 'USD', 'EUR']",
+       "formattedValue": "['USD', 'CHF', 'CHF', 'USD', 'EUR']"
+      },
+      "countryOfRisk": {
+       "value": "['Vereinigte Staaten', 'Schweiz', 'Schweiz', 'Vereinigte Staaten', 'Europa']",
+       "formattedValue": "['Vereinigte Staaten', 'Schweiz', 'Schweiz', 'Vereinigte Staaten', 'Europa']"
+      }
+     }
+    },
+    "documents": {
+     "dataPointsByNameMap": {
+      "documents": {
+       "value": "[]",
+       "formattedValue": "[]"
+      }
+     }
+    }
+   }
+  },
+  "keyFundFacts": {
+   "containersByNameMap": {
+    "default": {
+     "dataPointsByNameMap": {
+      "productStructure": {
+       "value": "Synthetisch",
+       "formattedValue": "Synthetisch"
+      },
+      "fundMethodologyTypeCode": {
+       "value": "Replicated",
+       "formattedValue": "Replicated"
+      },
+      "isin": {
+       "value": "IE00000000C8",
+       "formattedValue": "IE00000000C8"
+      }
+     }
+    }
+   }
+  }
+ },
+ "content": {
+  "x": [
+   {
+    "text": "disclaimer"
+   }
+  ]
+ }
+}

@@ -1,0 +1,67 @@
+{
+ "900001": {
+  "portfolioId": 900001,
+  "isin": "CH00000000A8",
+  "fundName": "iShares Example Swiss Equity ETF (CH)",
+  "productType": "ISHARES_FUND_DATA",
+  "productView": [
+   "all",
+   "etf"
+  ],
+  "domicile": "Switzerland",
+  "aladdinAssetClass": "Equity",
+  "aladdinAssetClassCode": "43511",
+  "aladdinFundTicker": "IS-EXCH",
+  "localExchangeTicker": "EXCH",
+  "seriesBaseCurrencyCode": "CHF",
+  "productPageUrl": "/ch/individuals/en/products/900001/example-fund",
+  "totalNetAssets": {
+   "d": "1",
+   "r": 1500000000.0
+  }
+ },
+ "900002": {
+  "portfolioId": 900002,
+  "isin": "CH00000000B6",
+  "fundName": "iShares Example Bond Index Fund (CH)",
+  "productType": "BLK_MUTUAL_FUND_DATA",
+  "productView": [
+   "all",
+   "indexFund"
+  ],
+  "domicile": "Switzerland",
+  "aladdinAssetClass": "Fixed Income",
+  "aladdinAssetClassCode": "43515",
+  "aladdinFundTicker": "BX-IDX",
+  "localExchangeTicker": "-",
+  "seriesBaseCurrencyCode": "CHF",
+  "productPageUrl": "/ch/individuals/en/products/900002/example-index-fund",
+  "totalNetAssets": "-"
+ },
+ "900003": {
+  "portfolioId": 900003,
+  "isin": "IE00000000C8",
+  "fundName": "iShares Example 500 Swap UCITS ETF",
+  "productType": "ISHARES_FUND_DATA",
+  "productView": [
+   "all",
+   "etf"
+  ],
+  "domicile": "Ireland",
+  "aladdinAssetClass": "Equity",
+  "aladdinAssetClassCode": "43511",
+  "aladdinFundTicker": "IS-EXSW",
+  "localExchangeTicker": "EXSW",
+  "seriesBaseCurrencyCode": "USD",
+  "productPageUrl": "/ch/individuals/en/products/900003/example-swap",
+  "totalNetAssets": {
+   "r": 2000000000.0
+  }
+ },
+ "900004": {
+  "portfolioId": 900004,
+  "isin": "-",
+  "fundName": "No ISIN row",
+  "productType": "ISHARES_FUND_DATA"
+ }
+}

@@ -133,7 +133,9 @@ class Result:
 
 
 #: Plausibility of a result, worst first. ``error`` and ``no_match`` are set by the callers.
-STATUSES = ("error", "no_match", "no_holdings", "leveraged", "over_100", "partial", "ok")
+#: ``local_only`` is a fund with no holdings in the public build whose only
+#: holdings source may not be republished (see :mod:`openbasket.sources`).
+STATUSES = ("error", "no_match", "no_holdings", "local_only", "leveraged", "over_100", "partial", "ok")
 
 #: Names of leveraged and inverse products.
 #: "Ultra-Short Duration" and the like are bond funds, not leveraged ones.
@@ -161,7 +163,8 @@ def choose(candidates: list[Holdings], min_resolved_pct: float) -> Holdings:
 def plausibility(summary: dict, min_resolved_pct: float = 90.0) -> tuple[str, list[str]]:
     """``(status, notes)`` for a look-through summary.
 
-    ``no_holdings`` when no source had any; ``leveraged`` when the name says
+    ``no_holdings`` when no source had any, or ``local_only`` when the only
+    one is a source the public build may not republish; ``leveraged`` when the name says
     so (2x, Ultra, Inverse, Bear ...) or the reported lines are more than 50
     points from 100; ``over_100`` when they are more than 5 points above, or
     when the looked-through constituents are (sub-funds over 100%);
@@ -172,7 +175,7 @@ def plausibility(summary: dict, min_resolved_pct: float = 90.0) -> tuple[str, li
     if not summary.get("matched"):
         return "no_match", notes
     if summary.get("source") is None:
-        return "no_holdings", notes
+        return ("local_only" if summary.get("local_only") else "no_holdings"), notes
     reported = summary.get("reported_total_pct")
     resolved = summary.get("resolved_pct") or 0.0
     off = None if reported is None else reported - 100.0
@@ -231,6 +234,8 @@ def look_through(
         "reported_total_pct": None,
         "fund_as_security": False,
         "max_depth_reached": False,
+        #: The issuer whose holdings the public build may not read, when that is why there are none.
+        "local_only": None,
     }
 
     derivative_pct = [0.0]
@@ -351,6 +356,7 @@ def look_through(
         summary["note"] = "no fund or security matched this ISIN"
     elif expand(ref, 100.0, 0, frozenset(ref.keys)) is None:
         add_note(getattr(providers, "explain", lambda r: None)(ref) or "no holdings found from any source")
+        summary["local_only"] = getattr(providers, "local_only_issuer", lambda r: None)(ref)
     if ref is not None and hasattr(providers, "source_status"):
         summary["sources_status"] = providers.source_status(ref)
 

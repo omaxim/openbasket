@@ -10,7 +10,7 @@ import pandas as pd
 
 from ...datasets import connection
 from ...identifiers import is_valid_isin
-from ...sources import issuers, ishares, nport, sec, spdr
+from ...sources import FULL_MODE, fund_identity, issuers, ishares, nport, publish_mode, redistribution, sec, spdr
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,14 @@ def download_fund_tickers() -> pd.DataFrame:
     return sec.fund_tickers()
 
 
-def download_issuer_products(ishares_sites: list[str], spdr_regions: list[str], issuers_params: dict | None = None) -> pd.DataFrame:
+#: Issuers whose fund lists are read by code in this package, not by an adapter.
+_BUILTIN = ("ishares", "spdr")
+
+
+def download_issuer_products(
+    ishares_sites: list[str], spdr_regions: list[str], issuers_params: dict | None = None,
+    publish_params: dict | None = None,
+) -> pd.DataFrame:
     """Every fund on the issuer lists, keyed by share-class ISIN.
 
     iShares and SPDR come first, then every adapter registered in
@@ -49,12 +56,27 @@ def download_issuer_products(ishares_sites: list[str], spdr_regions: list[str], 
     product contract, is logged and skipped or cleaned; it never stops the
     others. An ISIN two lists share stays with the first. ``listed_on`` is
     the date the list was read.
+
+    In the public build (``publish.mode: public``) nothing is asked of a
+    ``local_only`` source: not the iShares and SPDR lists, not a
+    ``local_only`` adapter's ``products()``. Their funds are added as
+    identity rows instead (ISIN, name, issuer; see
+    :mod:`openbasket.sources.fund_identity`), so they are still listed.
     """
     from ...pipelines.lookthrough.nodes import issuer_adapters
 
-    frames = [ishares.products(s).assign(issuer="ishares") for s in ishares_sites]
-    frames += [spdr.products(r) for r in spdr_regions]
-    for name, adapter in sorted(issuer_adapters(issuers_params).items()):
+    mode = publish_mode(publish_params)
+    adapters = issuer_adapters(issuers_params)
+    frames = []
+    if mode == FULL_MODE:
+        frames += [ishares.products(s).assign(issuer="ishares") for s in ishares_sites]
+        frames += [spdr.products(r) for r in spdr_regions]
+    else:
+        withheld = [n for n in _BUILTIN if redistribution(n) != issuers.PUBLIC]
+        withheld += [n for n, a in adapters.items() if a.redistribution != issuers.PUBLIC]
+        adapters = {n: a for n, a in adapters.items() if a.redistribution == issuers.PUBLIC}
+        logger.info("Public build: not reading the fund lists of %s (local_only)", sorted(withheld))
+    for name, adapter in sorted(adapters.items()):
         try:
             df = adapter.products()
         except Exception as exc:  # one issuer's site must not stop the others
@@ -69,10 +91,42 @@ def download_issuer_products(ishares_sites: list[str], spdr_regions: list[str], 
         df = df[df["isin"].map(is_valid_isin)].drop_duplicates("isin")
         logger.info("Issuer %s: %d share classes", name, len(df))
         frames.append(df)
-    out = pd.concat([f for f in frames if len(f)], ignore_index=True) if frames else pd.DataFrame(columns=issuers.PRODUCT_COLUMNS)
-    out = out.drop_duplicates("isin").reset_index(drop=True)
+    out = pd.concat([f for f in frames if len(f)], ignore_index=True) if any(len(f) for f in frames) else pd.DataFrame(columns=issuers.PRODUCT_COLUMNS)
     out["listed_on"] = date.today().isoformat()
+    if mode != FULL_MODE:
+        identity = local_only_identity(withheld, issuer_adapters(issuers_params), publish_params or {})
+        if len(identity):
+            out = pd.concat([out, identity], ignore_index=True) if len(out) else identity
+    out = out.drop_duplicates("isin").reset_index(drop=True)
     return parquet_safe(out)
+
+
+def local_only_identity(withheld: list[str], adapters: dict, publish_params: dict) -> pd.DataFrame:
+    """Identity rows (ISIN, name, issuer) for the funds of the ``withheld`` issuers, from local files only.
+
+    ``publish.identity.registries`` names the open registry files and
+    ``publish.identity.issuer_lists`` the cached issuer fund lists; see
+    :func:`openbasket.sources.fund_identity.identity_rows`. With
+    ``publish.identity.openfigi_cache`` set, US funds get their US ticker
+    from OpenFIGI.
+    """
+    cfg = publish_params.get("identity") or {}
+    sources = publish_params.get("sources") or {}
+    info = {}
+    for name in withheld:
+        a = adapters.get(name)
+        src = sources.get(name) or {}
+        info[name] = {"title": a.title if a else src.get("listed_by") or name,
+                      "homepage": a.homepage if a else src.get("url")}
+    rows = fund_identity.identity_rows(info, cfg.get("registries"), cfg.get("issuer_lists") or [])
+    if cfg.get("openfigi_cache") and len(rows):
+        from ...sources.openfigi import OpenFIGI
+
+        try:
+            rows = fund_identity.add_us_tickers(rows, OpenFIGI(cfg["openfigi_cache"]))
+        except Exception as exc:  # a broken cache file costs the tickers, nothing more
+            logger.warning("Fund identity: OpenFIGI tickers skipped: %s", exc)
+    return rows
 
 
 def _kind(v: object) -> str:

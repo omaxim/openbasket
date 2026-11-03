@@ -21,7 +21,7 @@ def create_pipeline(**kwargs) -> Pipeline:
             Node(download_fund_tickers, inputs=None, outputs="sec_fund_tickers", name="download_fund_tickers"),
             Node(
                 download_issuer_products,
-                inputs=["params:issuers.ishares_sites", "params:issuers.spdr_regions", "params:issuers"],
+                inputs=["params:issuers.ishares_sites", "params:issuers.spdr_regions", "params:issuers", "params:publish"],
                 outputs="issuer_products",
                 name="download_issuer_products",
             ),

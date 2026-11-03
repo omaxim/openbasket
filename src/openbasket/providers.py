@@ -20,6 +20,13 @@ outcome for a fund (``ok``, ``empty``, ``top10_only``, ``http_403``,
 ``parse_error`` ...) is kept, and :meth:`DataProviders.explain` turns the
 first failure into a sentence for the fund's note.
 
+In the public build (``mode="public"``) a ``local_only`` issuer's holdings
+are never fetched: the issuer source answers ``local_only`` without a
+request, the other sources (TickerInside, N-PORT) are still read, and when
+none has the fund, :meth:`DataProviders.explain` says where its holdings
+are: "Holdings for this fund are available from <issuer> when you run
+openbasket yourself".
+
 A fund can also be named directly by its SEC series ID (``S000004310``) or
 its issuer ID (``ishares-uk:253743``), which is how a universe run refers to
 funds it already knows.
@@ -40,8 +47,8 @@ from .countries import country_code, country_label
 from .datasets import connection
 from .identifiers import cusip_to_isin, is_placeholder_cusip, is_valid_isin, isin_to_cusip, normalise_ticker
 from .lookthrough import FundRef, Holdings, Line
-from .sources import ishares, nport, spdr
-from .sources.issuers import FetchContext, IssuerAdapter, validate_holdings
+from .sources import FULL_MODE, PUBLIC_MODE, ishares, nport, publish_mode, redistribution, spdr
+from .sources.issuers import PUBLIC, FetchContext, IssuerAdapter, validate_holdings
 from .sources.openfigi import OpenFIGI
 from .sources.tickerinside_source import fetch_fund
 
@@ -54,6 +61,9 @@ NPORT_DATASETS_URL = "https://www.sec.gov/data-research/sec-markets-data/form-n-
 
 #: Issuers read by code in this package rather than by a registered adapter.
 BUILTIN_ISSUERS = {"ishares": "iShares", "spdr": "SPDR"}
+
+#: Where the docs explain running openbasket on your own machine.
+RUN_LOCALLY_URL = "https://openbasket.leithresearch.org/docs/running-locally.html"
 
 #: Issuer types and asset categories that mean an N-PORT holding is a fund.
 FUND_ASSET_CATS = ("STIV",)
@@ -78,6 +88,8 @@ class DataProviders:
         adapters: dict[str, IssuerAdapter] | None = None,
         issuer_series: dict[str, str] | None = None,
         max_issuer_leis: int = 3,
+        mode: str = FULL_MODE,
+        run_locally_url: str | None = None,
     ):
         """``stop_at_pct`` stops reading further sources once one resolves that
         much, which spares a universe run the network calls whose answer
@@ -88,7 +100,9 @@ class DataProviders:
         issuer fund ID to the N-PORT series it was matched to, so a fund
         reached both ways is one fund. An ISIN or CUSIP that N-PORT reports
         under more than ``max_issuer_leis`` fund series LEIs is not used to match
-        a fund."""
+        a fund. ``mode`` is ``publish.mode``: ``"public"`` never reads a
+        ``local_only`` issuer's holdings; ``run_locally_url`` is the page
+        its funds' notes point to."""
         unknown = set(source_order) - set(SOURCES)
         if unknown:
             raise ValueError(f"Unknown sources {sorted(unknown)}; choose from {SOURCES}")
@@ -116,6 +130,8 @@ class DataProviders:
         self.stop_at_pct = stop_at_pct
         self.tickerinside_tickers = {t.upper() for t in tickerinside_tickers} if tickerinside_tickers is not None else None
         self.max_issuer_leis = max_issuer_leis
+        self.mode = publish_mode(mode)
+        self.run_locally_url = run_locally_url or RUN_LOCALLY_URL
         self._fund_holding_index: tuple[dict, dict, list] | None = None
         self.issuer_cache_dir = issuer_cache_dir
         self.cusip_isin = {c: v for c, v in (cusip_isin or {}).items() if not is_placeholder_cusip(c)}
@@ -166,10 +182,16 @@ class DataProviders:
         if p.get("replication") == "swap":
             note = "the issuer says this fund is swap-based: its holdings are a substitute basket, not what the fund tracks"
         series_id = self.issuer_series.get(iid)
-        if series_id is None and is_us_product(p) and is_valid_isin(p.get("isin")):
+        identity = _identity_only(p)
+        if series_id is None and (is_us_product(p) or identity) and is_valid_isin(p.get("isin")):
             series_id = self._series_from_nport(p["isin"])
-        return FundRef(series_id=series_id, ticker=ticker, name=p.get("fund_name"), via=str(p.get("issuer") or "ishares"),
-                       issuer_id=iid, note=note)
+        if identity and series_id:
+            # Only the fund's name and ISIN came from the issuer: an N-PORT series is the fund itself.
+            return self._ref(series_id, None, "nport_lei")
+        via = str(p.get("issuer") or "ishares")
+        if identity and isinstance(p.get("identity_source"), str):
+            via = p["identity_source"]  # the registry or list the name and ISIN came from
+        return FundRef(series_id=series_id, ticker=ticker, name=p.get("fund_name"), via=via, issuer_id=iid, note=note)
 
     def resolve_ref(self, fund: str) -> FundRef | None:
         """A fund named by series ID or issuer ID; ``None`` if ``fund`` is neither or is unknown."""
@@ -347,11 +369,16 @@ class DataProviders:
 
     def holdings(self, ref: FundRef) -> list[Holdings]:
         out = []
+        withheld = self.local_only_issuer(ref)
+        if withheld:
+            # Recorded whether or not "issuer" is in source_order, so the note can say where the holdings are.
+            self._status.setdefault(ref.key, {})["issuer"] = "local_only"
+            self._why.setdefault(ref.key, self._local_only_note(withheld))
         for source in self.source_order:
             if self.stop_at_pct is not None and out and out[-1].resolved_pct >= self.stop_at_pct:
                 break
             h, status = None, None
-            if source == "issuer" and ref.issuer_id:
+            if source == "issuer" and ref.issuer_id and not withheld:
                 h, status, why = self._read_issuer(ref.issuer_id)
                 if why:
                     self._why.setdefault(ref.key, why)
@@ -367,6 +394,32 @@ class DataProviders:
             if h is not None and h.lines:
                 out.append(h)
         return out
+
+    @property
+    def public(self) -> bool:
+        return self.mode == PUBLIC_MODE
+
+    def issuer_redistribution(self, issuer: str | None) -> str:
+        """The redistribution class of an issuer's holdings: its adapter's, else its module's."""
+        name = str(issuer or "ishares").lower()
+        a = self.adapters.get(name)
+        if a is not None:
+            return a.redistribution
+        return redistribution(name)
+
+    def local_only_issuer(self, ref: FundRef) -> str | None:
+        """In the public build, the name of the ``local_only`` issuer whose list ``ref`` is on; else ``None``."""
+        if not self.public or not ref.issuer_id:
+            return None
+        p = self.issuer_by_id.get(ref.issuer_id)
+        if p is None:
+            return None
+        issuer = str(p.get("issuer") or "ishares")
+        return self._title(issuer) if self.issuer_redistribution(issuer) != PUBLIC else None
+
+    def _local_only_note(self, title: str) -> str:
+        return (f"Holdings for this fund are available from {title} when you run openbasket yourself "
+                f"(see {self.run_locally_url})")
 
     def source_status(self, ref: FundRef) -> str | None:
         """``source=outcome`` for every source read for ``ref``, e.g. ``issuer=top10_only; nport=ok``."""
@@ -394,6 +447,10 @@ class DataProviders:
         if p is None:
             return None
         issuer = str(p.get("issuer") or "ishares")
+        if self.public and self.issuer_redistribution(issuer) != PUBLIC:
+            raise LocalOnly(self._title(issuer), self._local_only_note(self._title(issuer)))
+        if _identity_only(p):
+            raise AdapterOff(f"{self._title(issuer)} lists this fund, but only its name and ISIN are known here")
         if issuer == "spdr":
             return self._from_spdr(iid, p)
         if issuer == "ishares":
@@ -411,6 +468,8 @@ class DataProviders:
         title = self._title(str(p.get("issuer") or "ishares"))
         try:
             h = self._from_issuer(iid)
+        except LocalOnly as exc:
+            return None, "local_only", exc.plain
         except AdapterOff as exc:
             return None, "adapter_off", str(exc)
         except Exception as exc:  # a broken issuer file must not stop the run
@@ -643,6 +702,23 @@ class DataProviders:
 
 class AdapterOff(RuntimeError):
     """A fund is listed by an issuer whose adapter is not enabled."""
+
+
+class LocalOnly(RuntimeError):
+    """The public build may not read this issuer's holdings: its terms restrict republication.
+
+    ``issuer`` is the issuer's name and ``plain`` the sentence for the fund's note.
+    """
+
+    def __init__(self, issuer: str, plain: str):
+        super().__init__(plain)
+        self.issuer = issuer
+        self.plain = plain
+
+
+def _identity_only(p: dict) -> bool:
+    """True for an ``issuer_products`` row that carries only a fund's identity (the public build)."""
+    return p.get("identity_only") in (True,)
 
 
 def _text(v: object) -> str | None:

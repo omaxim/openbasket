@@ -12,6 +12,7 @@ import pandas as pd
 from ...lookthrough import look_through
 from ...providers import DataProviders
 from ...sources import issuers as issuer_registry
+from ...sources import publish_mode
 from ...sources.openfigi import OpenFIGI, best_listing
 
 logger = logging.getLogger(__name__)
@@ -44,16 +45,20 @@ def run_lookthrough(
     sedol_isin_map: pd.DataFrame,
     params: dict,
     issuers_params: dict | None = None,
+    publish_params: dict | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Expand each ISIN. Returns position-level constituents, unidentified lines and a summary.
 
     An ISIN whose look-through raises gets a summary row with ``status``
-    ``error`` and the exception in ``error``; the others carry on.
+    ``error`` and the exception in ``error``; the others carry on. In the
+    public build (``publish.mode: public``) a ``local_only`` issuer's
+    holdings are not read, and a fund that only such an issuer covers has
+    ``status`` ``local_only``.
     """
     figi = OpenFIGI(params["openfigi_cache"]) if params.get("use_openfigi", True) else None
     providers = make_providers(
         nport_holdings, security_master, fund_master, ticker_isin_map, issuer_products, cusip_isin_map,
-        sedol_isin_map, params, figi, issuers_params=issuers_params,
+        sedol_isin_map, params, figi, issuers_params=issuers_params, publish_params=publish_params,
     )
     leaves, unresolved, summaries = [], [], []
     for isin in isins:
@@ -98,9 +103,14 @@ def make_providers(
     params: dict,
     figi: OpenFIGI | None,
     issuers_params: dict | None = None,
+    publish_params: dict | None = None,
     **kwargs,
 ) -> DataProviders:
-    """The providers both look-through pipelines use; ``kwargs`` go to :class:`DataProviders`."""
+    """The providers both look-through pipelines use; ``kwargs`` go to :class:`DataProviders`.
+
+    ``publish_params`` gives ``mode`` (``publish.mode``) and ``run_locally_url``.
+    """
+    pp = publish_params or {}
     return DataProviders(
         nport_holdings, security_master, fund_master, ticker_isin_map, figi,
         source_order=params["source_order"], proxies=params.get("proxies"),
@@ -109,6 +119,7 @@ def make_providers(
         sedol_isin=dict(zip(sedol_isin_map["sedol"], sedol_isin_map["isin"])),
         adapters=issuer_adapters(issuers_params),
         max_issuer_leis=int(params.get("max_issuer_leis_per_isin", 3)),
+        mode=publish_mode(pp), run_locally_url=pp.get("run_locally_url"),
         **kwargs,
     )
 

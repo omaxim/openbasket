@@ -10,6 +10,13 @@ out larger than ``site_budget_mb`` the cut is lowered and the large funds are
 rewritten. Each cut is logged and recorded in the quality report; the full
 lists are always in the release file, and each fund file's ``n_rows``,
 ``listed_pct`` and ``breakdowns`` are computed over the full list.
+
+In the public build (``publish.mode: public``) only sources whose licence
+allows republication may appear (see :func:`openbasket.sources.redistribution`).
+Before anything is written, every constituent row's source and every fund's
+source are checked, and a ``local_only`` one stops the build with
+:class:`LocalOnlyInPublicBuild`; each fund file is checked again as it is
+written, and ``meta.sources`` lists public sources only.
 """
 
 from __future__ import annotations
@@ -28,6 +35,7 @@ import numpy as np
 import pandas as pd
 
 from ...datasets import connection
+from ...sources import FULL_MODE, PUBLIC_MODE, is_public, publish_mode, redistribution
 from ..lookthrough.nodes import issuer_adapters
 from ..universe.nodes import source_catalogue
 
@@ -58,6 +66,41 @@ FUND_FILE_KEYS = FUND_KEYS + [
 ]
 _PCT_KEYS = ("reported_total_pct", "resolved_pct", "unexpanded_fund_pct", "unresolved_pct", "unidentified_lines_pct")
 _ID_RE = re.compile(r"^[A-Z0-9]{9,12}$")
+
+
+class LocalOnlyInPublicBuild(RuntimeError):
+    """The public build was handed rows or funds from a source it may not republish."""
+
+
+def check_public(funds: pd.DataFrame, rel: duckdb.DuckDBPyRelation) -> dict[str, int]:
+    """Raise :class:`LocalOnlyInPublicBuild` if any row or fund comes from a ``local_only`` source.
+
+    Returns the number of rows per source. A local run's universe outputs
+    (``kedro run`` without ``--env public``) hold issuer rows; publishing them
+    in the public build would republish them, so it fails here instead.
+    """
+    r = rel  # noqa: F841 - read by DuckDB below
+    rows = dict(connection().sql("select coalesce(source, ''), count(*) from r group by 1").fetchall())
+    fund_sources = funds["source"].fillna("").value_counts().to_dict() if "source" in funds else {}
+    bad_rows = {s: int(n) for s, n in rows.items() if s and not is_public(s)}
+    bad_funds = {s: int(n) for s, n in fund_sources.items() if s and not is_public(s)}
+    if bad_rows or bad_funds:
+        raise LocalOnlyInPublicBuild(
+            "The public build may only publish sources whose licence allows it, but these local_only sources are "
+            f"in its input: rows {bad_rows or 'none'}, funds {bad_funds or 'none'}. Run the universe with "
+            "`kedro run --env public --pipeline=universe` (publish.mode: public) before publishing."
+        )
+    return {s: int(n) for s, n in rows.items()}
+
+
+def _check_document(doc: dict) -> None:
+    """A fund file in the public build: its source, its unresolved entry's and every row's must be public."""
+    srcs = {doc.get("source"), (doc.get("unresolved") or {}).get("source")}
+    i = CONSTITUENT_FIELDS.index("source")
+    srcs |= {row[i] for row in doc.get("constituents") or []}
+    bad = sorted(s for s in srcs if s and not is_public(s))
+    if bad:
+        raise LocalOnlyInPublicBuild(f"funds/{doc.get('id')}.json would publish local_only sources {bad}")
 
 
 def release_urls(repo: str, tag: str) -> tuple[str, str]:
@@ -256,18 +299,27 @@ def _finish_breakdowns(sums: dict, unresolved_pct: object) -> dict:
 
 
 def _write_fund_files(funds: dict[str, dict], rel, cap: int, out: Path, full_data_url: str,
-                      only: set[str] | None = None) -> tuple[dict[str, int], dict[str, int]]:
-    """Write fund files; returns bytes per file and constituent rows per fund."""
+                      only: set[str] | None = None, public: bool = False) -> tuple[dict[str, int], dict[str, int]]:
+    """Write fund files; returns bytes per file and constituent rows per fund.
+
+    With ``public`` each file is checked to name public sources only before it is written.
+    """
     sizes, n_rows = {}, {}
     for fid, n, rows, sums in _stream_constituents(rel, cap, only if only is not None else set(funds)):
         if fid in funds:
             bd = _finish_breakdowns(sums, funds[fid].get("unresolved_pct"))
-            data = _dumps(fund_document(funds[fid], rows, n, full_data_url, bd))
+            doc = fund_document(funds[fid], rows, n, full_data_url, bd)
+            if public:
+                _check_document(doc)
+            data = _dumps(doc)
             (out / f"{fid}.json").write_bytes(data)
             sizes[fid], n_rows[fid] = len(data), n
     for fid in (only if only is not None else funds.keys()) - sizes.keys():
         bd = _finish_breakdowns({}, funds[fid].get("unresolved_pct"))
-        data = _dumps(fund_document(funds[fid], [], 0, full_data_url, bd))
+        doc = fund_document(funds[fid], [], 0, full_data_url, bd)
+        if public:
+            _check_document(doc)
+        data = _dumps(doc)
         (out / f"{fid}.json").write_bytes(data)
         sizes[fid], n_rows[fid] = len(data), 0
     return sizes, n_rows
@@ -314,7 +366,8 @@ def _source_entries(sources_cfg: dict, rel, funds: pd.DataFrame) -> list[dict]:
         if cfg is None:
             logger.warning("Source %r contributed rows but has no entry in publish.sources or the issuer adapters", sid)
             cfg = {"name": sid, "url": None, "licence": None, "credit": sid}
-        entries.append({"id": sid, **{k: cfg.get(k) for k in ("name", "url", "licence", "credit")}, **found[sid]})
+        entries.append({"id": sid, **{k: cfg.get(k) for k in ("name", "url", "licence", "credit")},
+                        "redistribution": redistribution(sid), **found[sid]})
     return entries
 
 
@@ -335,13 +388,25 @@ def publish(
     params: dict,
     issuers_params: dict | None = None,
 ) -> dict:
-    """Write ``api/v1`` under ``site_dir`` and the release files under ``release_dir``; return the quality report."""
+    """Write ``api/v1`` under ``site_dir`` and the release files under ``release_dir``; return the quality report.
+
+    In the public build (``mode: public``) nothing is written unless every
+    row and fund comes from a public source (:func:`check_public`).
+    """
     t0 = time.perf_counter()
     now = datetime.now(timezone.utc)
     built_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     tag = str(params.get("release_tag") or now.strftime("%Y-%m"))
     release_url, full_data_url = release_urls(params["repo"], tag)
+    mode = publish_mode(params)
+    public = mode == PUBLIC_MODE
     sources_cfg = source_catalogue(params["sources"], issuer_adapters(issuers_params))
+    withheld = sorted(sid for sid in sources_cfg if not is_public(sid))
+    if public:
+        rows_by_source = check_public(universe_funds, universe_constituents)
+        sources_cfg = {sid: cfg for sid, cfg in sources_cfg.items() if is_public(sid)}
+    else:
+        rows_by_source = None
 
     release = Path(params["release_dir"])
     release.mkdir(parents=True, exist_ok=True)
@@ -367,7 +432,7 @@ def publish(
 
     cap = int(params.get("max_constituents", 1000))
     requested_cap = cap
-    sizes, n_rows = _write_fund_files(funds, rel, cap, api / "funds", full_data_url)
+    sizes, n_rows = _write_fund_files(funds, rel, cap, api / "funds", full_data_url, public=public)
 
     aliases: dict[str, str] = {}
     for fid, f in funds.items():
@@ -390,16 +455,22 @@ def publish(
         "aliases": dict(sorted(aliases.items())),
     }
     (api / "index.json").write_bytes(_dumps(index))
+    meta_sources = _source_entries(sources_cfg, rel, ok)
+    if public:
+        bad = [e["id"] for e in meta_sources if e["redistribution"] != "public"]
+        if bad:
+            raise LocalOnlyInPublicBuild(f"meta.sources would list local_only sources {bad}")
     meta = {
         "api_version": API_VERSION,
         "contract": CONTRACT,
+        "mode": mode,
         "built_at": built_at,
         "release_tag": tag,
         "release_url": release_url,
         "full_data_url": full_data_url,
         "n_funds": len(funds),
         "n_isins": len(aliases),
-        "sources": _source_entries(sources_cfg, rel, ok),
+        "sources": meta_sources,
     }
     (api / "meta.json").write_bytes(_dumps(meta))
 
@@ -415,7 +486,7 @@ def publish(
             total / 1e6, budget / 1e6, cap, new_cap, len(affected),
         )
         cap = new_cap
-        new_sizes, _ = _write_fund_files(funds, rel, cap, api / "funds", full_data_url, only=affected)
+        new_sizes, _ = _write_fund_files(funds, rel, cap, api / "funds", full_data_url, only=affected, public=public)
         sizes.update(new_sizes)
         total = _dir_bytes(api)
         cuts.append({"max_constituents": cap, "funds_rewritten": len(affected), "api_mb": round(total / 1e6, 1)})
@@ -430,6 +501,7 @@ def publish(
         )
     report = quality_report(universe, universe_funds, universe_run, funds)
     report["shared_constituent_isins"] = shared_isins(rel, int(params.get("shared_isin_issuers", 20)))
+    report["publishing"] = publishing_report(mode, universe_funds, funds, meta_sources, withheld, rows_by_source)
     report.update(
         release_tag=tag,
         built_at=built_at,
@@ -452,6 +524,27 @@ def publish(
     (release / QUALITY_FILE).write_text(json.dumps(report, indent=2, ensure_ascii=False, default=_clean))
     logger.info("Published %d funds, %d ISINs, %.1f MB of API to %s", len(funds), len(aliases), total / 1e6, api)
     return report
+
+
+def publishing_report(mode: str, funds: pd.DataFrame, published: dict, meta_sources: list[dict], withheld: list[str],
+                      rows_by_source: dict[str, int] | None) -> dict:
+    """The build mode, the sources published and withheld, and the funds listed as ``local_only``.
+
+    ``local_only_by_issuer`` counts the published funds listed without
+    holdings because only a ``local_only`` source has them, by issuer.
+    """
+    pub = funds[funds["id"].isin(list(published))]
+    lo = pub[pub["status"] == "local_only"] if "status" in pub else pub.iloc[:0]
+    return {
+        "mode": mode,
+        "sources_published": [e["id"] for e in meta_sources],
+        # In a full build nothing is withheld; the list says what a public build would leave out.
+        "sources_local_only": withheld,
+        "withheld": withheld if mode != FULL_MODE else [],
+        "rows_by_source": rows_by_source,
+        "n_local_only": len(lo),
+        "local_only_by_issuer": {k: int(v) for k, v in lo["issuer"].fillna("unknown").value_counts().items()},
+    }
 
 
 def shared_isins(rel: duckdb.DuckDBPyRelation, min_issuers: int = 20, top: int = 20) -> dict:
@@ -539,6 +632,7 @@ def quality_report(universe: pd.DataFrame, funds: pd.DataFrame, run: dict, publi
             "matched_via": {k: int(v) for k, v in f["matched_via"].value_counts().items()},
             "series_match": {k: int(v) for k, v in f["series_match"].value_counts().items()},
             "status": {k: int(v) for k, v in f["status"].value_counts().items()},
+            "published_by_status": {k: int(v) for k, v in f.loc[f["published"], "status"].value_counts().items()},
         },
         "unexpanded_funds": {
             "n_funds": int((done.get("unexpanded_fund_pct", pd.Series(dtype=float)).astype(float) > 0).sum()),

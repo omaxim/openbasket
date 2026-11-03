@@ -80,6 +80,26 @@ universe:
       tickerinside.com: 0.25
 
 publish:
+  # "full" (a run on your own machine): every enabled source is read and
+  # shown. "public" (conf/public, the GitHub Action): holdings from local_only
+  # sources (issuer sites whose terms restrict republication) are never
+  # fetched or written; their funds are listed by name and ISIN only, with
+  # status local_only. See docs/source/publishing.md.
+  mode: full
+  # Where a local_only fund's note sends readers who want its holdings.
+  run_locally_url: https://openbasket.leithresearch.org/docs/running-locally.html
+  # Public build only: where a local_only issuer's funds get their identity
+  # (ISIN, name, issuer). Open registries first, when built; then a fund list
+  # cached by an earlier full run, of which only those three columns are read.
+  identity:
+    registries:
+      fund_directory: data/03_primary/fund_directory.parquet
+      fund_registry: data/03_primary/fund_registry.parquet
+      firds: data/03_primary/firds_instruments.parquet
+    issuer_lists: [data/01_raw/issuers/issuer_products.parquet]
+    # US funds get their US ticker from OpenFIGI (not the issuer), so they
+    # still meet their N-PORT series by ticker. null skips it.
+    openfigi_cache: data/03_primary/openfigi_cache.parquet
   # The scheduled build passes the tag: --params=publish.release_tag=2026-11.
   # null uses the current UTC year and month.
   release_tag: null
@@ -127,6 +147,30 @@ publish:
       url: https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets
       licence: Public US government data
       credit: Security details from SEC Form N-PORT filings, U.S. Securities and Exchange Commission
+    issuer_list:
+      name: Issuers' public fund lists (fund names and ISINs only)
+      url: https://openbasket.leithresearch.org/docs/running-locally.html
+      licence: Facts only (fund name, ISIN, issuer); no holdings or other content is republished
+      credit: Fund name and ISIN as listed by the fund's issuer
+      listed_by: the issuer's public fund list
+    fund_directory:
+      name: openbasket fund directory (exchange and regulator listings)
+      url: https://openbasket.leithresearch.org/docs/sources/index.html
+      licence: Facts only (fund name, ISIN, issuer) from public listings
+      credit: Fund name and ISIN from public exchange and regulator listings
+      listed_by: the fund directory
+    fund_registry:
+      name: GLEIF and ESMA fund registry
+      url: https://www.gleif.org/
+      licence: GLEIF data CC0 1.0; ESMA registers free to reuse with credit
+      credit: Fund identity from GLEIF (CC0) and ESMA registers
+      listed_by: GLEIF and ESMA
+    firds:
+      name: ESMA Financial Instruments Reference Data System (FIRDS)
+      url: https://registers.esma.europa.eu/publication/searchRegister?core=esma_registers_firds
+      licence: ESMA register data, free to reuse with credit
+      credit: Instrument reference data from ESMA FIRDS
+      listed_by: ESMA FIRDS
     openfigi:
       name: OpenFIGI
       url: https://www.openfigi.com/

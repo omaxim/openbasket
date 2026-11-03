@@ -1,0 +1,5 @@
+{"response": {"numFound": 3, "docs": [
+ {"file_name": "FULINS_C_20261024_01of01.zip", "file_type": "FULINS", "publication_date": "2026-10-24T00:00:00Z", "download_link": "https://firds.esma.europa.eu/firds/FULINS_C_20261024_01of01.zip"},
+ {"file_name": "FULINS_C_20261031_01of01.zip", "file_type": "FULINS", "publication_date": "2026-10-31T00:00:00Z", "download_link": "https://firds.esma.europa.eu/firds/FULINS_C_20261031_01of01.zip"},
+ {"file_name": "FULINS_D_20261031_01of04.zip", "file_type": "FULINS", "publication_date": "2026-10-31T00:00:00Z", "download_link": "https://firds.esma.europa.eu/firds/FULINS_D_20261031_01of04.zip"}
+]}}

@@ -16,5 +16,7 @@ def register_pipelines() -> dict[str, Pipeline]:
         A mapping from pipeline names to ``Pipeline`` objects.
     """
     pipelines = find_pipelines(raise_errors=True)
-    pipelines["__default__"] = sum(p for name, p in pipelines.items() if name not in BATCH_PIPELINES)
+    # ``prefetch`` reads every issuer file over the network, so it too runs only when asked for.
+    on_request = (*BATCH_PIPELINES, "prefetch")
+    pipelines["__default__"] = sum(p for name, p in pipelines.items() if name not in on_request)
     return pipelines

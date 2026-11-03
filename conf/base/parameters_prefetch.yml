@@ -1,0 +1,19 @@
+# kedro run --pipeline=prefetch, before --pipeline=universe: reads the issuer
+# files of the funds the universe run will select (universe.sources, ids,
+# sample, seed, limit) into lookthrough.issuer_cache_dir, one worker per host.
+prefetch:
+  # Worker threads: one per host, at most this many hosts at once.
+  max_hosts: 16
+  # "local" or "public". null takes publish.mode when it is set, else local;
+  # conf/public sets public. Public mode never fetches a local_only source.
+  mode: null
+  # Only these fund lists (ishares, spdr, adapter names); null follows universe.sources.
+  sources: null
+  # Read each host's robots.txt first: its Crawl-delay lengthens the host's
+  # interval, and a holdings URL it disallows is skipped.
+  check_robots: true
+  # Progress per host every this many jobs, and at least this often (seconds).
+  log_every: 50
+  log_every_s: 60
+  # Error messages kept per host in the report.
+  errors_kept: 5

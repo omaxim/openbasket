@@ -63,6 +63,31 @@ def is_valid_cusip(value: object) -> bool:
     return bool(_CUSIP_RE.match(value)) and cusip_check_digit(value[:8]) == value[8]
 
 
+#: CUSIP values filers use when a holding has none.
+PLACEHOLDER_CUSIPS = frozenset({"N/A", "NA", "NONE", "NULL", "0", "-", "UNKNOWN"})
+
+
+def is_placeholder_cusip(cusip: object) -> bool:
+    """True for CUSIPs that stand for "no CUSIP": ``000000000``, nine equal characters, ``N/A``.
+
+    N-PORT filers put ``000000000`` on cash sweeps, money market lines and
+    private funds alike, so one ISIN reported next to it in one filing must
+    not be spread to every other holding with that "CUSIP".
+    """
+    if not isinstance(cusip, str):
+        return False
+    c = cusip.strip().upper()
+    return c in PLACEHOLDER_CUSIPS or c.startswith("000000") or (len(c) >= 6 and len(set(c)) == 1)
+
+
+#: The same test in SQL, for a column named ``cusip``.
+PLACEHOLDER_CUSIP_SQL = (
+    "(upper(trim(cusip)) in ('N/A', 'NA', 'NONE', 'NULL', '0', '-', 'UNKNOWN') "
+    "or upper(trim(cusip)) like '000000%' "
+    "or (length(trim(cusip)) >= 6 and length(replace(upper(trim(cusip)), left(upper(trim(cusip)), 1), '')) = 0))"
+)
+
+
 def cusip_to_isin(cusip: object, country: object = "US") -> str | None:
     """Derive an ISIN from a CUSIP, or ``None`` when that is not safe.
 

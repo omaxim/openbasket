@@ -17,7 +17,7 @@ def create_pipeline(**kwargs) -> Pipeline:
                 run_universe,
                 ["universe_selected", "nport_holdings", "security_master", "fund_master", "ticker_isin_map",
                  "issuer_products", "cusip_isin_map", "sedol_isin_map", "params:lookthrough", "params:universe",
-                 "params:publish.sources"],
+                 "params:publish.sources", "params:issuers"],
                 ["universe_funds", "universe_constituents", "universe_run"],
                 name="run_universe",
             ),

@@ -1,23 +1,27 @@
 """Look through every fund openbasket knows, in one batch.
 
-The universe is every fund in the issuer lists (iShares, SPDR) plus every
-N-PORT series with a latest filing. A US ETF that is both is one fund, keyed
-by the issuer's ISIN, with the series kept so N-PORT can still serve as a
-fallback. Share classes of one portfolio are aliases of one fund.
+The universe is every fund in the issuer lists (iShares, SPDR and every
+registered issuer adapter) plus every N-PORT series with a latest filing. A
+US fund that is both is one fund, keyed by the issuer's ISIN, with the series
+kept so N-PORT can still serve as a fallback. Share classes of one portfolio
+are aliases of one fund.
 
 Funds are expanded one at a time with the same engine and providers as the
 ``lookthrough`` pipeline. Unlike its output, a constituent row here is one
-ISIN from one source through one fund, so every row's source is exact. A fund that raises is recorded with its error and
-the batch moves on. Constituent rows go to Parquet parts on disk as they are
-made, so memory stays flat however many funds there are.
+ISIN from one source through one fund, so every row's source is exact. A
+fund that raises is recorded with its error and the batch moves on.
+Constituent rows go to Parquet parts on disk as they are made, so memory
+stays flat however many funds there are.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 import time
 import traceback
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -30,18 +34,19 @@ from ... import throttle
 from ...datasets import connection
 from ...identifiers import normalise_ticker
 from ...lookthrough import FundRef, look_through
-from ...providers import edgar_url, issuer_id
+from ...providers import BUILTIN_ISSUERS, edgar_url, is_us_product, issuer_id
 from ...sources.openfigi import OpenFIGI, best_listing
 from ...sources.tickerinside_source import issuer_tickers
-from ..lookthrough.nodes import aggregate, make_providers
+from ..lookthrough.nodes import aggregate, issuer_adapters, make_providers
 
 logger = logging.getLogger(__name__)
 
+#: Fund lists every universe has; each registered issuer adapter adds its own.
 UNIVERSE_SOURCES = ("ishares", "spdr", "nport")
 
 UNIVERSE_COLUMNS = [
-    "id", "isin", "isins", "series_id", "issuer_id", "name", "ticker", "issuer", "universe_source",
-    "series_match", "product_page_url", "cik",
+    "id", "isin", "isins", "series_id", "issuer_id", "share_class_ids", "name", "ticker", "issuer",
+    "universe_source", "series_match", "product_page_url", "cik", "listed_on",
 ]
 
 _STR = pa.string()
@@ -49,7 +54,8 @@ _STR = pa.string()
 PART_SCHEMA = pa.schema(
     [
         ("fund_id", _STR), ("constituent_isin", _STR), ("name", _STR), ("weight_pct", pa.float64()),
-        ("asset_class", _STR), ("source", _STR), ("source_ref", _STR), ("source_url", _STR), ("as_of", _STR),
+        ("asset_class", _STR), ("country", _STR), ("sector", _STR),
+        ("source", _STR), ("source_ref", _STR), ("source_url", _STR), ("as_of", _STR),
         ("issuer_name", _STR), ("issuer_lei", _STR), ("title", _STR), ("ticker", _STR), ("cusip", _STR),
         ("isin_source", _STR), ("depth", pa.int32()), ("n_paths", pa.int32()), ("via_fund", _STR), ("note", _STR),
     ]
@@ -57,9 +63,9 @@ PART_SCHEMA = pa.schema(
 
 FUND_COLUMNS = [
     "id", "isin", "isins", "series_id", "issuer_id", "name", "ticker", "issuer", "universe_source", "series_match",
-    "source", "source_url", "source_ref", "credit", "as_of", "matched_via", "note", "sources_used", "sources_tried",
-    "reported_total_pct", "resolved_pct", "unresolved_pct", "unidentified_lines_pct", "n_constituents",
-    "error", "traceback", "warnings", "seconds",
+    "source", "source_url", "source_ref", "credit", "as_of", "matched_via", "note", "status", "sources_used",
+    "sources_tried", "sources_status", "reported_total_pct", "resolved_pct", "unexpanded_fund_pct", "unresolved_pct",
+    "unidentified_lines_pct", "derivative_exposure_pct", "n_constituents", "max_depth_reached", "error", "traceback", "warnings", "seconds",
 ]
 
 
@@ -70,28 +76,82 @@ def _str(v: object) -> str | None:
     return v if isinstance(v, str) and v.strip() else None
 
 
+def fund_name_key(name: object) -> str:
+    """A fund name folded for comparison: case, accents, spacing and punctuation ignored."""
+    if not isinstance(name, str):
+        return ""
+    s = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower().replace("&", " and ")
+    return re.sub(r"[^a-z0-9$]+", " ", s.replace("​", "")).strip()
+
+
+def _share_class_group(row: pd.Series) -> tuple:
+    """Rows with the same group are share classes of one portfolio.
+
+    An adapter's ``portfolio_id`` is shared by its share classes (that is the
+    adapter contract). iShares and SPDR give every share class its own
+    portfolio id, so their classes are grouped by issuer, site, exact fund
+    name, domicile and asset class instead. On iShares UK the share classes
+    of a fund carry the fund's name unchanged (hedged classes included) and
+    their holdings files are identical; a name that differs, such as
+    "iShares Core S&P 500 UCITS ETF USD (Dist)" (IUSA, a separate fund from
+    CSPX), keeps the funds apart. SPDR names end in "(Acc)" or "(Dist)", so
+    SPDR classes stay one fund each.
+    """
+    if row["issuer"] in BUILTIN_ISSUERS:
+        return (row["issuer"], str(row["site"]).lower(), fund_name_key(row["fund_name"]),
+                str(row.get("domicile") or ""), str(row.get("asset_class") or ""))
+    return (row["issuer"], row["issuer_id"])
+
+
+def _union_groups(issuer_ids: list[str], groups: list[tuple]) -> list[int]:
+    """One group number per row: rows sharing an issuer id or a share-class group are one fund."""
+    parent = list(range(len(issuer_ids)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    first: dict[object, int] = {}
+    for i, keys in enumerate(zip(issuer_ids, groups)):
+        for k in (("id", keys[0]), ("group", keys[1])):
+            if k in first:
+                parent[find(i)] = find(first[k])
+            else:
+                first[k] = i
+    return [find(i) for i in range(len(issuer_ids))]
+
+
 def _issuer_funds(issuer_products: pd.DataFrame, issuer_names: dict) -> list[dict]:
     """One fund per issuer portfolio; its share-class ISINs, largest first, are the aliases."""
     ip = issuer_products.copy()
     if "issuer" not in ip:
         ip["issuer"] = "ishares"
-    ip["issuer"] = ip["issuer"].fillna("ishares")
-    for col in ("total_net_assets", "product_page_url", "ticker"):
+    ip["issuer"] = ip["issuer"].fillna("ishares").astype(str).str.lower()
+    for col in ("total_net_assets", "product_page_url", "ticker", "domicile", "asset_class", "listed_on"):
         if col not in ip:
             ip[col] = None
+    ip["total_net_assets"] = pd.to_numeric(ip["total_net_assets"], errors="coerce")
+    ip = ip.dropna(subset=["isin"])
+    if ip.empty:
+        return []
     ip["issuer_id"] = [issuer_id(i, s, p) for i, s, p in zip(ip["issuer"], ip["site"], ip["portfolio_id"])]
-    ip = ip.dropna(subset=["isin"]).sort_values(["total_net_assets", "isin"], ascending=[False, True], na_position="last")
+    ip["_group"] = _union_groups(ip["issuer_id"].tolist(), ip.apply(_share_class_group, axis=1).tolist())
+    ip = ip.sort_values(["total_net_assets", "isin"], ascending=[False, True], na_position="last")
     funds = []
-    for iid, g in ip.groupby("issuer_id", sort=False):
+    for _, g in ip.groupby("_group", sort=False):
         first = g.iloc[0]
         isins = list(dict.fromkeys(g["isin"]))
         funds.append(
             {
-                "id": isins[0], "isin": isins[0], "isins": isins, "series_id": None, "issuer_id": iid,
+                "id": isins[0], "isin": isins[0], "isins": isins, "series_id": None, "issuer_id": first["issuer_id"],
+                "share_class_ids": list(dict.fromkeys(g["issuer_id"])),
                 "name": _str(first["fund_name"]), "ticker": _str(first["ticker"]),
                 "issuer": issuer_names.get(first["issuer"], first["issuer"]), "universe_source": first["issuer"],
                 "series_match": None, "product_page_url": _str(first["product_page_url"]), "cik": None,
-                "_site": first["site"],
+                "listed_on": _str(first["listed_on"]),
+                "_us": is_us_product(first.to_dict()), "_name_key": fund_name_key(first["fund_name"]),
             }
         )
     return funds
@@ -128,12 +188,17 @@ def _series_funds(fund_master: pd.DataFrame, security_master: duckdb.DuckDBPyRel
         first = g.iloc[0]
         tickers = [t for t in dict.fromkeys(g["ticker"].dropna()) if _str(t)]
         lei = _str(first.get("series_lei"))
+        report = first.get("report_date")
         funds.append(
             {
                 "id": sid, "isin": None, "isins": list(isins_by_lei.get(lei, [])) if lei else [], "series_id": sid,
-                "issuer_id": None, "name": _str(first.get("series_name")), "ticker": tickers[0] if tickers else None,
-                "issuer": None, "universe_source": "nport", "series_match": None, "product_page_url": None,
-                "cik": _str(first.get("cik")), "_tickers": tickers,
+                "issuer_id": None, "share_class_ids": [], "name": _str(first.get("series_name")),
+                "ticker": tickers[0] if tickers else None,
+                # The N-PORT filer: the trust or company the series belongs to.
+                "issuer": _str(first.get("registrant_name")), "universe_source": "nport", "series_match": None,
+                "product_page_url": None, "cik": _str(first.get("cik")),
+                "listed_on": pd.Timestamp(report).date().isoformat() if pd.notna(report) else None,
+                "_tickers": tickers, "_name_key": fund_name_key(first.get("series_name")),
             }
         )
     return funds
@@ -148,16 +213,19 @@ def build_universe(
     """Every known fund, one row each, with every ISIN that names it in ``isins``.
 
     A series joins an issuer fund when one of its share-class ISINs is the
-    issuer fund's ISIN, or, for US issuer sites, when one of its tickers is
-    the issuer fund's ticker. An ISIN belongs to one fund only: issuer funds
-    claim theirs first.
+    issuer fund's ISIN, or, for US issuer funds, when one of its tickers is
+    the issuer fund's ticker, or, failing both, when its name is the issuer
+    fund's name and no other fund on either side has that name. An ISIN
+    belongs to one fund only: issuer funds claim theirs first.
     """
-    issuer = _issuer_funds(issuer_products, params.get("issuers") or {})
+    names = {**BUILTIN_ISSUERS, **{n: a.title for n, a in issuer_adapters(params.get("adapters")).items()},
+             **(params.get("issuers") or {})}
+    issuer = _issuer_funds(issuer_products, names)
     series = _series_funds(fund_master, security_master)
     by_isin = {i: f for f in issuer for i in f["isins"]}
     us_by_ticker = {}
     for f in issuer:
-        if f["_site"] == "us" and f["ticker"]:
+        if f["_us"] and f["ticker"]:
             us_by_ticker.setdefault(normalise_ticker(f["ticker"]), f)
 
     rest = []
@@ -176,6 +244,26 @@ def build_universe(
             continue
         target.update(series_id=s["series_id"], series_match=how, cik=s["cik"])
         target["_series_isins"] = s["isins"]
+
+    # Names, last: a US issuer fund still unmatched whose name only one
+    # remaining series has (and no other unmatched issuer fund shares).
+    us_left: dict[str, list[dict]] = {}
+    for f in issuer:
+        if f["_us"] and f["series_id"] is None and f["_name_key"]:
+            us_left.setdefault(f["_name_key"], []).append(f)
+    series_by_name: dict[str, list[dict]] = {}
+    for s in rest:
+        if s["_name_key"]:
+            series_by_name.setdefault(s["_name_key"], []).append(s)
+    matched_by_name = set()
+    for key, fs in us_left.items():
+        ss = series_by_name.get(key, [])
+        if len(fs) == 1 and len(ss) == 1:
+            f, s = fs[0], ss[0]
+            f.update(series_id=s["series_id"], series_match="name", cik=s["cik"])
+            f["_series_isins"] = s["isins"]
+            matched_by_name.add(s["series_id"])
+    rest = [s for s in rest if s["series_id"] not in matched_by_name]
 
     claimed = set(by_isin)
     for f in issuer:
@@ -197,18 +285,20 @@ def build_universe(
         logger.warning("Dropping %d funds whose id repeats another's: %s", dupes.sum(), out.loc[dupes, "id"].tolist()[:10])
         out = out[~dupes]
     logger.info(
-        "Universe: %d funds (%s); %d issuer funds matched to an N-PORT series",
+        "Universe: %d funds (%s); %d issuer funds matched to an N-PORT series (%s)",
         len(out), out["universe_source"].value_counts().to_dict(), out["series_match"].notna().sum(),
+        out["series_match"].value_counts().to_dict(),
     )
     return out.reset_index(drop=True)
 
 
 def select_universe(universe: pd.DataFrame, params: dict) -> pd.DataFrame:
     """The funds to run: ``sources``, then ``ids``, then ``sample`` funds per source, then ``limit``."""
-    sources = params.get("sources") or list(UNIVERSE_SOURCES)
-    unknown = set(sources) - set(UNIVERSE_SOURCES)
+    known = set(UNIVERSE_SOURCES) | set(universe["universe_source"].dropna())
+    sources = params.get("sources") or sorted(known)
+    unknown = set(sources) - known
     if unknown:
-        raise ValueError(f"universe.sources: unknown {sorted(unknown)}; choose from {UNIVERSE_SOURCES}")
+        raise ValueError(f"universe.sources: unknown {sorted(unknown)}; choose from {sorted(known)}")
     out = universe[universe["universe_source"].isin(sources)]
     if params.get("ids"):
         out = out[out["id"].isin(params["ids"]) | out["series_id"].isin(params["ids"])]
@@ -238,10 +328,15 @@ class _Warnings(logging.Handler):
 
 
 def fund_ref(fund: dict) -> FundRef:
-    """The engine's ref for a universe row; issuer funds keep their series for the N-PORT fallback."""
+    """The engine's ref for a universe row; issuer funds keep their series for the N-PORT fallback.
+
+    ``via`` is how the fund was matched: the issuer list it is keyed by, or
+    ``series_id`` for an N-PORT series.
+    """
+    src = fund["universe_source"]
     return FundRef(
         series_id=_str(fund.get("series_id")), ticker=_str(fund.get("ticker")), name=_str(fund.get("name")),
-        via=fund["universe_source"], issuer_id=_str(fund.get("issuer_id")),
+        via="series_id" if src == "nport" else src, issuer_id=_str(fund.get("issuer_id")),
     )
 
 
@@ -250,8 +345,17 @@ def _short_traceback(exc: BaseException, frames: int = 4) -> str:
     return " | ".join(f"{Path(f.filename).name}:{f.lineno} {f.name}" for f in tb)
 
 
+def _isins(v: object) -> list[str]:
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return []
+    return [str(x) for x in v]
+
+
 def expand_fund(fund: dict, providers, params: dict) -> tuple[dict, pd.DataFrame]:
-    """Look through one universe fund. Never raises: an error is returned in the summary."""
+    """Look through one universe fund. Never raises: an error is returned in the summary.
+
+    A configured proxy for any of the fund's ISINs replaces its own holdings.
+    """
     t0 = time.perf_counter()
     catcher = _Warnings()
     pkg = logging.getLogger("openbasket")
@@ -260,12 +364,16 @@ def expand_fund(fund: dict, providers, params: dict) -> tuple[dict, pd.DataFrame
     rows = pd.DataFrame()
     error = tb = None
     try:
+        ref = None
+        proxy_ref = getattr(providers, "proxy_ref", None)
+        if proxy_ref is not None:
+            ref = next((r for r in map(proxy_ref, _isins(fund.get("isins")) or [fund["id"]]) if r is not None), None)
         res = look_through(
             fund["id"], providers, max_depth=params["max_depth"], min_resolved_pct=params["min_resolved_pct"],
-            ref=fund_ref(fund), look_through_derivatives=params.get("look_through_derivatives", True),
+            ref=ref or fund_ref(fund), look_through_derivatives=params.get("look_through_derivatives", True),
         )
         summary = res.summary
-        rows = _fund_rows(fund["id"], res.leaves, summary)
+        rows = _fund_rows(fund, res.leaves, summary)
     except Exception as exc:  # one broken fund must not stop the batch
         error = f"{type(exc).__name__}: {exc}"[:500]
         tb = _short_traceback(exc)
@@ -281,15 +389,30 @@ def expand_fund(fund: dict, providers, params: dict) -> tuple[dict, pd.DataFrame
 ROW_KEY = ("input_isin", "constituent_isin", "source", "as_of", "via_fund")
 
 
-def _fund_rows(fid: str, leaves: list[dict], summary: dict) -> pd.DataFrame:
-    """Constituents of one fund, routes summed per ``ROW_KEY``, plus its unresolved-weight row."""
+def _fallback_url(fund: dict) -> str | None:
+    return _str(fund.get("product_page_url")) or (
+        edgar_url(fund["series_id"], None, _str(fund.get("cik"))) if _str(fund.get("series_id")) else None
+    )
+
+
+def _fund_rows(fund: dict, leaves: list[dict], summary: dict) -> pd.DataFrame:
+    """Constituents of one fund, routes summed per ``ROW_KEY``, plus its unresolved-weight row.
+
+    The unresolved row of a fund with no holdings carries the fund's own
+    source, link and as-of date, so every row says where it came from.
+    """
+    fid = fund["id"]
     agg = aggregate(pd.DataFrame(leaves), ROW_KEY) if leaves else pd.DataFrame(columns=PART_SCHEMA.names)
     agg = agg.rename(columns={"input_isin": "fund_id"})
+    no_holdings = summary.get("source") is None
     unresolved = {
         "fund_id": fid, "constituent_isin": None, "name": "Unresolved weight", "weight_pct": summary["unresolved_pct"],
-        "asset_class": "unresolved", "source": summary["source"], "source_ref": summary.get("source_ref"),
-        "source_url": summary.get("source_url"), "as_of": summary["as_of"], "depth": 0, "n_paths": 0,
-        "note": summary["note"],
+        "asset_class": "unresolved",
+        "source": summary["source"] or fund["universe_source"],
+        "source_ref": summary.get("source_ref"),
+        "source_url": summary.get("source_url") or _fallback_url(fund),
+        "as_of": summary["as_of"] or (_str(fund.get("listed_on")) if no_holdings else None),
+        "depth": 0, "n_paths": 0, "note": summary["note"],
     }
     out = pd.concat([agg, pd.DataFrame([unresolved])], ignore_index=True)
     out["fund_id"] = fid
@@ -299,31 +422,32 @@ def _fund_rows(fid: str, leaves: list[dict], summary: dict) -> pd.DataFrame:
 def _summary_row(fund: dict, s: dict, error: str | None, tb: str | None, warnings: list[str], seconds: float) -> dict:
     src = s.get("source")
     note = s.get("note")
-    if error is None and src is None:
-        # Say why, when a source said so (e.g. an issuer that lists only the ten largest lines).
-        note = "; ".join([note or "no holdings found from any source", *list(dict.fromkeys(warnings))[:2]])
-    fallback_url = _str(fund.get("product_page_url")) or (
-        edgar_url(fund["series_id"], None, None) if _str(fund.get("series_id")) else None
-    )
+    no_holdings = error is None and src is None
     return {
         **{k: fund.get(k) for k in ("id", "isin", "isins", "series_id", "issuer_id", "ticker", "issuer",
                                     "universe_source", "series_match")},
         "name": _str(fund.get("name")) or s.get("fund_name"),
-        # A fund with no holdings is still credited to the list it came from.
+        # A fund with no holdings is credited to the list it came from, dated
+        # the day that list was read.
         "source": src or fund["universe_source"],
-        "source_url": s.get("source_url") or fallback_url,
+        "source_url": s.get("source_url") or _fallback_url(fund),
         "source_ref": s.get("source_ref"),
         "credit": None,
-        "as_of": s.get("as_of"),
-        "matched_via": s.get("matched_via") or fund["universe_source"],
-        "note": note,
+        "as_of": s.get("as_of") or (_str(fund.get("listed_on")) if no_holdings else None),
+        "matched_via": s.get("matched_via") or fund_ref(fund).via,
+        "note": note or ("no holdings found from any source" if no_holdings else None),
+        "status": "error" if error else s.get("status"),
         "sources_used": s.get("sources_used"),
         "sources_tried": s.get("sources_tried"),
+        "sources_status": s.get("sources_status"),
         "reported_total_pct": s.get("reported_total_pct"),
         "resolved_pct": s.get("resolved_pct"),
+        "unexpanded_fund_pct": s.get("unexpanded_fund_pct"),
         "unresolved_pct": s.get("unresolved_pct"),
         "unidentified_lines_pct": s.get("unidentified_lines_pct"),
+        "derivative_exposure_pct": s.get("derivative_exposure_pct"),
         "n_constituents": s.get("n_constituents"),
+        "max_depth_reached": s.get("max_depth_reached"),
         "error": error,
         "traceback": tb,
         "warnings": "; ".join(dict.fromkeys(warnings))[:2000] or None,
@@ -380,6 +504,15 @@ def _to_arrow(df: pd.DataFrame) -> pa.Table:
     return pa.table(cols, schema=PART_SCHEMA)
 
 
+def source_catalogue(sources_cfg: dict, adapters: dict) -> dict:
+    """Name, link, licence and credit of every source: the configured ones, then each adapter's own."""
+    out = {k: dict(v) for k, v in (sources_cfg or {}).items()}
+    for name, a in adapters.items():
+        out.setdefault(name, {"name": a.title, "url": a.homepage, "licence": a.licence, "credit": a.credit,
+                              "listed_by": a.title})
+    return out
+
+
 def run_universe(
     universe: pd.DataFrame,
     nport_holdings: duckdb.DuckDBPyRelation,
@@ -392,6 +525,7 @@ def run_universe(
     lookthrough_params: dict,
     params: dict,
     sources: dict,
+    issuers_params: dict | None = None,
 ) -> tuple[pd.DataFrame, duckdb.DuckDBPyRelation, dict]:
     """Expand every selected fund. Returns the fund table, the constituent rows and a run record."""
     started = time.perf_counter()
@@ -401,12 +535,18 @@ def run_universe(
     use_figi = lookthrough_params.get("use_openfigi", True)
     figi = OpenFIGI(lookthrough_params["openfigi_cache"], autosave=False) if use_figi else None
     ti = issuer_tickers() if "tickerinside" in lookthrough_params["source_order"] and params.get("tickerinside_prefilter", True) else None
+    issuer_series = {}
+    for f in universe.to_dict("records"):
+        if _str(f.get("series_id")):
+            for iid in _isins(f.get("share_class_ids")) or ([f["issuer_id"]] if _str(f.get("issuer_id")) else []):
+                issuer_series[iid] = f["series_id"]
     providers = make_providers(
         nport_holdings, security_master, fund_master, ticker_isin_map, issuer_products, cusip_isin_map,
-        sedol_isin_map, lookthrough_params, figi,
+        sedol_isin_map, lookthrough_params, figi, issuers_params=issuers_params,
         stop_at_pct=lookthrough_params["min_resolved_pct"] if params.get("stop_early", True) else None,
-        tickerinside_tickers=ti,
+        tickerinside_tickers=ti, issuer_series=issuer_series,
     )
+    sources = source_catalogue(sources, providers.adapters)
     writer = _PartWriter(Path(params["work_dir"]), int(params.get("rows_per_part", 500_000)))
     every = int(params.get("log_every", 100))
     # The OpenFIGI cache is rewritten whole, so not after every fund.
@@ -420,11 +560,18 @@ def run_universe(
         if i % every == 0 or i == len(funds):
             _progress(records, len(funds), time.perf_counter() - started)
         if figi is not None and i % save_every == 0:
-            figi.save()
+            _save_figi(figi)
     writer.flush(force=True)
 
     enrich_started = time.perf_counter()
-    figi_table = _figi_table(writer.glob, figi) if use_figi and lookthrough_params.get("enrich_openfigi", True) else None
+    figi_table, figi_error = None, None
+    if use_figi and lookthrough_params.get("enrich_openfigi", True):
+        try:
+            figi_table = _figi_table(writer.glob, figi)
+        except Exception as exc:  # names and types are a bonus; never lose the run for them
+            figi_error = f"{type(exc).__name__}: {exc}"[:300]
+            logger.warning("OpenFIGI enrichment skipped: %s", figi_error)
+        _save_figi(figi)
     enrich_s = time.perf_counter() - enrich_started
     constituents = _constituents(writer.glob, figi_table)
     funds_df = _with_credit(pd.DataFrame(records, columns=FUND_COLUMNS), constituents, sources)
@@ -434,17 +581,30 @@ def run_universe(
         "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "seconds": round(time.perf_counter() - started, 1),
         "openfigi_enrich_seconds": round(enrich_s, 1),
+        "openfigi": {**(figi.stats() if figi is not None else {"requests": 0, "failures": 0, "gave_up": False, "errors": []}),
+                     "enabled": figi is not None, "enrich_error": figi_error},
         "n_attempted": len(funds_df),
         "n_ok": int(ok.sum()),
         "n_failed": int((~ok).sum()),
-        "n_no_holdings": int((ok & funds_df["sources_tried"].isna()).sum()),
+        "n_no_holdings": int((funds_df["status"] == "no_holdings").sum()),
+        "status": {k: int(v) for k, v in funds_df["status"].value_counts().items()},
         "n_constituent_rows": writer.n_rows,
         "http_requests": throttle.THROTTLE.requests,
         "http_wait_seconds": round(throttle.THROTTLE.waited_s, 1),
+        "issuer_adapters": sorted(providers.adapters),
         "selection": {k: params.get(k) for k in ("sources", "ids", "sample", "seed", "limit")},
     }
     logger.info("Universe run: %s", run)
     return funds_df, constituents, run
+
+
+def _save_figi(figi: OpenFIGI | None) -> None:
+    if figi is None:
+        return
+    try:
+        figi.save()
+    except Exception as exc:  # a cache that cannot be written costs requests next time, nothing more
+        logger.warning("OpenFIGI cache not saved: %s", exc)
 
 
 def _progress(records: list[dict], total: int, elapsed: float) -> None:
@@ -463,7 +623,6 @@ def _figi_table(glob: str, figi: OpenFIGI) -> pd.DataFrame:
         f"select distinct constituent_isin from read_parquet('{glob}') where constituent_isin is not null"
     ).fetchall()]
     found = figi.map("ID_ISIN", isins)
-    figi.save()
     rows = []
     for isin, listings in found.items():
         b = best_listing(listings)
@@ -496,21 +655,30 @@ def _constituents(glob: str, figi_table: pd.DataFrame | None) -> duckdb.DuckDBPy
 
 
 def _with_credit(funds: pd.DataFrame, constituents: duckdb.DuckDBPyRelation, sources: dict) -> pd.DataFrame:
-    """Credit every source a fund's rows came from, its own source first, then by weight."""
+    """Credit every source a fund's rows came from, its own source first, then by weight.
+
+    OpenFIGI is credited where it supplied a name. A fund with no holdings is
+    credited as listed by its source, with no holdings available.
+    """
     rel = constituents  # noqa: F841 - read by DuckDB below
     used = connection().sql(
         """
         select fund_id, source as src, sum(abs(weight_pct)) w from rel
         where constituent_isin is not null group by all
         union all
-        select fund_id, 'openfigi', 0 from rel where name_source = 'openfigi' or composite_figi is not null group by 1
+        select fund_id, 'openfigi', 0 from rel where name_source = 'openfigi' group by 1
         """
     ).df()
     by_fund = {
         fid: g.sort_values("w", ascending=False)["src"].tolist() for fid, g in used.groupby("fund_id", sort=False)
     }
     credits = []
-    for fid, top in zip(funds["id"], funds["source"]):
+    for fid, top, status in zip(funds["id"], funds["source"], funds["status"]):
+        if status == "no_holdings" and not by_fund.get(fid):
+            cfg = sources.get(top) or {}
+            name = cfg.get("listed_by") or cfg.get("name") or top
+            credits.append(f"Fund listed by {name}; no holdings were available from any source")
+            continue
         ids = list(dict.fromkeys([top, *by_fund.get(fid, [])]))
         credits.append("; ".join((sources.get(s) or {}).get("credit") or s for s in ids if s))
     funds = funds.copy()

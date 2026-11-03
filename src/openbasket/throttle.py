@@ -28,12 +28,20 @@ class Throttle:
     def interval(self, host: str) -> float:
         return float(self.per_host_s.get(host, self.default_s))
 
-    def wait(self, url: str) -> None:
-        """Block until a request to ``url``'s host is allowed, then claim the slot."""
+    def wait(self, url: str, min_interval: float | None = None) -> None:
+        """Block until a request to ``url``'s host is allowed, then claim the slot.
+
+        ``min_interval`` is the host's own limit when it has one (an API's
+        published rate); a configured interval for the host is used instead
+        when it is longer.
+        """
         host = urlsplit(url).netloc.lower()
         with self._lock:
             now = time.monotonic()
-            due = self._last.get(host, float("-inf")) + self.interval(host)
+            gap = self.interval(host) if host in self.per_host_s or min_interval is None else float(min_interval)
+            if min_interval is not None:
+                gap = max(gap, float(min_interval))
+            due = self._last.get(host, float("-inf")) + gap
             pause = max(0.0, due - now)
             self._last[host] = now + pause
             self.waited_s += pause

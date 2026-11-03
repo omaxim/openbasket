@@ -9,8 +9,9 @@ Matching an input ISIN to a fund, in order:
    adapter, see :mod:`openbasket.sources.issuers`);
 3. N-PORT: a holding with this ISIN, or with the CUSIP inside it, whose
    issuer LEI is a fund series' LEI. ISINs and CUSIPs that filings report
-   under many different issuer LEIs are ignored here: they are placeholders
-   or reporting errors, not one fund;
+   under many different series LEIs are ignored here: they are placeholders
+   or reporting errors, not one fund (a trust's or a mistyped LEI next to
+   the series' own does not count against it);
 4. OpenFIGI: the ISIN's US ticker, looked up in SEC's fund ticker list.
 
 Holdings sources are tried in ``source_order``; see
@@ -86,7 +87,7 @@ class DataProviders:
         adapters to read holdings with, by name. ``issuer_series`` maps an
         issuer fund ID to the N-PORT series it was matched to, so a fund
         reached both ways is one fund. An ISIN or CUSIP that N-PORT reports
-        under more than ``max_issuer_leis`` issuer LEIs is not used to match
+        under more than ``max_issuer_leis`` fund series LEIs is not used to match
         a fund."""
         unknown = set(source_order) - set(SOURCES)
         if unknown:
@@ -239,7 +240,8 @@ class DataProviders:
         Built with one scan of N-PORT; a query per ISIN would scan all of it
         each time, which a universe run would do thousands of times.
         Placeholder CUSIPs, and ISINs and CUSIPs reported under more than
-        ``max_issuer_leis`` different issuer LEIs, are left out.
+        ``max_issuer_leis`` different series LEIs, are left out. Holdings
+        filed under any other LEI (a trust's, a typo) are not counted.
         """
         if self._fund_holding_index is None:
             con = connection()
@@ -250,18 +252,24 @@ class DataProviders:
                     "select isin, cusip, issuer_lei, count(*) from rel "
                     "where issuer_lei in (select lei from _series_leis) group by all"
                 ).fetchall()
-                n = int(self.max_issuer_leis)
-                amb_isin = {r[0] for r in con.execute(
-                    f"select isin from rel where isin is not null group by isin having count(distinct issuer_lei) > {n}"
-                ).fetchall()}
-                amb_cusip = {r[0] for r in con.execute(
-                    f"select cusip from rel where cusip is not null group by cusip having count(distinct issuer_lei) > {n}"
-                ).fetchall()}
             finally:
                 con.unregister("rel")
                 con.unregister("_series_leis")
+            # Ambiguity counts series LEIs only: the same fund is often also filed
+            # under its trust's LEI or a mistyped one, which says nothing about
+            # which series it is.
+            n = int(self.max_issuer_leis)
+            leis_isin: dict[str, set[str]] = {}
+            leis_cusip: dict[str, set[str]] = {}
+            for isin, cusip, lei, _ in rows:
+                if isin:
+                    leis_isin.setdefault(isin, set()).add(lei)
+                if cusip:
+                    leis_cusip.setdefault(cusip, set()).add(lei)
+            amb_isin = {k for k, v in leis_isin.items() if len(v) > n}
+            amb_cusip = {k for k, v in leis_cusip.items() if len(v) > n}
             if amb_isin or amb_cusip:
-                logger.info("Fund matching ignores %d ISINs and %d CUSIPs reported under more than %d issuer LEIs",
+                logger.info("Fund matching ignores %d ISINs and %d CUSIPs reported under more than %d series LEIs",
                             len(amb_isin), len(amb_cusip), n)
             by_isin: dict[str, list[int]] = {}
             by_cusip: dict[str, list[int]] = {}

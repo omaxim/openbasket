@@ -14,6 +14,11 @@ FUND_MASTER = pd.DataFrame(
         {"series_id": "S000000001", "series_name": "US Equity Fund", "series_lei": "LEI-EQ", "ticker": "IGLD", "has_nport": True, "cik": None},
         {"series_id": "S000000002", "series_name": "Large Cap Index Portfolio", "series_lei": "LEI-LC", "ticker": None, "has_nport": True, "cik": None},
         {"series_id": "S000000004", "series_name": "Other Fund", "series_lei": "LEI-OT", "ticker": None, "has_nport": True, "cik": None},
+        # Money market series that the sweep line below is (mis)reported under.
+        *({"series_id": f"S00000009{i}", "series_name": f"Sweep {i}", "series_lei": f"LEI-MM{i}", "ticker": None,
+           "has_nport": True, "cik": None} for i in range(1, 6)),
+        {"series_id": "S000000005", "series_name": "Vanguard S&P 500 ETF", "series_lei": "LEI-VOO", "ticker": "VOO",
+         "has_nport": True, "cik": None},
     ]
 )
 
@@ -43,11 +48,15 @@ def nport_holdings():
         _line("S000000004", "US0000000LC4", "00000LC04", "LEI-LC", "Large Cap Index Portfolio", 5.0, itype="RF"),
     ]
     # A money market sweep line, as dozens of filers report it: CUSIP 000000000,
-    # an ISIN copied in from one filing, and a different issuer each time; the
-    # Large Cap LEI is one of them.
+    # an ISIN copied in from one filing, and a different series' LEI each
+    # time; the Large Cap LEI is one of them.
     for i in range(6):
         rows.append(_line("S000000004", "IE000S9YS762", "000000000", f"LEI-MM{i}" if i else "LEI-LC",
                           f"Cash sweep {i}", 1.0, src="reported_for_cusip", itype="RF", cat="STIV"))
+    # VOO as funds hold it: under its series LEI, its trust's LEI, mistyped
+    # LEIs and with no LEI at all. Only the series LEI is a series LEI.
+    for lei in ("LEI-VOO", "LEI-VOO", "LEI-TRUST", "LEI-V00", "LEI-VO0", "LEI-VOO-TYPO", None):
+        rows.append(_line("S000000006", "US9229083632", "922908363", lei, "Vanguard S&P 500 ETF", 1.0, itype="RF"))
     return connection().from_df(pd.DataFrame(rows))
 
 
@@ -78,6 +87,15 @@ def test_placeholder_cusip_isin_does_not_name_a_fund():
     # Reported under six issuer LEIs next to CUSIP 000000000: not one fund's share class.
     assert p._series_from_nport("IE000S9YS762") is None
     assert p._series_from_nport("US0000000LC4") == "S000000002"
+
+
+def test_only_series_leis_count_towards_ambiguity():
+    # Five other LEIs next to the series' own, but none of them is a series LEI.
+    p = providers()
+    assert p._series_from_nport("US9229083632") == "S000000005"
+    assert p.resolve_line(Line(1.0, "US9229083632", fund_hint=True)).series_id == "S000000005"
+    # With the limit at 0 even one series LEI is too many: the rule still applies.
+    assert providers(max_issuer_leis=0)._series_from_nport("US9229083632") is None
 
 
 def test_placeholder_cusip_isin_is_dropped_from_nport_lines():

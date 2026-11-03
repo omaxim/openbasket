@@ -37,8 +37,9 @@ lookthrough:
   openfigi_cache: data/03_primary/openfigi_cache.parquet
   # Issuer responses, one file per fund per day, written only once they parse.
   issuer_cache_dir: data/01_raw/issuers/holdings
-  # An ISIN or CUSIP that N-PORT reports under more than this many issuer
-  # LEIs is a placeholder or an error and is not used to match a fund.
+  # An ISIN or CUSIP that N-PORT reports under more than this many fund
+  # series LEIs is a placeholder or an error and is not used to match a fund.
+  # Holdings under other LEIs (a trust's, a typo) are not counted.
   max_issuer_leis_per_isin: 3
   # Funds with no free full holdings, mapped to a fund on the same index.
   # A proxy wins over an issuer listing, so swap ETFs can be shown through a

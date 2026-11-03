@@ -125,8 +125,9 @@ ISIN.
   is not asked again in that run, and the counts are in `universe_run`
   under `openfigi`.
 - An ISIN or CUSIP that N-PORT reports under more than
-  `lookthrough.max_issuer_leis_per_isin` (3) issuer LEIs is not used to
-  match a fund, and placeholder CUSIPs (`000000000`, nine equal characters,
+  `lookthrough.max_issuer_leis_per_isin` (3) fund series LEIs is not used
+  to match a fund (holdings filed under a trust's LEI or a mistyped one do
+  not count, so VOO, VWO or EEM still match their series), and placeholder CUSIPs (`000000000`, nine equal characters,
   `N/A`) are never mapped to an ISIN. On 2026 Q3 the placeholder alone had
   spread one ISIN (IE000S9YS762) to 163,328 holdings in 4,451 series; it
   now sits on the 1,238 holdings that report it themselves.

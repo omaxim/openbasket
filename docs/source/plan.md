@@ -45,7 +45,7 @@ ingest ──► security_master ──► consolidate ──► lookthrough
    registered issuer adapter).
 3. N-PORT: a holding with this ISIN (or its CUSIP) whose issuer LEI is a fund
    series' LEI. Placeholder CUSIPs and ISINs reported under more than three
-   issuer LEIs are ignored.
+   series LEIs are ignored.
 4. OpenFIGI: the ISIN's US ticker, found in SEC's fund ticker list.
 5. Not a fund: if the ISIN is in the security master it is its own
    constituent at 100% (a single stock or bond, shown with its issuer). An

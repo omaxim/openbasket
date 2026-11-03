@@ -1,0 +1,25 @@
+# reference (ESMA FIRDS) -----------------------------------------------------
+# One row per input ISIN, from the FIRDS Solr API.
+firds_lookup:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/firds_lookup.csv
+
+# The FIRDS files chosen for this run (empty unless firds.bulk.enabled).
+firds_files:
+  type: pandas.CSVDataset
+  filepath: data/01_raw/firds/files.csv
+
+firds_raw_manifest:
+  type: pandas.CSVDataset
+  filepath: data/01_raw/firds/manifest.csv
+
+# The per-file Parquet files that firds_instruments reads.
+firds_parquet_manifest:
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/firds/manifest.csv
+
+# One row per ISIN: debt, funds and equities from the loaded FIRDS files.
+firds_instruments:
+  type: openbasket.datasets.DuckDBParquetDataset
+  filepath: data/03_primary/firds_instruments.parquet
+  order_by: isin

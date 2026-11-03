@@ -1,0 +1,13 @@
+Betashares Portfolio Holdings,
+,
+Fund Name,Betashares Australia 200 ETF
+Fund ASX Code,A200
+Date,2026-11-02
+,
+Ticker,Name,Asset Class,Sector,Country,Currency,Weight (%),Shares/Units (#),Market Value (AUD),Notional Value (AUD)
+BHP AT,BHP GROUP LTD,Equities,Materials,Australia,AUD,55.5,100.0,5550.0,5550.0
+AAPL UW,APPLE INC,Equities,Information Technology,United States,USD,44.0,10.0,4400.0,4400.0
+AUD,AUD - AUSTRALIA DOLLAR,Cash,,,AUD,0.5,50.0,50.0,50.0
+XPZ6 Index,SPI 200 FUTURES   DEC26,Index Futures,,,AUD,,1.0,,
+""
+"Total weights may not add up to 100% due to rounding or immateriality."

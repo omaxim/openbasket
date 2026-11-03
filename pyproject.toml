@@ -21,6 +21,7 @@ dependencies = [
     "requests>=2.31",
     "python-dotenv>=1.0",
     "tickerinside>=0.1",
+    "xlrd>=2.0.1",
 ]
 
 [project.optional-dependencies]

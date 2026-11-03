@@ -1,0 +1,24 @@
+{"data": {"PPSS": [
+  {"fundid": "90001", "fundname": "Franklin Example World UCITS ETF", "assetclass": "Equity", "etftype": "Indexed",
+   "methodology": "Full Replication", "basecurrcode": "USD",
+   "shareclass": [
+     {"shclname": "(Acc)", "shclcurr": "USD", "etfclass": "N",
+      "identifiers": {"fundid": "90001", "shclcode": "ETA", "ticker": "FXWA", "isin": "IE00FT000004", "cusip": "-", "sedol": "BSGYZZ1"}},
+     {"shclname": "(Dis)", "shclcurr": "USD", "etfclass": "N",
+      "identifiers": {"fundid": "90001", "shclcode": "ETD", "ticker": "FXWD", "isin": "IE00FT000012", "cusip": "-", "sedol": "-"}},
+     {"shclname": "(Dis)", "shclcurr": "USD", "etfclass": "N",
+      "identifiers": {"fundid": "90001", "shclcode": "ETD", "ticker": "FXWD", "isin": "IE00FT000012", "cusip": "-", "sedol": "-"}}
+   ]},
+  {"fundid": "90002", "fundname": "Franklin Example Euro Bond UCITS ETF", "assetclass": "Fixed Income", "etftype": "Indexed",
+   "methodology": "Optimised", "basecurrcode": "EUR",
+   "shareclass": [
+     {"shclname": "CHF Hedged (Acc)", "shclcurr": "CHF", "etfclass": "N",
+      "identifiers": {"fundid": "90002", "shclcode": "ETH", "ticker": "FXEB", "isin": "IE00FT000020", "cusip": "-", "sedol": "-"}}
+   ]},
+  {"fundid": "90003", "fundname": "Franklin Example Active UCITS ETF", "assetclass": "Equity", "etftype": "Active",
+   "methodology": "-", "basecurrcode": "USD",
+   "shareclass": [
+     {"shclname": "(Acc)", "shclcurr": "USD", "etfclass": "N",
+      "identifiers": {"fundid": "90003", "shclcode": "ETA", "ticker": "FXAC", "isin": "-", "cusip": "-", "sedol": "-"}}
+   ]}
+]}}

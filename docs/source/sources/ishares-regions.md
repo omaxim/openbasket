@@ -2,6 +2,7 @@
 
 Adapter: `ishares` (`openbasket.sources.issuers.ishares`), built on
 `openbasket.sources.ishares`. Status as tested on 3 November 2026.
+Redistribution class: **`local_only`** (see [Terms and credit](#terms-and-credit)).
 
 BlackRock runs about twenty regional iShares and BlackRock websites. All of
 them sit on the same two services: a product screener (the fund list) and
@@ -137,16 +138,31 @@ which is dropped before caching.
    that request.
 3. `holdings(product, ctx)` fetches it, keeps `holdingPercent` (percent of
    net assets, as reported; US equity tables give `marketWeight` to two
-   decimals, used instead) and maps the table to `HOLDING_COLUMNS`.
-   Identifiers that fail their check digit become `None`. The as-of date is
-   the table's `asOfDate`. Responses are cached as
+   decimals, used instead) and maps the table to `HOLDING_COLUMNS`, plus the
+   issuer's `sector`. Identifiers that fail their check digit become `None`,
+   and so do the pseudo-CUSIPs Aladdin gives lines without one (`S` + the
+   line's SEDOL + a check digit, e.g. `S64351455` on the Japanese site),
+   which would otherwise turn into a wrong US ISIN. The as-of date is the
+   table's `asOfDate`. Responses are cached as
    `<site>_<share class>_<date>.json` in `ctx.cache_dir`, only after they
-   parse.
+   parse. A fund that has only a ten-largest table raises `NoFullHoldings`
+   (the answer is cached too); the look-through records it as `top10_only`
+   and moves on to the next source.
 
-The older interface is unchanged: `ishares.products(site)` and
-`ishares.holdings(portfolio_id, site, cache_dir)`, used by the `ingest`
-pipeline through `issuers.ishares_sites` (now every site above). That path
-keeps top-10 funds in `issuer_products`; the adapter does not.
+This adapter is the only way openbasket reads iShares. `ingest` calls
+`products(sites=issuers.ishares_sites)` (every site above by default; `[]`
+reads none), so one failing site is skipped and only funds with full
+holdings reach `issuer_products`. The look-through reads holdings through
+the same adapter. The per-site functions `ishares.products(site)` and
+`ishares.holdings(share_class_id, site, cache_dir, top10=False)` remain for
+tests and one-off use.
+
+Product links: the Swiss screener gives `/ch/individuals/...` paths, which
+answer 404; they are rewritten to `/ch/individual/...`, the path in the
+site's own sitemap. Australian links come from the sitemap. Rows kept from
+the Latin America offshore site, whose links redirect to a UK page that
+answers 403, take the link another site gives for the same share class, or
+none.
 
 ## Update frequency
 
@@ -227,14 +243,22 @@ host.
 Credit shown with every row: "Holdings: iShares by BlackRock, from
 BlackRock's regional websites (ishares.com, blackrock.com)."
 
-No login, cookie or consent gate is involved, and `robots.txt` does not
-disallow the `varnish-api` or screener paths. But the site terms, as read on
-the Swiss site's terms and conditions page on 3 November 2026, say the
-content is protected by copyright, all rights reserved, is provided for
-personal, non-commercial use, and is not to be reproduced or redistributed.
-Publishing these holdings on a public site therefore needs BlackRock's
-permission or a legal view first. The client fetches each fund at most once
-a day, one request per second per host.
+**Redistribution class: `local_only`.** The adapter runs when you run
+openbasket yourself (it is on by default) and your local site and API show
+its rows. The public build never fetches it and publishes nothing from it.
+A fund only iShares covers appears in the public index with status
+`local_only`, no constituents, and a note that its holdings are available
+from iShares when you run openbasket yourself.
+
+Terms in short: the site terms, as read on the Swiss site's terms and
+conditions page on 3 November 2026, say the content is protected by
+copyright, all rights reserved, is provided for personal, non-commercial
+use, and is not to be reproduced or redistributed. Reading it for yourself
+fits that; republishing it would need BlackRock's permission.
+
+Access: no login, cookie or consent gate is involved, and `robots.txt` does
+not disallow the `varnish-api` or screener paths. The client fetches each
+fund at most once a day, one request per second per host.
 
 ## Example
 

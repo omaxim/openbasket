@@ -31,7 +31,7 @@ Issuer adapters
   all) and `issuers.disabled` choose which. An adapter whose list fails is
   logged and skipped; rows that break the product contract are logged and
   rows with an invalid ISIN dropped. An ISIN two lists share stays with the
-  first (iShares, SPDR, then adapters by name). The look-through reads each
+  first (SPDR, then adapters by name; iShares is the `ishares` adapter). The look-through reads each
   adapter fund's holdings with its own adapter and turns CUSIPs and SEDOLs
   into ISINs exactly as for iShares and SPDR: through N-PORT's CUSIP and
   SEDOL maps, and, for an ISIN derived from a CUSIP, only if OpenFIGI knows
@@ -41,8 +41,9 @@ One fund, many ISINs
 : Share classes of one portfolio are one fund. The largest share class by
   net assets gives the fund its `id`; the others are aliases.
 : For an adapter, share classes are the rows that share a `portfolio_id`
-  (the adapter contract). iShares and SPDR give every share class its own
-  portfolio id, so their classes are grouped by issuer, site, fund name
+  (the adapter contract; the `ishares` adapter uses iShares' fund-level
+  ticker). SPDR, and iShares lists from before the adapter, give every share
+  class its own portfolio id, so their classes are also grouped by issuer, site, fund name
   (exactly, ignoring case and spacing), domicile and asset class. On the
   iShares UK site every share class carries its fund's name unchanged,
   hedged classes included, and the issuer's holdings files for those

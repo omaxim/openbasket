@@ -52,15 +52,20 @@ mapping its ISINs through OpenFIGI; results are cached in
   quarter; each fund still uses only its latest filing.
 
 `issuers.ishares_sites`
-: iShares regional sites whose fund lists are loaded. Only `uk` is
-  supported so far.
+: iShares regional sites the `ishares` adapter reads, in order of preference
+  for a share class several sites list (default: all 21; `[]` reads none).
+  A site that fails is skipped. See [iShares regional sites](sources/ishares-regions.md).
+
+`issuers.options`
+: Keyword arguments for an adapter's `products()`, by adapter name, e.g.
+  `first_trust: {cache_dir: data/01_raw/issuers}`.
 
 `issuers.spdr_regions`
 : SPDR fund finders: `us` (US ETFs, including SPY and DIA) and `emea`
   (UCITS ETFs).
 
 `lookthrough.source_order`
-: Holdings sources in priority order: `issuer` (iShares and SPDR), `tickerinside`,
+: Holdings sources in priority order: `issuer` (SPDR and every enabled issuer adapter, iShares included), `tickerinside`,
   `nport`, and `top_holdings` (not built yet, skipped).
 
 `lookthrough.min_resolved_pct`

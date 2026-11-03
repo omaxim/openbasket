@@ -1,8 +1,9 @@
 # Franklin Templeton ETFs
 
 Adapters `franklin` (UCITS ETFs from the Irish site plus US ETFs, daily) and
-`franklin_ca` (ETF series of Franklin's Canadian funds, quarterly), in
-`src/openbasket/sources/issuers/franklin.py`.
+`franklin_ca` (ETF series of Franklin's Canadian funds, monthly or quarterly
+by series), in `src/openbasket/sources/issuers/franklin.py`. Redistribution
+class of both: **`local_only`** (see [Terms and credit](#terms-and-credit)).
 
 ## What it covers
 
@@ -109,13 +110,21 @@ sitemap per site).
   currency balances, futures and FX forwards. The US bond fund lists both
   legs of each forward (+28.46% and offsetting negatives), which is why its
   lines add up to 97.78%; the derivatives net to −0.17%.
-- **Canada is quarterly.** The Canadian site publishes full holdings as of
-  each quarter end; on 3 November 2026 the latest was 30 September. Some Canadian lines are deposits with
-  no ISIN (0.93% of FCRI).
+- **Canada is monthly or quarterly, by series.** The Canadian site publishes
+  full holdings about a month after the date, several dates at once; only the
+  latest is kept. Some series are monthly (FLCI on 3 November 2026: rows
+  tagged `MONTHLY`, as of 30 September, 1,542 lines of earlier months
+  dropped), others quarterly (FCRI: quarter ends 31 March, 30 June and
+  30 September). `franklin_ca` is registered as monthly, its most frequent
+  series, and each result's notes give the series' own frequency. Some
+  Canadian lines are deposits with no ISIN (0.93% of FCRI).
 - **Liquidated funds.** The US list still carries liquidated funds (13 on
   3 November 2026, such as FLHK); their product page moves under
   `/investments/closed/` and their holdings are a final cash line, so
-  `products()` drops them.
+  `products()` drops them. A fund with no page at all cannot be checked this
+  way: `products()` logs such share classes so they can be reviewed, and a
+  holdings result whose lines are all cash carries a note that the fund may
+  have been liquidated.
 - **Crypto and gold ETFs.** The US Bitcoin, Ethereum, Solana, XRP, crypto
   index and gold ETFs hold one asset with no ISIN, reported as `other`.
 - 14 share classes (new funds and some US bond ETFs) are not in the
@@ -126,10 +135,21 @@ sitemap per site).
 ## Terms and credit
 
 Credit line: "Holdings data: Franklin Templeton (franklintempleton.com), as
-published on its website." The data is public, read without login through
-the same API the fund pages use. Franklin's site terms have not been reviewed
-for automated or bulk use; `openbasket.http` keeps to one request a second per
-host and each fund is fetched at most once a day.
+published on its website."
+
+**Redistribution class: `local_only`.** No open licence is offered and the
+site terms have not been reviewed for republication, so both adapters run
+only when you run openbasket yourself (they are on by default) and your
+local site and API show their rows. The public build never fetches them and
+publishes nothing from them. A fund only Franklin covers appears in the
+public index with status `local_only`, no constituents, and a note that its
+holdings are available from Franklin Templeton when you run openbasket
+yourself.
+
+Access: the data is public, read without login through the same API the
+fund pages use. `openbasket.http` keeps to one request a second per host and
+each fund is fetched at most once a day. One site whose list fails is logged
+and skipped; the other is kept.
 
 ## Example
 

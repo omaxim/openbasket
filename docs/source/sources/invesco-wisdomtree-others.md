@@ -5,7 +5,8 @@ User-Agent `Mozilla/5.0 (compatible; openbasket; +https://openbasket.leithresear
 openbasket does not get around bot protection, log-ins, consent gates or
 `robots.txt`, so the issuers below have no adapter. Their US-registered funds
 are still covered by SEC N-PORT. Franklin Templeton, checked at the same
-time, works and has its own page.
+time, works and has its own page ([Franklin Templeton ETFs](franklin.md),
+redistribution class `local_only`).
 
 | Issuer | What was tried | Result |
 |---|---|---|

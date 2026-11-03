@@ -19,8 +19,11 @@ Status as tested on 2026-11-03.
 | SEC `company_tickers_mf.json` | Working | Fund and ETF ticker to series ID. |
 | TickerInside | Working | Daily issuer holdings for US equity ETFs, keyed by ticker. |
 | OpenFIGI | Working | ISIN to name, ticker and security type; ISIN to US ticker when matching a fund. |
-| iShares UK | Working | Daily full holdings of UCITS ETFs with ISINs and five-decimal weights, from the issuer's site. |
-| iShares US | Working | Daily full holdings of US iShares ETFs with ISINs; equity weights to two decimals. |
+| iShares (21 regional sites) | Working; local only | Daily full holdings of iShares ETFs with ISINs, from BlackRock's sites; see [iShares regional sites](ishares-regions.md). |
+| Amundi ETF | Working; local only | Daily full holdings of Amundi (and former Lyxor and ComStage) ETFs; see [Amundi ETF](amundi.md). |
+| Vanguard | Working; local only | Month-end full holdings of Vanguard funds in Europe, the US, Australia and Canada; see [Vanguard](vanguard.md). |
+| Avantis, First Trust | Working; local only | Holdings of US ETFs and funds from the issuers' sites; see [US issuers](us-issuers.md). |
+| Franklin Templeton | Working; local only | Daily holdings of UCITS and US ETFs, monthly or quarterly for Canada; see [Franklin Templeton ETFs](franklin.md). |
 | SPDR (State Street) | Working | Daily full holdings of US ETFs (including SPY and DIA) and UCITS ETFs. |
 | justETF, FT and others | Not built | Top holdings only. |
 
@@ -86,8 +89,9 @@ and types and the ticker that links a fund ISIN to its SEC series.
 BlackRock moved its sites in 2026. The `.ajax` CSV endpoints that
 `etf-scraper` used (US `1467271812596`, UK `1506575576011`) now return the
 HTML product page, so `etf-scraper` was not used. Two JSON endpoints per
-site replace them. The sites read are set in `issuers.ishares_sites`
-(`[uk, us]`).
+site replace them. This section describes the UK and US sites; the
+`ishares` adapter now reads every regional site (`issuers.ishares_sites`),
+see [iShares regional sites](ishares-regions.md).
 
 Fund list, UK
 : `https://www.ishares.com/varnish-api/blk-product-screener-server/api/v1/product-screener/product-data?country=gb&language=en&siteName=ishares-uk&userType=individual`
@@ -165,8 +169,10 @@ Issuer tickers are local codes, and cash lines use currency codes such as
 `USD`, which is also a US ETF's ticker. So iShares lines are matched to funds
 by ISIN only, never by ticker.
 
-**Terms.** This is public data from the issuer's website. BlackRock's site
-terms have not been reviewed for automated or bulk use; the client keeps to
+**Terms.** Redistribution class `local_only`: read only when you run
+openbasket yourself, never fetched or published by the public build (see
+[iShares regional sites](ishares-regions.md#terms-and-credit)). BlackRock's site
+terms allow personal, non-commercial use and forbid reproduction; the client keeps to
 one request per fund per day and pauses between requests.
 
 ## SPDR

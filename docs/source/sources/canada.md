@@ -1,8 +1,18 @@
 # Canada: Vanguard Canada
 
-Adapter `vanguard_ca` (`src/openbasket/sources/issuers/vanguard_ca.py`). It
-covers the Canadian-domiciled ETFs and mutual funds of Vanguard Investments
-Canada Inc. The other large Canadian ETF issuers were surveyed too. None of
+Module `vanguard_ca` (`src/openbasket/sources/issuers/vanguard_ca.py`). It
+reads the Canadian-domiciled ETFs and mutual funds of Vanguard Investments
+Canada Inc. from vanguard.ca. Redistribution class: **`local_only`** (see
+[Terms and credit](#terms-and-credit)).
+
+It is not an adapter of its own. The [`vanguard` adapter](vanguard.md) lists
+the same 54 Canadian share classes and reads their direct holdings from
+Vanguard's GPX service, which gives ISINs: on 3 November 2026 VAB had
+99.68% of its weight on lines with an ISIN there, against none here, and
+VSP showed the Vanguard S&P 500 ETF it holds (99.77%, with its ISIN), which
+the look-through then expands. `vanguard_ca` is that adapter's fallback for
+a Canadian fund whose GPX holdings fail or come back empty; the result then
+says so in its notes. The numbers below are this module's own. The other large Canadian ETF issuers were surveyed too. None of
 them publishes free full holdings with identifiers, so they are not built
 (see [Other Canadian issuers](#other-canadian-issuers)). The iShares Canada
 ETFs belong to BlackRock and are handled with the other iShares sites.
@@ -115,21 +125,25 @@ only after they parse.
 
 ## Terms and credit
 
-Credit line: "Holdings data: Vanguard Investments Canada Inc., vanguard.ca".
+Rows read through this module are credited to Vanguard, under the
+`vanguard` adapter's credit line.
 
-The [website terms of use](https://www.vanguard.ca/en/website-terms-of-use)
+**Redistribution class: `local_only`.** The
+[website terms of use](https://www.vanguard.ca/en/website-terms-of-use)
 license the site's content for "personal and noncommercial use" only, unless
-Vanguard authorises more in writing, and reserve all other rights. No such
-authorisation has been obtained. openbasket is
-non-commercial, but republishing the lines goes beyond personal use, so ask
-Vanguard before relying on this source in public output.
+Vanguard authorises more in writing, and reserve all other rights. So the
+rows appear only when you run openbasket yourself; the public build never
+fetches them and publishes nothing from them.
 
 ## Known gaps
 
 - **No ISINs** in month-end data, only SEDOLs. Coverage depends on the
-  SEDOL map. VAB's lines without a SEDOL (248 lines, 6.2%) are mostly
-  Canada Housing Trust, provincial and CPPIB bonds, identified by issuer
-  ticker only.
+  SEDOL map, which is built from US filings and resolves few Canadian
+  provincial and corporate bonds, so a Canadian bond fund read through this
+  fallback is far from complete. VAB's lines without a SEDOL (248 lines,
+  6.2%) are mostly Canada Housing Trust, provincial and CPPIB bonds,
+  identified by issuer ticker only. The GPX route of the `vanguard` adapter
+  does not have this gap.
 - **Month-end only.** Positions lag by one to two months.
 - **Look-through is Vanguard's own.** For fund-of-funds the weights are
   Vanguard's apportionment, as of the same month-end. The direct holdings

@@ -3,16 +3,21 @@
 US-registered funds are already covered by SEC Form N-PORT, which runs two to
 five months behind, and by TickerInside for equity ETFs. The issuers' own
 files are fresher and carry CUSIPs, and for Vanguard and Avantis ISINs too.
-Three US issuers beyond iShares and SPDR are built as plug-ins:
+Three US issuers beyond iShares and SPDR are built. Avantis and First Trust
+are adapters of their own. The Vanguard US reader is not: the
+[`vanguard` adapter](vanguard.md) lists the US funds too and reads them from
+Vanguard's GPX service with five-decimal weights, and `vanguard_us` is its
+fallback for a US fund whose GPX holdings fail or come back empty.
 
 | Adapter | Module | Funds | Holdings updated | Identifiers on holdings |
 |---|---|---|---|---|
-| `vanguard_us` | `sources/issuers/vanguard_us.py` | 383 share classes (116 ETFs, 267 mutual fund classes) of 215 portfolios | Monthly, month-end, about a month late | ISIN, CUSIP, SEDOL |
+| `vanguard_us` (fallback of `vanguard`) | `sources/issuers/vanguard_us.py` | 383 share classes (116 ETFs, 267 mutual fund classes) of 215 portfolios | Monthly, month-end, about a month late | ISIN, CUSIP, SEDOL |
 | `avantis` | `sources/issuers/avantis.py` | 41 (33 ETFs, 8 mutual funds) | ETFs daily; mutual funds month-end | ISIN, CUSIP, SEDOL |
 | `first_trust` | `sources/issuers/first_trust.py` | 334 ETFs on the list | Daily | CUSIP and ticker only |
 
 Status as tested on 3 November 2026. Other US issuers were checked and are not
-built; see [Not built](#not-built) for why.
+built; see [Not built](#not-built) for why. Redistribution class of all three:
+**`local_only`** (see [Terms and credit](#terms-and-credit)).
 
 All three are US-domiciled, USD funds with no swap-based products, so
 `replication` is never `swap`. Every row carries the adapter's `credit` text
@@ -163,10 +168,13 @@ Fund ISIN
   and then closes the connection. ISINs never change, so they are kept in
   `first_trust_isins.json` in the cache folder (`products(cache_dir=...)`,
   else `$OPENBASKET_ISSUER_CACHE`, else `data/01_raw/issuers` if it exists),
-  and later runs look up only funds not yet in that file. The first full run
-  costs one request per fund, about 17 minutes at one request a second; a fund
-  whose summary page fails is left out of that run and tried again next time.
-  `products(limit=n)` caps the lookups per run.
+  and later runs look up only funds not yet in that file. `ingest` passes
+  `issuers.options.first_trust.cache_dir` (`data/01_raw/issuers`, which is
+  not committed). The first full run costs one request per fund, about 17
+  minutes at one request a second; a fund whose summary page fails is left
+  out of that run and tried again next time. `products(limit=n)` caps the
+  lookups per run, and with no folder to keep the file in, at most 25 pages
+  are read.
 
 Holdings
 : `https://www.ftportfolios.com/Retail/Etf/EtfHoldings.aspx?Ticker=<T>`, an
@@ -197,8 +205,12 @@ during development.
 Gaps:
 
 - **No ISINs on holdings lines.** Every line carries a CUSIP; the pipeline
-  maps CUSIPs to ISINs. Foreign shares held through their local listing may
-  have only a ticker.
+  maps CUSIPs to ISINs. Foreign shares mostly carry a CINS code instead (a
+  CUSIP that starts with a letter, e.g. `P3515D163` for FUNO11 in FEM),
+  which has no ISIN form, so in emerging-market and international funds most
+  of the weight stays unresolved unless OpenFIGI or the N-PORT CUSIP and
+  SEDOL maps know the security. Each result's notes give the weight on CINS
+  lines (FDN on 3 November: one line, 0.46%).
 - **Buffer and target-outcome funds** (FT Vest) hold FLEX options on an ETF
   (FJAN: a deep in-the-money call on SPY at 99.78%, plus puts and a short
   call). Those lines are `derivative (options)` with no identifier, so the
@@ -206,17 +218,30 @@ Gaps:
   `lookthrough.proxies` if that approximation is wanted.
 - `asset_class` and `replication` are not published on the list and are
   left empty. `asset_class` per line is inferred: the Classification column
-  for equity funds, otherwise from the name (coupon or maturity: debt; "ETF":
-  fund).
+  for equity funds, otherwise from the name and identifiers. A coupon, a
+  maturity, "variable rate" or "floating rate", a term loan (`TL`) or an
+  `LX...` loan id means debt; option words ("flex", "call", "put", "option")
+  mean an option only on a line with no CUSIP, so a bond of "FLEX
+  INTERMEDIATE HOLDCO" stays debt; an OCC symbol is always an option; "ETF"
+  means a fund.
 - Preferred shares in FPE without a coupon in their name are labelled equity.
 
 ## Terms and credit
 
-None of the three sites publishes terms that cover automated use, and none
-was reviewed for it; all three pages are public, need no log-in and are
-allowed by each site's robots.txt. Every request goes through
-`openbasket.http` (one request a second per host, retries on 429 and 5xx),
-each fund is fetched at most once a day, and every row is credited:
+**Redistribution class: `local_only`.** None of the three sites offers an
+open licence, and their terms were not reviewed for republication, so the
+adapters run only when you run openbasket yourself (they are on by default)
+and your local site and API show their rows. The public build never fetches
+them and publishes nothing from them. A fund only one of them covers appears
+in the public index with status `local_only`, no constituents, and a note
+that its holdings are available from the issuer when you run openbasket
+yourself. The Vanguard reader shares the terms of the
+[`vanguard` adapter](vanguard.md#terms-and-credit).
+
+Access: all three pages are public, need no log-in and are allowed by each
+site's robots.txt. Every request goes through `openbasket.http` (one request
+a second per host, retries on 429 and 5xx), each fund is fetched at most once
+a day, and every row is credited:
 
 - Vanguard: "Holdings data: The Vanguard Group, Inc., investor.vanguard.com"
 - Avantis: "Holdings data: Avantis Investors (American Century Investment Services, Inc.), avantisinvestors.com"

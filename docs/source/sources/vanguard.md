@@ -7,8 +7,19 @@ Zealand and Canada. One service behind Vanguard's own websites provides all of
 it, with an ISIN, SEDOL and CUSIP on most lines. The adapter is
 `openbasket.sources.issuers.vanguard`.
 
-Status as tested on 2026-11-03: **working**, with a terms caveat (see
-[Terms and credit](#terms-and-credit)).
+Status as tested on 2026-11-03: **working**. Redistribution class:
+**`local_only`** (see [Terms and credit](#terms-and-credit)).
+
+This is the one Vanguard source openbasket lists funds from. The US and
+Canadian readers built alongside it (`vanguard_us`, see
+[US issuers](us-issuers.md), and `vanguard_ca`, see [Canada](canada.md)) are
+not adapters of their own: they are its fallbacks for a US or Canadian fund
+whose GPX holdings fail or come back empty, and a note on the result says
+when one was used. GPX is preferred because it gives five-decimal weights
+(investor.vanguard.com rounds to two, so BND's lines there sum to 83.5%) and
+lists a Canadian fund of funds as the Vanguard ETFs it holds, with their
+ISINs (VSP on 2026-11-03: Vanguard S&P 500 ETF, 99.77%), which the
+look-through then expands; vanguard.ca's own view gives SEDOLs only.
 
 ## Coverage
 
@@ -114,7 +125,9 @@ Product pages are built from the portId:
 `https://www.vanguard.ca/en/product/<etf|fund>/<equity|fixed-income>/<portId>/<slug>`
 and `https://investor.vanguard.com/investment-products/<etfs|mutual-funds>/profile/<ticker>`.
 The European sites find a page by its portId, so the slug only affects how
-the link reads.
+the link reads. The Australian link is the portId form the Australian site
+itself uses for its fund pages; it opens the fund's page (HTTP 200, the
+fund's name and figures in the page), though the page title is generic.
 
 ## Fields and weights
 
@@ -219,14 +232,28 @@ redistributing data from the site. The Canadian terms
 personal, non-commercial use in the same way. The US and Australian terms
 were not read.
 
-So the registered `licence` says that republishing needs Vanguard's written
-permission. Showing this data on a public site should wait for that
-permission or for a decision that the use is allowed.
+The UK terms also forbid "using devices or software that provide repeated
+automated access to this website, other than those made generally available
+by Vanguard". The adapter is a script that reads the GPX service the sites'
+own pages call, throttled to about one request a second and one fetch per
+fund per day, for the person running it.
+
+**Redistribution class: `local_only`.** The adapter runs when you run
+openbasket yourself (it is on by default; `issuers.disabled: [vanguard]`
+switches it off) and your local site and API show its rows. The public build
+never fetches it and publishes nothing from it. A fund only Vanguard covers
+appears in the public index with status `local_only`, no constituents, and a
+note that its holdings are available from Vanguard when you run openbasket
+yourself.
+
+Every holdings request goes to the UK site's GPX endpoint with the header the
+UK site sends (`x-consumer-id: uk0`), US, Australian and Canadian funds
+included; the US fund list comes from investor.vanguard.com.
 
 Registered credit line: "Holdings: Vanguard (The Vanguard Group, Inc. and its
-regional entities), month-end portfolio data from Vanguard's fund pages
-(vanguard.co.uk, ch.vanguard, de.vanguard, vanguard.ca, vanguard.com.au,
-investor.vanguard.com). © Vanguard."
+regional entities), month-end portfolio data from Vanguard's GPX fund-data
+service, reached through vanguard.co.uk; the US fund list comes from
+investor.vanguard.com. © Vanguard."
 
 ## Example
 

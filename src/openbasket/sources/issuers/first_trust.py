@@ -344,9 +344,11 @@ def holdings(product: dict, ctx: FetchContext | None = None) -> IssuerHoldings:
     ]
     cins = df["cusip"].map(lambda c: isinstance(c, str) and c[:1].isalpha())
     if cins.any():
+        n = int(cins.sum())
         notes.append(
-            f"{int(cins.sum())} lines ({df.loc[cins, 'weight_pct'].sum():.2f}% of weight) carry a CINS code, "
-            "which has no ISIN of its own; they resolve only where another source knows the security."
+            f"CINS codes, which have no ISIN form, on {n} line{'s' if n != 1 else ''} "
+            f"({df.loc[cins, 'weight_pct'].sum():.2f}% of weight): such lines resolve only where "
+            "another source knows the security."
         )
     return IssuerHoldings(as_of, df, url, notes)
 

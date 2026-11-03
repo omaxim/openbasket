@@ -35,6 +35,10 @@ from ..datasets import connection
 
 logger = logging.getLogger(__name__)
 
+#: Redistribution class (see :func:`openbasket.sources.redistribution`):
+#: SEC N-PORT data sets are US government works in the public domain.
+REDISTRIBUTION = "public"
+
 TABLES = ("SUBMISSION", "FUND_REPORTED_INFO", "FUND_REPORTED_HOLDING", "IDENTIFIERS", "REGISTRANT", "DESC_REF_OTHER")
 #: Tables a quarter may lack without failing the conversion.
 OPTIONAL_TABLES = ("REGISTRANT", "DESC_REF_OTHER")

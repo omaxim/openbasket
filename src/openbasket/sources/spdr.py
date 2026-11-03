@@ -34,6 +34,10 @@ from ..throttle import THROTTLE
 
 logger = logging.getLogger(__name__)
 
+#: Redistribution class (see :func:`openbasket.sources.redistribution`):
+#: State Street's site terms restrict republication: read only for the person running openbasket.
+REDISTRIBUTION = "local_only"
+
 HOST = "https://www.ssga.com"
 FUND_FINDER_URL = HOST + "/bin/v1/ssmp/fund/fundfinder"
 USER_AGENT = "Mozilla/5.0 (compatible; openbasket)"

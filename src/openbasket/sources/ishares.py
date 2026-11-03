@@ -40,6 +40,10 @@ from ..throttle import THROTTLE
 
 logger = logging.getLogger(__name__)
 
+#: Redistribution class (see :func:`openbasket.sources.redistribution`):
+#: BlackRock's site terms restrict republication: read only for the person running openbasket.
+REDISTRIBUTION = "local_only"
+
 HOST = "https://www.ishares.com"
 SCREENER_URL = HOST + "/varnish-api/blk-product-screener-server/api/v1/product-screener/product-data"
 PRODUCT_DATA_URL = "https://www.blackrock.com/varnish-api/{data_site}/product-data/api/v2/get-product-data"

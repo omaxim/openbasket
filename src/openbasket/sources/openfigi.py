@@ -31,6 +31,10 @@ from ..throttle import THROTTLE
 
 logger = logging.getLogger(__name__)
 
+#: Redistribution class (see :func:`openbasket.sources.redistribution`):
+#: OpenFIGI names and security types may be shown with credit to OpenFIGI.
+REDISTRIBUTION = "public"
+
 URL = "https://api.openfigi.com/v3/mapping"
 FIELDS = ("name", "ticker", "exchCode", "securityType", "securityType2", "marketSector", "compositeFIGI", "figi")
 RETRY_STATUS = (429, 500, 502, 503, 504)

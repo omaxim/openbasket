@@ -49,6 +49,10 @@ from ..identifiers import is_valid_isin
 
 logger = logging.getLogger(__name__)
 
+#: Redistribution class (see :func:`openbasket.sources.redistribution`):
+#: CVM open data, ODbL 1.0: credit CVM and offer derived databases under ODbL.
+REDISTRIBUTION = "public"
+
 CVM_HOST = "dados.cvm.gov.br"
 CDA_DIR = f"https://{CVM_HOST}/dados/FI/DOC/CDA/DADOS/"
 CDA_URL = CDA_DIR + "cda_fi_{month}.zip"

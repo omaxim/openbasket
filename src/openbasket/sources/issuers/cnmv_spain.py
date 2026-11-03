@@ -54,5 +54,6 @@ ADAPTER = register(
         products=products,
         holdings=holdings,
         frequency="quarterly, published about four months after quarter end",
+        redistribution="public",
     )
 )

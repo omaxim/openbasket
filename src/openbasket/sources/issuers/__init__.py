@@ -22,6 +22,16 @@ of one portfolio share it.
 :class:`IssuerHoldings` whose frame has :data:`HOLDING_COLUMNS`. ``weight_pct``
 is percent of the fund's net assets as the issuer reports it: never rescale.
 Identifiers that fail their check digit must be ``None``.
+
+``redistribution`` says whether the source's terms allow its holdings to be
+republished: ``"public"`` (an open licence, e.g. a regulator's open data) or
+``"local_only"`` (the default: an issuer site whose terms restrict reuse,
+which openbasket reads only for the person running it). The public build
+never fetches or publishes holdings from a ``local_only`` adapter.
+
+``enabled_by_default`` is ``False`` for a source whose terms forbid automated
+access even for private use; such an adapter runs only when it is named in
+``issuers.enabled`` (for example in ``conf/local``).
 """
 
 from __future__ import annotations
@@ -38,6 +48,11 @@ import pandas as pd
 from ...identifiers import is_valid_cusip, is_valid_isin
 
 logger = logging.getLogger(__name__)
+
+#: Redistribution classes: may the holdings be republished, or only read locally?
+PUBLIC = "public"
+LOCAL_ONLY = "local_only"
+REDISTRIBUTION_CLASSES = (PUBLIC, LOCAL_ONLY)
 
 PRODUCT_COLUMNS = [
     "issuer",            # adapter name, e.g. "xtrackers"
@@ -93,6 +108,15 @@ class IssuerAdapter:
     products: Callable[[], pd.DataFrame]
     holdings: Callable[[dict, "FetchContext"], IssuerHoldings]
     frequency: str = "daily"   # how often the issuer updates holdings
+    redistribution: str = LOCAL_ONLY  # "public" or "local_only", see the module docs
+    enabled_by_default: bool = True   # False: runs only when named in issuers.enabled
+
+    def __post_init__(self):
+        if self.redistribution not in REDISTRIBUTION_CLASSES:
+            raise ValueError(
+                f"Issuer adapter {self.name!r}: redistribution must be one of {REDISTRIBUTION_CLASSES}, "
+                f"not {self.redistribution!r}"
+            )
 
 
 @dataclass
@@ -156,11 +180,12 @@ def failed_modules() -> dict[str, str]:
 def select(
     adapters: dict[str, IssuerAdapter], enabled: list[str] | None = None, disabled: list[str] | None = None
 ) -> dict[str, IssuerAdapter]:
-    """The adapters to use: all of ``adapters`` (or only those named in ``enabled``) minus ``disabled``.
+    """The adapters to use: those named in ``enabled``, or every adapter that is
+    ``enabled_by_default`` when ``enabled`` is ``None``; minus ``disabled``.
 
     A name in ``enabled`` that no module registers is logged and skipped.
     """
-    names = list(adapters) if enabled is None else list(enabled)
+    names = [n for n, a in adapters.items() if a.enabled_by_default] if enabled is None else list(enabled)
     unknown = [n for n in names if n not in adapters]
     if unknown:
         logger.warning("issuers.enabled names unknown adapters %s; known: %s", unknown, sorted(adapters))

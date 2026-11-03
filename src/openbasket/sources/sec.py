@@ -17,6 +17,10 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+#: Redistribution class (see :func:`openbasket.sources.redistribution`):
+#: SEC's fund ticker list is a US government work in the public domain.
+REDISTRIBUTION = "public"
+
 NPORT_URL = "https://www.sec.gov/files/dera/data/form-n-port-data-sets/{quarter}_nport.zip"
 FUND_TICKERS_URL = "https://www.sec.gov/files/company_tickers_mf.json"
 

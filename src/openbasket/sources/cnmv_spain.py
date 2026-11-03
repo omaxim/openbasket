@@ -45,6 +45,10 @@ from ..identifiers import is_valid_isin
 
 logger = logging.getLogger(__name__)
 
+#: Redistribution class (see :func:`openbasket.sources.redistribution`):
+#: CNMV allows faithful reproduction and calculations on its public data.
+REDISTRIBUTION = "public"
+
 HOST = "https://www.cnmv.es"
 PAGE_URL = HOST + "/portal/publicaciones/descarga-informacion-individual"
 DOC_URL = HOST + "/webservices/verdocumento/ver?e={token}"

@@ -1,0 +1,32 @@
+{
+  "shares": [
+    {"compartment_id": 90001, "compart_name": "BNP PARIBAS EASY EXAMPLE WORLD UCITS ETF", "eng_asset_class": "Equity",
+     "sub_asset_class": "Global Equity", "region": "Global", "flags": ["etf_flag"], "share_type": "UETF",
+     "isin_code": "IE00B4L5Y983", "legal_name": "BNP PARIBAS EASY EXAMPLE WORLD UCITS ETF [UCITS ETF EUR, C]",
+     "val_currency": "EUR", "bloomberg_codes": ["XWLD FP"]},
+    {"compartment_id": 90001, "compart_name": "BNP PARIBAS EASY EXAMPLE WORLD UCITS ETF", "eng_asset_class": "Equity",
+     "sub_asset_class": "Global Equity", "region": "Global", "flags": ["etf_flag"], "share_type": "TRC",
+     "isin_code": "IE00B5BMR087", "legal_name": "BNP PARIBAS EASY EXAMPLE WORLD UCITS ETF [TRACK CLASSIC, C]",
+     "val_currency": "CHF", "bloomberg_codes": ["XWLD FP"]},
+    {"compartment_id": 90002, "compart_name": "BNP PARIBAS EASY EXAMPLE US 500 UCITS ETF", "eng_asset_class": "Equity",
+     "sub_asset_class": "US Equity", "region": "North America", "flags": ["etf_flag", "pea_flag"], "share_type": "EUC",
+     "isin_code": "FR0011550185", "legal_name": "BNP PARIBAS EASY EXAMPLE US 500 UCITS ETF [EUR C, C]",
+     "val_currency": "EUR", "bloomberg_codes": []},
+    {"compartment_id": 90003, "compart_name": "BNP PARIBAS EASY EXAMPLE EUROPE FACTOR", "eng_asset_class": "Equity",
+     "sub_asset_class": "Europe Equity", "region": "Europe", "flags": ["pea_flag"], "share_type": "UETF",
+     "isin_code": "LU1377381717", "legal_name": "BNP PARIBAS EASY EXAMPLE EUROPE FACTOR [UCITS ETF, C]",
+     "val_currency": "EUR", "bloomberg_codes": []},
+    {"compartment_id": 90004, "compart_name": "BNP PARIBAS EASY EXAMPLE MANAGED FUTURES", "eng_asset_class": "Other",
+     "sub_asset_class": "Other", "region": "Global", "flags": [], "share_type": "UETF",
+     "isin_code": "LU3307218399", "legal_name": "BNP PARIBAS EASY EXAMPLE MANAGED FUTURES [UCITS ETF, C]",
+     "val_currency": "USD", "bloomberg_codes": []},
+    {"compartment_id": 80001, "compart_name": "BNP PARIBAS FUNDS EXAMPLE ACTIVE", "eng_asset_class": "Equity",
+     "sub_asset_class": "Global Equity", "region": "Global", "flags": [], "share_type": "CLAS",
+     "isin_code": "LU0823411706", "legal_name": "BNP PARIBAS FUNDS EXAMPLE ACTIVE [CLASSIC, C]",
+     "val_currency": "EUR", "bloomberg_codes": []},
+    {"compartment_id": 90005, "compart_name": "BNP PARIBAS EASY EXAMPLE BAD CODE", "eng_asset_class": "Equity",
+     "sub_asset_class": "Global Equity", "region": "Global", "flags": [], "share_type": "UETF",
+     "isin_code": "LU0000000001", "legal_name": "BNP PARIBAS EASY EXAMPLE BAD CODE [UCITS ETF, C]",
+     "val_currency": "EUR", "bloomberg_codes": []}
+  ]
+}

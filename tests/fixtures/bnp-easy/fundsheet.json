@@ -1,0 +1,36 @@
+{
+  "fundshare_id": "99001",
+  "compartment_id": "90001",
+  "legal_name": "BNP PARIBAS EASY EXAMPLE WORLD UCITS ETF [UCITS ETF EUR, C]",
+  "fundsheet_uri": "equity/bnp-paribas-easy-example-world-ucits-etf-ucits-etf-eur-c-ie00b4l5y983",
+  "fundshare_selection": {
+    "isin": "IE00B4L5Y983",
+    "shares": [
+      {"isin_code": "IE00B5BMR087", "product_id": "99002", "share_type": "Track Classic, Capitalisation",
+       "legal_name": "BNP PARIBAS EASY EXAMPLE WORLD UCITS ETF [TRACK CLASSIC, C]"},
+      {"isin_code": "IE00B4L5Y983", "product_id": "99001", "share_type": "UCITS ETF EUR, Capitalisation",
+       "legal_name": "BNP PARIBAS EASY EXAMPLE WORLD UCITS ETF [UCITS ETF EUR, C]"}
+    ]
+  },
+  "publications": {
+    "ENG": {
+      "name": "English",
+      "documents": [
+        {"category": "Factsheet", "doc_type": "DOC_FACTSHEET", "format": "pdf", "language": "ENG",
+         "reference_date": "2026-09-30", "url": "https://docfinder.example.invalid/api/files/factsheet/512"},
+        {"category": "DOC_ACCOUNTING_INVENTORY", "doc_type": "DOC_ACCOUNTING_INVENTORY", "format": "xlsx",
+         "language": "ENG", "publication_date": "2026-10-29", "reference_date": "2026-10-29",
+         "url": "https://docfinder.example.invalid/api/files/inventory-eng/1024"}
+      ]
+    },
+    "FRE": {
+      "name": "French",
+      "documents": [
+        {"category": "DOC_ACCOUNTING_INVENTORY", "doc_type": "DOC_ACCOUNTING_INVENTORY", "format": "xlsx",
+         "language": "FRE", "reference_date": "2026-10-29",
+         "url": "https://docfinder.example.invalid/api/files/inventory-fre/1024"}
+      ]
+    },
+    "compartment_currency": "USD"
+  }
+}

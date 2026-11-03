@@ -8,7 +8,8 @@ publishing) is shared.
 
 Adding a source means adding one module here, one test file and one docs page
 under ``docs/source/sources/``. Nothing else needs editing:
-:func:`discover` imports every module in the package.
+:func:`safe_discover` imports every module in the package, and a module that
+fails to import is logged and skipped, so one broken adapter cannot stop a run.
 
 Contracts
 ---------
@@ -28,12 +29,15 @@ from __future__ import annotations
 import importlib
 import logging
 import pkgutil
+import sys
 from dataclasses import dataclass, field
 from typing import Callable
 
 import pandas as pd
 
 from ...identifiers import is_valid_cusip, is_valid_isin
+
+logger = logging.getLogger(__name__)
 
 PRODUCT_COLUMNS = [
     "issuer",            # adapter name, e.g. "xtrackers"
@@ -100,6 +104,9 @@ class FetchContext:
 
 _REGISTRY: dict[str, IssuerAdapter] = {}
 
+#: Adapter modules that failed to import, by module name, with the error.
+_FAILED: dict[str, str] = {}
+
 
 def register(adapter: IssuerAdapter) -> IssuerAdapter:
     if adapter.name in _REGISTRY:
@@ -109,11 +116,41 @@ def register(adapter: IssuerAdapter) -> IssuerAdapter:
 
 
 def discover() -> dict[str, IssuerAdapter]:
-    """Import every adapter module in this package and return the registry."""
+    """Import every adapter module in this package and return the registry.
+
+    Raises on the first module that fails to import; pipelines use
+    :func:`safe_discover` instead.
+    """
     for mod in pkgutil.iter_modules(__path__):
         if not mod.name.startswith("_"):
             importlib.import_module(f"{__name__}.{mod.name}")
     return dict(_REGISTRY)
+
+
+def safe_discover() -> dict[str, IssuerAdapter]:
+    """Like :func:`discover`, but each module is imported on its own.
+
+    A module that fails to import (a missing optional dependency, a syntax
+    error, a name registered twice) is logged, recorded in
+    :func:`failed_modules` and skipped; the other adapters are still returned.
+    A module that failed is not retried in the same process.
+    """
+    for mod in pkgutil.iter_modules(__path__):
+        name = f"{__name__}.{mod.name}"
+        if mod.name.startswith("_") or name in sys.modules or mod.name in _FAILED:
+            continue
+        try:
+            importlib.import_module(name)
+        except Exception as exc:  # one broken adapter must not stop the build
+            _FAILED[mod.name] = f"{type(exc).__name__}: {exc}"[:500]
+            sys.modules.pop(name, None)
+            logger.warning("Issuer adapter module %s failed to import and is skipped: %s", mod.name, _FAILED[mod.name])
+    return dict(_REGISTRY)
+
+
+def failed_modules() -> dict[str, str]:
+    """Adapter modules :func:`safe_discover` skipped, with their errors."""
+    return dict(_FAILED)
 
 
 def select(
@@ -126,7 +163,7 @@ def select(
     names = list(adapters) if enabled is None else list(enabled)
     unknown = [n for n in names if n not in adapters]
     if unknown:
-        logging.getLogger(__name__).warning("issuers.enabled names unknown adapters %s; known: %s", unknown, sorted(adapters))
+        logger.warning("issuers.enabled names unknown adapters %s; known: %s", unknown, sorted(adapters))
     skip = set(disabled or ())
     return {n: adapters[n] for n in names if n in adapters and n not in skip}
 

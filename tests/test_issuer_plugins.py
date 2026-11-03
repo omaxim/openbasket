@@ -77,7 +77,7 @@ BROKEN = IssuerAdapter(
 def registry(monkeypatch):
     # Import the real adapter modules first, so they register in the real
     # registry and never in this one (their products() would go online).
-    issuers.discover()
+    issuers.safe_discover()
     monkeypatch.setattr(issuers, "_REGISTRY", {"fakeco": FAKE, "brokenco": BROKEN})
     FETCHED.clear()
     return issuers._REGISTRY

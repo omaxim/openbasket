@@ -84,7 +84,7 @@ def run_lookthrough(
 def issuer_adapters(issuers_params: dict | None) -> dict:
     """The registered issuer adapters to use, after ``issuers.enabled`` and ``issuers.disabled``."""
     p = issuers_params or {}
-    return issuer_registry.select(issuer_registry.discover(), p.get("enabled"), p.get("disabled"))
+    return issuer_registry.select(issuer_registry.safe_discover(), p.get("enabled"), p.get("disabled"))
 
 
 def make_providers(

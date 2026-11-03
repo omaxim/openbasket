@@ -48,3 +48,24 @@ unresolved weight can be checked line by line.
 
 The rows before ISINs reached by several routes are summed, with the full
 path through sub-funds.
+
+## Derivatives
+
+Some funds hold their exposure through derivatives: a buffer ETF holds FLEX
+options on SPY, a synthetic fund holds a swap on an index fund. N-PORT says
+which instrument each derivative references (`DESC_REF_OTHER`), so openbasket
+follows it:
+
+- A derivative on a **fund** is broken down into that fund's companies,
+  using the fund's own holdings (SPY's daily file, for example). Each company's
+  weight is the derivative's market value as a percent of the fund's net
+  assets, times the company's weight in the underlying fund.
+- A derivative on a **single company** becomes a row for that company's ISIN,
+  marked `isin_source = derivative_reference`.
+
+These rows say `via derivatives` in `via_fund` and `exposure = derivative`,
+and the fund's `note` gives the share held this way. Market value is not the
+same as economic exposure: buffers, caps, leverage and option deltas are not
+modelled, so read the weights as "what the fund's derivatives are written on",
+not as shares it owns. Set `lookthrough.look_through_derivatives: false` to
+turn this off.

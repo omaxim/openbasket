@@ -21,7 +21,12 @@ def nport_positions(nport_parquet_manifest: pd.DataFrame) -> duckdb.DuckDBPyRela
     con = connection()
     holding = nport.table(con, nport_parquet_manifest, "FUND_REPORTED_HOLDING")
     identifiers = nport.table(con, nport_parquet_manifest, "IDENTIFIERS")
-    return nport.holdings_with_identifiers(holding, identifiers)
+    desc_ref = (
+        nport.table(con, nport_parquet_manifest, "DESC_REF_OTHER")
+        if (nport_parquet_manifest["table"] == "DESC_REF_OTHER").any()
+        else None
+    )
+    return nport.holdings_with_identifiers(holding, identifiers, desc_ref)
 
 
 def cusip_isin_map(nport_positions: duckdb.DuckDBPyRelation) -> duckdb.DuckDBPyRelation:

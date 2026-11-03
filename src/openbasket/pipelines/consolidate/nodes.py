@@ -46,9 +46,11 @@ def nport_holdings(
             l.series_id, l.series_name, l.report_date, l.filing_date, l.net_assets,
             p.*,
             coalesce(p.reported_isin, m.isin) as isin,
-            case when p.reported_isin is not null then 'reported' else m.isin_source end as isin_source
+            case when p.reported_isin is not null then 'reported' else m.isin_source end as isin_source,
+            coalesce(p.ref_isin, rm.isin) as underlying_isin
         from positions p
         join _latest_filings l using (accession_number)
         left join cmap m on p.reported_isin is null and p.cusip = m.cusip
+        left join cmap rm on p.ref_isin is null and p.ref_cusip = rm.cusip
         """
     )

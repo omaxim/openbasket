@@ -96,3 +96,50 @@ def test_choose_prefers_order_then_coverage():
     b = H("nport", [Line(100, "US0000000001")])
     assert choose([a, b], 90).source == "tickerinside"
     assert choose([a, b], 99).source == "nport"
+
+
+class DerivativeProviders(FakeProviders):
+    """Adds resolve_underlying: an ISIN that names a fund in ``self.funds`` is that fund."""
+
+    def resolve_underlying(self, isin):
+        sid = self.isin_to_fund.get(isin)
+        return FundRef(sid, None, sid, "test") if sid else None
+
+
+def test_option_on_a_fund_is_broken_into_its_companies():
+    p = DerivativeProviders(
+        {
+            "BUFFER": [H("nport", [
+                Line(95, "US0000000099", asset_class="derivative (equity)", underlying_isin="US78462F1030", underlying_name="SPY"),
+                Line(5, "US0000000001"),
+            ])],
+            "SPY": [H("spdr", [Line(60, "US0378331005", name="APPLE"), Line(40, "US5949181045", name="MICROSOFT")])],
+        },
+        {"US1111111111": "BUFFER", "US78462F1030": "SPY"},
+    )
+    r = look_through("US1111111111", p)
+    w = {x["constituent_isin"]: x["weight_pct"] for x in r.leaves}
+    assert w["US0378331005"] == pytest.approx(57) and w["US5949181045"] == pytest.approx(38)
+    assert "US0000000099" not in w  # the option itself is not a constituent
+    assert r.summary["derivative_exposure_pct"] == pytest.approx(95)
+    assert "derivatives" in r.summary["note"]
+    assert all(x["exposure"] == "derivative" for x in r.leaves if x["source"] == "spdr")
+
+
+def test_option_on_a_single_company_points_at_that_company():
+    p = DerivativeProviders(
+        {"F": [H("nport", [Line(10, None, asset_class="derivative (equity)", underlying_isin="US0378331005", underlying_name="Apple")])]},
+        {"US1111111111": "F"},
+    )
+    r = look_through("US1111111111", p)
+    assert r.leaves[0]["constituent_isin"] == "US0378331005"
+    assert r.leaves[0]["isin_source"] == "derivative_reference"
+
+
+def test_derivatives_can_be_switched_off():
+    p = DerivativeProviders(
+        {"F": [H("nport", [Line(10, None, asset_class="derivative (equity)", underlying_isin="US0378331005")])]},
+        {"US1111111111": "F"},
+    )
+    r = look_through("US1111111111", p, look_through_derivatives=False)
+    assert r.leaves == [] and r.summary["derivative_exposure_pct"] == 0

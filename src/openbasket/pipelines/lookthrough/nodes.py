@@ -50,7 +50,8 @@ def run_lookthrough(
     )
     leaves, unresolved, summaries = [], [], []
     for isin in isins:
-        res = look_through(isin, providers, max_depth=params["max_depth"], min_resolved_pct=params["min_resolved_pct"])
+        res = look_through(isin, providers, max_depth=params["max_depth"], min_resolved_pct=params["min_resolved_pct"],
+                          look_through_derivatives=params.get("look_through_derivatives", True))
         leaves += res.leaves
         unresolved += res.unresolved
         summaries.append(res.summary)

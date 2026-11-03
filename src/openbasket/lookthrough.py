@@ -54,6 +54,9 @@ class Line:
     #: fund ticker list. Issuer files use local tickers and cash codes such as
     #: ``USD``, which collide with US fund tickers.
     us_ticker: bool = False
+    #: For a derivative: the instrument it references (an option on SPY carries SPY's ISIN).
+    underlying_isin: str | None = None
+    underlying_name: str | None = None
 
 
 @dataclass
@@ -83,6 +86,9 @@ class Providers(Protocol):
     def resolve_line(self, line: Line) -> FundRef | None:
         """Return the fund behind a holding, or ``None`` if it is not a fund."""
 
+    def resolve_underlying(self, isin: str) -> FundRef | None:
+        """The fund a derivative references, without network lookups; ``None`` for a single company."""
+
     def holdings(self, ref: FundRef) -> list[Holdings]:
         """Candidate holdings lists, highest-priority source first."""
 
@@ -111,6 +117,7 @@ def look_through(
     max_depth: int = 4,
     min_resolved_pct: float = 90.0,
     ref: FundRef | None = None,
+    look_through_derivatives: bool = True,
 ) -> Result:
     """Expand ``isin`` into its constituents.
 
@@ -138,8 +145,12 @@ def look_through(
         "reported_total_pct": None,
     }
 
+    derivative_pct = [0.0]
+    derivative_names: list[str] = []
+
     def expand(
-        fund: FundRef, factor: float, depth: int, path: tuple[str, ...], given: Holdings | None = None
+        fund: FundRef, factor: float, depth: int, path: tuple[str, ...], given: Holdings | None = None,
+        exposure: str | None = None,
     ) -> Holdings | None:
         candidates = [given] if given is not None else providers.holdings(fund)
         if not candidates:
@@ -154,6 +165,31 @@ def look_through(
             summary["sources_tried"] = "; ".join(f"{h.source}={h.resolved_pct:.2f}%" for h in candidates)
         for line in chosen.lines:
             weight = factor * line.weight_pct / 100.0
+            if line.underlying_isin and look_through_derivatives and depth < max_depth:
+                # An option or swap on a fund is exposure to that fund's companies; one on a
+                # single company is exposure to that company. Weighted by the derivative's
+                # market value as reported: payoffs (buffers, caps, leverage) are not modelled.
+                label = f"derivatives on {line.underlying_name or line.underlying_isin}"
+                under = providers.resolve_underlying(line.underlying_isin)
+                if under is not None and under.key not in path and expand(
+                    under, weight, depth + 1, path + (under.key,), exposure="via derivatives"
+                ) is not None:
+                    derivative_pct[0] += weight
+                    derivative_names.append(line.underlying_name or line.underlying_isin)
+                    continue
+                if under is None:
+                    derivative_pct[0] += weight
+                    derivative_names.append(line.underlying_name or line.underlying_isin)
+                    res.leaves.append({
+                        "input_isin": isin, "constituent_isin": line.underlying_isin,
+                        "name": line.underlying_name or line.name, "issuer_name": line.underlying_name,
+                        "issuer_lei": None, "title": line.title, "cusip": None, "ticker": None,
+                        "weight_pct": weight, "asset_class": line.asset_class, "isin_source": "derivative_reference",
+                        "source": chosen.source, "source_ref": chosen.source_ref, "source_url": chosen.source_url,
+                        "as_of": chosen.as_of, "depth": depth, "via_fund": fund.name or fund.key,
+                        "note": f"{label}; weighted by the derivative's market value", "exposure": "derivative",
+                    })
+                    continue
             sub = providers.resolve_line(line) if depth < max_depth else None
             note = None
             if sub is not None:
@@ -180,8 +216,9 @@ def look_through(
                 "source_url": chosen.source_url,
                 "as_of": chosen.as_of,
                 "depth": depth,
-                "via_fund": fund.name or fund.key,
-                "note": note,
+                "via_fund": (f"{fund.name or fund.key} ({exposure})" if exposure else fund.name or fund.key),
+                "note": note or (f"{exposure}; weighted by the derivative's market value" if exposure else None),
+                "exposure": "derivative" if exposure else "held",
             }
             if line.isin:
                 res.leaves.append(row)
@@ -199,6 +236,13 @@ def look_through(
         summary["note"] = "no fund or security matched this ISIN"
     elif expand(ref, 100.0, 0, (ref.key,)) is None:
         summary["note"] = "; ".join(x for x in (ref.note, "no holdings found from any source") if x)
+
+    if derivative_pct[0]:
+        names = ", ".join(dict.fromkeys(derivative_names))
+        flag = (f"{derivative_pct[0]:.2f}% is held through derivatives on {names}; their companies are shown "
+                "weighted by the derivatives' market value, and payoffs such as buffers, caps or leverage are not modelled")
+        summary["note"] = "; ".join(x for x in (summary["note"], flag) if x)
+    summary["derivative_exposure_pct"] = round(derivative_pct[0], 6)
 
     top_unresolved = [r for r in res.unresolved if r["depth"] == 0]
     biggest = max(top_unresolved, key=lambda r: r["weight_pct"], default=None)

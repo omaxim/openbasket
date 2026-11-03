@@ -262,7 +262,7 @@ def expand_fund(fund: dict, providers, params: dict) -> tuple[dict, pd.DataFrame
     try:
         res = look_through(
             fund["id"], providers, max_depth=params["max_depth"], min_resolved_pct=params["min_resolved_pct"],
-            ref=fund_ref(fund),
+            ref=fund_ref(fund), look_through_derivatives=params.get("look_through_derivatives", True),
         )
         summary = res.summary
         rows = _fund_rows(fund["id"], res.leaves, summary)

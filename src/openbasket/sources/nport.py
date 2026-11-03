@@ -32,7 +32,13 @@ from ..datasets import connection
 
 logger = logging.getLogger(__name__)
 
-TABLES = ("SUBMISSION", "FUND_REPORTED_INFO", "FUND_REPORTED_HOLDING", "IDENTIFIERS")
+TABLES = ("SUBMISSION", "FUND_REPORTED_INFO", "FUND_REPORTED_HOLDING", "IDENTIFIERS", "DESC_REF_OTHER")
+
+#: Tables a quarter may lack without failing the ingest.
+OPTIONAL_TABLES = ("DESC_REF_OTHER",)
+
+#: Asset categories that are derivatives; their reference instrument can be looked through.
+DERIVATIVE_CATS = ("DE", "DIR", "DCR", "DCO", "DFE", "DO")
 
 #: N-PORT asset category codes, grouped into plain asset classes.
 ASSET_CLASS = {
@@ -84,6 +90,9 @@ def zip_to_parquet(
         for table in tables:
             member = names.get(table)
             if member is None:
+                if table in OPTIONAL_TABLES:
+                    logger.warning("%s missing from %s; skipped", table, zip_path)
+                    continue
                 raise KeyError(f"{table} missing from {zip_path}")
             tsv = extract_dir / Path(member).name
             if not tsv.exists():
@@ -140,12 +149,36 @@ def latest_filings(submission: duckdb.DuckDBPyRelation, info: duckdb.DuckDBPyRel
 
 
 def holdings_with_identifiers(
-    holding: duckdb.DuckDBPyRelation, identifiers: duckdb.DuckDBPyRelation
+    holding: duckdb.DuckDBPyRelation,
+    identifiers: duckdb.DuckDBPyRelation,
+    desc_ref: duckdb.DuckDBPyRelation | None = None,
 ) -> duckdb.DuckDBPyRelation:
-    """Holdings with one reported ISIN and ticker per ``HOLDING_ID``."""
-    return connection().sql(
+    """Holdings with one reported ISIN and ticker per ``HOLDING_ID``.
+
+    With ``desc_ref`` (``DESC_REF_OTHER``), derivatives also get the instrument
+    they reference: an option on SPY carries SPY's ISIN, CUSIP and ticker in
+    ``ref_isin``, ``ref_cusip``, ``ref_ticker`` and ``ref_name``.
+    """
+    con = connection()
+    if desc_ref is None:
+        desc_ref = con.sql(
+            "select null::varchar as HOLDING_ID, null::varchar as ISSUER_NAME, null::varchar as ISSUE_TITLE, "
+            "null::varchar as CUSIP, null::varchar as ISIN, null::varchar as TICKER where false"
+        )
+    return con.sql(
         """
-        with ids as (
+        with refs as (
+            select
+                HOLDING_ID,
+                max(case when ISIN is not null and ISIN not in ('', 'N/A') then upper(trim(ISIN)) end) as ref_isin,
+                max(case when CUSIP is not null and CUSIP not in ('', 'N/A') and CUSIP not like '000000%'
+                         then upper(trim(CUSIP)) end) as ref_cusip,
+                max(case when TICKER is not null and TICKER not in ('', 'N/A') then upper(trim(TICKER)) end) as ref_ticker,
+                max(coalesce(nullif(ISSUE_TITLE, ''), ISSUER_NAME)) as ref_name
+            from desc_ref
+            group by HOLDING_ID
+        ),
+        ids as (
             select
                 HOLDING_ID,
                 max(case when IDENTIFIER_ISIN is not null and IDENTIFIER_ISIN not in ('', 'N/A')
@@ -169,9 +202,14 @@ def holdings_with_identifiers(
             h.PAYOFF_PROFILE as payoff_profile,
             h.INVESTMENT_COUNTRY as country,
             ids.reported_isin,
-            ids.reported_ticker
+            ids.reported_ticker,
+            refs.ref_isin,
+            refs.ref_cusip,
+            refs.ref_ticker,
+            refs.ref_name
         from holding h
         left join ids using (HOLDING_ID)
+        left join refs using (HOLDING_ID)
         """
     )
 

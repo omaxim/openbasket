@@ -23,6 +23,9 @@ lookthrough:
   # if none does, take the one that resolves the most.
   min_resolved_pct: 90.0
   max_depth: 4
+  # Expand options and swaps on a fund into that fund's companies (weighted by the
+  # derivative's market value, labelled as derivative exposure).
+  look_through_derivatives: true
   use_openfigi: true
   enrich_openfigi: true
   openfigi_cache: data/03_primary/openfigi_cache.parquet

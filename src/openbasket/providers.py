@@ -209,6 +209,15 @@ class DataProviders:
             self._fund_holding_index = (by_isin, by_cusip, groups)
         return self._fund_holding_index
 
+    def resolve_underlying(self, isin: str) -> FundRef | None:
+        """The fund a derivative references, from local data only (issuer lists, N-PORT)."""
+        isin = isin.strip().upper()
+        ref = self._issuer_ref(isin)
+        if ref is not None:
+            return ref
+        series_id = self._series_from_nport(isin)
+        return self._ref(series_id, None, "nport_lei") if series_id else None
+
     def resolve_line(self, line: Line) -> FundRef | None:
         if line.isin:
             ref = self._issuer_ref(line.isin)
@@ -369,6 +378,17 @@ class DataProviders:
         as_of = pd.Timestamp(df["report_date"].iloc[0]).date().isoformat() if len(df) else None
         return df, as_of
 
+    @staticmethod
+    def _underlying_isin(r) -> str | None:
+        """ISIN of the instrument a derivative line references, if N-PORT gives one."""
+        if r.asset_cat not in nport.DERIVATIVE_CATS:
+            return None
+        isin = getattr(r, "underlying_isin", None)
+        if isin and is_valid_isin(isin):
+            return isin
+        cusip = getattr(r, "ref_cusip", None)
+        return cusip_to_isin(cusip) if cusip else None
+
     def _from_nport(self, series_id: str) -> Holdings | None:
         df, as_of = self._nport_lines(series_id)
         if df.empty:
@@ -386,6 +406,8 @@ class DataProviders:
                 asset_class=nport.ASSET_CLASS.get(r.asset_cat, r.asset_cat),
                 isin_source=r.isin_source,
                 fund_hint=r.issuer_type in nport.FUND_ISSUER_TYPES,
+                underlying_isin=self._underlying_isin(r),
+                underlying_name=getattr(r, "ref_name", None),
             )
             for r in df.itertuples(index=False)
         ]

@@ -1,0 +1,33 @@
+{
+ "statusCode": 200,
+ "data": [
+  {
+   "portId": "8205",
+   "fundName": "Vanguard Australian Shares Index ETF",
+   "productType": "etf",
+   "assetClass": "equity",
+   "tradingSymbols": {
+    "TICKER": "VAS"
+   }
+  },
+  {
+   "portId": "0991",
+   "fundName": "Vanguard All-World ex-U.S. Shares Index ETF",
+   "productType": "etf",
+   "assetClass": "equity",
+   "tradingSymbols": {
+    "TICKER": "VEU"
+   }
+  },
+  {
+   "portId": "8108",
+   "fundName": "Vanguard Cash Reserve Fund",
+   "productType": "mf",
+   "assetClass": "cash",
+   "tradingSymbols": {
+    "TICKER": null,
+    "APIR": "VAN0020AU"
+   }
+  }
+ ]
+}

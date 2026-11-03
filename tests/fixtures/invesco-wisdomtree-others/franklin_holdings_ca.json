@@ -1,0 +1,9 @@
+{"data": {"Portfolio": {"fundname": "Franklin Example Canada Fund", "producttype": "ETFs", "assetclass": "Equity", "portfolio": {
+  "dailyholdings": [],
+  "fullholdings": [
+    {"asofdate": "09/30/2026", "asofdatestd": "2026-09-30", "frequency": "QUARTERLY", "secticker": "—", "isinsecnbr": "CA7800871021", "cusipnbr": "780087102", "secname": "Example Royal Bank Line", "quantityshrpar": "100", "pctofnetassets": "70.50", "mktvalue": "1,000", "assetclasscatg": "Equities", "mktcurr": "CAD"},
+    {"asofdate": "09/30/2026", "asofdatestd": "2026-09-30", "frequency": "QUARTERLY", "secticker": "—", "isinsecnbr": "—", "cusipnbr": "—", "secname": "Example Deposit 2.1% 10/01/2026", "quantityshrpar": "1", "pctofnetassets": "29.00", "mktvalue": "400", "assetclasscatg": "Bond", "mktcurr": "CAD"},
+    {"asofdate": "09/30/2026", "asofdatestd": "2026-09-30", "frequency": "QUARTERLY", "secticker": "—", "isinsecnbr": "—", "cusipnbr": "—", "secname": "Example Index Future", "quantityshrpar": "1", "pctofnetassets": "-0.01", "mktvalue": "0", "assetclasscatg": "Future", "mktcurr": "USD"},
+    {"asofdate": "06/30/2026", "asofdatestd": "2026-06-30", "frequency": "QUARTERLY", "secticker": "—", "isinsecnbr": "CA7800871021", "cusipnbr": "780087102", "secname": "Example Royal Bank Line", "quantityshrpar": "90", "pctofnetassets": "99.00", "mktvalue": "900", "assetclasscatg": "Equities", "mktcurr": "CAD"}
+  ]
+}}}}

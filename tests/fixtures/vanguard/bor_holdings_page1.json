@@ -1,0 +1,19 @@
+{
+  "borHoldings": [
+    {"portId": "9679", "holdings": {
+      "totalHoldings": 7,
+      "lastItemKey": "{\"portIdKey\":\"fundBorHoldings-9679-2026-09-30\",\"skey\":1.5}",
+      "items": [
+        {"issuerName": "NVIDIA Corp", "securityLongDescription": "NVIDIA Corp", "securityShortDescription": "NVIDIA CORP",
+         "isin": "US67066G1040", "sedol1": "2379504", "cusip": "67066G104", "ticker": "NVDA", "securityType": "EQ.STOCK",
+         "marketValuePercentage": 40.12345, "quantity": 1000, "effectiveDate": "2026-09-30", "couponRate": 0, "maturityDate": null},
+        {"issuerName": "Apple Inc", "securityLongDescription": "Apple Inc", "securityShortDescription": "APPLE INC",
+         "isin": "US0378331005", "sedol1": "2046251", "cusip": "037833100", "ticker": "AAPL", "securityType": "EQ.STOCK",
+         "marketValuePercentage": 30.5, "quantity": 900, "effectiveDate": "2026-09-30", "couponRate": 0, "maturityDate": null},
+        {"issuerName": "United States Treasury Note/Bond", "securityLongDescription": "United States Treasury Note/Bond",
+         "securityShortDescription": "US TREASURY N/B", "isin": "US912828ZQ64", "sedol1": null, "cusip": "912828ZQ6",
+         "ticker": "T", "securityType": "FI.US_GOV", "marketValuePercentage": 20.0, "quantity": 500,
+         "effectiveDate": "2026-09-30", "couponRate": 0.625, "maturityDate": "2030-05-15"}
+      ]}}
+  ]
+}

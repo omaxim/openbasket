@@ -27,7 +27,11 @@ without any configuration.
 | {doc}`CVM Brazil <cvm-brazil>` (`cvm_brazil`) | Every Brazilian fund class that files a CDA: 27,428 fund ISINs, 266 of them listed on B3 | public (ODbL 1.0, see [](../data-licence.md)) | yes | monthly, about one month after month end; confidential positions released up to 90 days later |
 | {doc}`CNMV Spain <cnmv-spain>` (`cnmv_spain`) | Every Spanish fund (FI) and SICAV: 3,510 share classes in 2,067 compartments | public (CNMV legal notice) | yes | quarterly, about four months after quarter end |
 | TickerInside (`tickerinside`) | Daily issuer holdings of US equity ETFs, keyed by ticker | public (CC BY 4.0) | yes | daily, a day or two old |
-| iShares UK and US (`ishares`) | Full holdings of UCITS ETFs (UK site, 1,431 products) and US iShares ETFs (482) | local_only (BlackRock site terms) | yes | daily |
+| {doc}`iShares <ishares-regions>` (`ishares`, 21 regional sites) | Daily full holdings of iShares ETFs with ISINs, from BlackRock's sites (UK and US sites by default) | local_only (BlackRock site terms) | yes | daily |
+| {doc}`Amundi ETF <amundi>` (`amundi`) | Full holdings of Amundi (and former Lyxor and ComStage) ETFs | local_only (Amundi site terms) | yes | daily |
+| {doc}`Vanguard <vanguard>` (`vanguard`) | Month-end full holdings of Vanguard funds in Europe, the US, Australia and Canada | local_only (Vanguard site terms) | no: the UK terms forbid repeated automated access; switch it on in `conf/local` | monthly |
+| {doc}`Avantis, First Trust <us-issuers>` (`avantis`, `first_trust`) | Holdings of US ETFs and funds from the issuers' sites | local_only (issuer site terms) | yes | daily |
+| {doc}`Franklin Templeton <franklin>` (`franklin`, `franklin_ca`) | Daily holdings of UCITS and US ETFs, monthly or quarterly for Canada | local_only (issuer site terms) | yes | daily to quarterly |
 | SPDR (`spdr`) | Full holdings of US ETFs, including SPY and DIA (185), and UCITS ETFs (177) | local_only (State Street site terms) | yes | daily |
 | {doc}`EDINET Japan <edinet-japan>` | Japanese investment trust reports; client only, nothing parsed | local_only | no (needs a personal API key) | annual and semi-annual reports |
 
@@ -118,8 +122,9 @@ and types and the ticker that links a fund ISIN to its SEC series.
 BlackRock moved its sites in 2026. The `.ajax` CSV endpoints that
 `etf-scraper` used (US `1467271812596`, UK `1506575576011`) now return the
 HTML product page, so `etf-scraper` was not used. Two JSON endpoints per
-site replace them. The sites read are set in `issuers.ishares_sites`
-(`[uk, us]`).
+site replace them. This section describes the UK and US sites; the
+`ishares` adapter now reads every regional site (`issuers.ishares_sites`),
+see [iShares regional sites](ishares-regions.md).
 
 Fund list, UK
 : `https://www.ishares.com/varnish-api/blk-product-screener-server/api/v1/product-screener/product-data?country=gb&language=en&siteName=ishares-uk&userType=individual`
@@ -197,11 +202,12 @@ Issuer tickers are local codes, and cash lines use currency codes such as
 `USD`, which is also a US ETF's ticker. So iShares lines are matched to funds
 by ISIN only, never by ticker.
 
-**Terms.** BlackRock's site terms restrict republication, so iShares is
-`local_only`: openbasket reads it only when you run it yourself, and the
-public build lists iShares funds by name and ISIN without their holdings
-(see {doc}`../running-locally`). The client keeps to one request per fund
-per day and pauses between requests.
+**Terms.** BlackRock's site terms allow personal, non-commercial use and
+forbid reproduction, so iShares is `local_only`: openbasket reads it only
+when you run it yourself, and the public build lists iShares funds by name
+and ISIN without their holdings (see {doc}`../running-locally` and
+[iShares regional sites](ishares-regions.md#terms-and-credit)). The client
+keeps to one request per fund per day and pauses between requests.
 
 ## SPDR
 

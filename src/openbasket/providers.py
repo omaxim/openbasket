@@ -64,7 +64,10 @@ SOURCES = ("issuer", "tickerinside", "nport", "top_holdings")
 SERIES_RE = re.compile(r"^S\d{9}$")
 NPORT_DATASETS_URL = "https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets"
 
-#: Issuers read by code in this package rather than by a registered adapter.
+#: Issuers whose fund lists ``ingest`` reads with its own code; SPDR's
+#: holdings are also read here, every other issuer's (iShares included)
+#: through its registered adapter. iShares stays listed for its title and
+#: for how the universe groups its share classes in older fund lists.
 BUILTIN_ISSUERS = {"ishares": "iShares", "spdr": "SPDR"}
 
 #: Where the docs explain running openbasket on your own machine.
@@ -466,8 +469,6 @@ class DataProviders:
             raise AdapterOff(f"{self._title(issuer)} lists this fund, but only its name and ISIN are known here")
         if issuer == "spdr":
             return self._from_spdr(iid, p)
-        if issuer == "ishares":
-            return self._from_ishares(iid, p)
         if issuer in self.adapters:
             return self._from_adapter(iid, p, self.adapters[issuer])
         raise AdapterOff(f"{self._title(issuer)} lists this fund, but its adapter is not enabled")
@@ -548,32 +549,6 @@ class DataProviders:
         if derived:
             return derived, "derived_cusip"
         return None, None
-
-    def _from_ishares(self, iid: str, p: dict) -> Holdings | None:
-        site, portfolio_id = str(p["site"]).lower(), str(p["portfolio_id"])
-        got = ishares.holdings(portfolio_id, site, cache_dir=self.issuer_cache_dir)
-        if len(got.holdings) >= 20000:
-            logger.warning("iShares %s returned %d lines, possibly capped by the site", iid, len(got.holdings))
-        df = got.holdings.astype(object).where(got.holdings.notna(), None)
-        records = df.to_dict("records")
-        found = self._issuer_isins([(r.get("isin"), r.get("cusip"), r.get("sedol")) for r in records])
-        lines = [
-            Line(
-                weight_pct=float(r.get("holdingPercent") or 0.0),
-                isin=isin,
-                name=r.get("issueName"),
-                ticker=r.get("ticker"),
-                cusip=r.get("cusip"),
-                asset_class=ishares.ASSET_CLASS.get(r.get("assetClass"), (r.get("assetClass") or "").lower() or None),
-                isin_source=how,
-                fund_hint=r.get("assetClass") == "Money Market" or " ETF" in (r.get("issueName") or "").upper(),
-                country=country_label(r.get("countryOfRisk") or r.get("location")),
-                sector=_text(r.get("sectorName") or r.get("sector")),
-            )
-            for r, (isin, how) in zip(records, found)
-        ]
-        return Holdings("ishares", got.as_of, lines, source_ref=f"iShares holdings {got.url}",
-                        source_url=self._product_page(iid) or got.url)
 
     def _from_adapter(self, iid: str, p: dict, adapter: IssuerAdapter) -> Holdings | None:
         """Holdings from a registered adapter, with CUSIPs and SEDOLs turned into ISINs as for iShares and SPDR."""

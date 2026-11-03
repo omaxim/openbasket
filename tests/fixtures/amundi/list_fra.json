@@ -1,0 +1,12 @@
+{"products": [
+  {"productId": "LU1681043599", "productType": "PRODUCT", "composition": null, "breakDowns": [],
+   "characteristics": {"ISIN": "LU1681043599", "SHARE_MARKETING_NAME": "Example World Swap UCITS ETF EUR Acc",
+     "FUND_REFLEX_CODE": 9000003, "FUND_REPLICATION_METHODOLOGY": "Indirect(Swap Based)", "FUND_SAMPLING": false,
+     "FUND_DOMICILIATION_COUNTRY": "Luxembourg", "ASSET_CLASS": "Equity", "CURRENCY": "EUR",
+     "FUND_ISSUER": "LYXOR", "MNEMO": "EXSW", "MAIN_LISTINGS": {"FRA": "EXSW FP"}}},
+  {"productId": "FR0011871128", "productType": "PRODUCT", "composition": null, "breakDowns": [],
+   "characteristics": {"ISIN": "FR0011871128", "SHARE_MARKETING_NAME": "Example PEA US UCITS ETF Acc",
+     "FUND_REFLEX_CODE": 9000004, "FUND_REPLICATION_METHODOLOGY": "Indirect(Swap Based)", "FUND_SAMPLING": false,
+     "FUND_DOMICILIATION_COUNTRY": "France", "ASSET_CLASS": "Equity", "CURRENCY": "EUR",
+     "FUND_ISSUER": "LYXOR", "MNEMO": "EXPU", "MAIN_LISTINGS": {"FRA": "EXPU FP"}}}
+]}

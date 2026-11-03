@@ -1,0 +1,113 @@
+{
+ "size": 4,
+ "fund": {
+  "entity": [
+   {
+    "type": "priceMonthEndPerformance",
+    "profile": {
+     "fundId": "9002",
+     "ticker": "XETF",
+     "cusip": "99999A102",
+     "longName": "Example Total Stock ETF",
+     "isExternalFund": false,
+     "isETF": true,
+     "isMutualFund": false,
+     "fundFact": {
+      "isIndex": true,
+      "isBond": false
+     },
+     "associatedFundIds": {
+      "investorFundId": "9000",
+      "admiralFundId": "9001",
+      "etfFundId": "9002"
+     },
+     "fundCategory": {
+      "high": {
+       "type": "HIGH",
+       "id": 1,
+       "name": "Stock Funds"
+      }
+     }
+    }
+   },
+   {
+    "type": "priceMonthEndPerformance",
+    "profile": {
+     "fundId": "9001",
+     "ticker": "XADMX",
+     "cusip": "99999A201",
+     "longName": "Example Total Stock Index Fund Admiral Shares",
+     "isExternalFund": false,
+     "isETF": false,
+     "isMutualFund": true,
+     "fundFact": {
+      "isIndex": true,
+      "isBond": false
+     },
+     "associatedFundIds": {
+      "investorFundId": "9000",
+      "admiralFundId": "9001",
+      "etfFundId": "9002"
+     },
+     "fundCategory": {
+      "high": {
+       "type": "HIGH",
+       "id": 1,
+       "name": "Stock Funds"
+      }
+     }
+    }
+   },
+   {
+    "type": "priceMonthEndPerformance",
+    "profile": {
+     "fundId": "9100",
+     "ticker": "XBND",
+     "cusip": "99999B100",
+     "longName": "Example Total Bond ETF",
+     "isExternalFund": false,
+     "isETF": true,
+     "isMutualFund": false,
+     "fundFact": {
+      "isIndex": true,
+      "isBond": true
+     },
+     "associatedFundIds": {
+      "etfFundId": "9100"
+     },
+     "fundCategory": {
+      "high": {
+       "type": "HIGH",
+       "id": 1,
+       "name": "Bond Funds"
+      }
+     }
+    }
+   },
+   {
+    "type": "priceMonthEndPerformance",
+    "profile": {
+     "fundId": "9001",
+     "ticker": "XEXTX",
+     "cusip": "99999C108",
+     "longName": "Someone Else's Fund",
+     "isExternalFund": true,
+     "isETF": false,
+     "isMutualFund": true,
+     "fundFact": {
+      "isIndex": true,
+      "isBond": false
+     },
+     "associatedFundIds": {},
+     "fundCategory": {
+      "high": {
+       "type": "HIGH",
+       "id": 1,
+       "name": "Stock Funds"
+      }
+     }
+    }
+   }
+  ]
+ }
+}

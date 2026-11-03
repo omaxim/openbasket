@@ -4,6 +4,7 @@ import pytest
 from openbasket.lookthrough import Line, look_through
 from openbasket.providers import DataProviders
 from openbasket.sources import ishares
+from openbasket.sources.issuers import ishares as ishares_adapter
 
 
 def _dp(value):
@@ -86,11 +87,11 @@ def test_cusip_only_line_needs_openfigi(monkeypatch, known, expected):
     )
     products = pd.DataFrame([{"issuer": "ishares", "site": "us", "portfolio_id": "1", "isin": "US4642872265",
                               "ticker": "AGG", "fund_name": "AGG"}])
-    monkeypatch.setattr(ishares, "holdings", lambda pid, site, cache_dir=None: ishares.IssuerHoldings(
+    monkeypatch.setattr(ishares, "holdings", lambda pid, site, cache_dir=None, top10=False: ishares.IssuerHoldings(
         *ishares.parse_holdings(CUSIP_ONLY), url="u"))
     prov = DataProviders(empty, empty, pd.DataFrame(columns=["series_id", "series_name", "series_lei", "ticker"]),
                          pd.DataFrame(columns=["ticker", "isin"]), Figi(), source_order=["issuer"],
-                         issuer_products=products)
+                         issuer_products=products, adapters={"ishares": ishares_adapter.ADAPTER})
     lines = prov.holdings(prov.resolve("US4642872265"))[0].lines
     assert lines[1].isin == expected
     assert lines[1].isin_source == ("derived_cusip" if expected else None)
@@ -164,11 +165,11 @@ def providers(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         ishares, "holdings",
-        lambda pid, site, cache_dir=None: ishares.IssuerHoldings(*ishares.parse_holdings(PAYLOAD), url="u"),
+        lambda pid, site, cache_dir=None, top10=False: ishares.IssuerHoldings(*ishares.parse_holdings(PAYLOAD), url="u"),
     )
     return DataProviders(
         empty, empty, fund_master, pd.DataFrame(columns=["ticker", "isin"]), None,
-        source_order=["issuer", "nport"], issuer_products=products,
+        source_order=["issuer", "nport"], issuer_products=products, adapters={"ishares": ishares_adapter.ADAPTER},
     )
 
 

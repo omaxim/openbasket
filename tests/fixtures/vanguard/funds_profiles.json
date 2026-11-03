@@ -1,0 +1,75 @@
+{
+  "funds": [
+    {"profile": {
+      "portId": "9679", "fundFullName": "Vanguard FTSE All-World UCITS ETF (USD) Accumulating", "shareClassName": "ETF",
+      "fundCurrency": "USD", "marketOfDomicile": "IRELAND", "polarisPdtTypeIndicator": "ETF",
+      "assetClassificationLevel1": "Equity", "etfReplicationMethodology": "Physical", "activityStatusCode": "ACTIVE",
+      "identifiers": [{"altIdCode": "ISIN", "altIdValue": "IE00BK5BQT80"}, {"altIdCode": "WKN", "altIdValue": "A2PKXG"}],
+      "listings": [
+        {"stockExchangeMarketIdentifierCode": "XETR", "fundCurrency": "EUR", "activityStatusCode": "ACTIVE",
+         "identifiers": [{"altIdCode": "BLMB", "altIdValue": "VWCE GY"}, {"altIdCode": "DBTK", "altIdValue": "VWCE"}]},
+        {"stockExchangeMarketIdentifierCode": "XLON", "fundCurrency": "GBP", "activityStatusCode": "ACTIVE",
+         "identifiers": [{"altIdCode": "BLMB", "altIdValue": "VWRP LN"}, {"altIdCode": "TIDM", "altIdValue": "VWRP"}]},
+        {"stockExchangeMarketIdentifierCode": "XLON", "fundCurrency": "USD", "activityStatusCode": "ACTIVE",
+         "identifiers": [{"altIdCode": "BLMB", "altIdValue": "VWRA LN"}, {"altIdCode": "TIDM", "altIdValue": "VWRA"}]},
+        {"stockExchangeMarketIdentifierCode": "XSWX", "fundCurrency": "CHF", "activityStatusCode": "ACTIVE",
+         "identifiers": [{"altIdCode": "BLMB", "altIdValue": "VWRA SW"}, {"altIdCode": "SSET", "altIdValue": "VWRA"}]}
+      ],
+      "relatedShareClassesPolaris": [{"portId": "9505"}]}},
+    {"profile": {
+      "portId": "9505", "fundFullName": "Vanguard FTSE All-World UCITS ETF (USD) Distributing", "shareClassName": "ETF",
+      "fundCurrency": "USD", "marketOfDomicile": "IRELAND", "polarisPdtTypeIndicator": "ETF",
+      "assetClassificationLevel1": "Equity", "etfReplicationMethodology": "Physical", "activityStatusCode": "ACTIVE",
+      "identifiers": [{"altIdCode": "ISIN", "altIdValue": "IE00B3RBWM25"}],
+      "listings": [
+        {"stockExchangeMarketIdentifierCode": "XSWX", "fundCurrency": "CHF", "activityStatusCode": "ACTIVE",
+         "identifiers": [{"altIdCode": "SSET", "altIdValue": "VWRL"}]}
+      ],
+      "relatedShareClassesPolaris": [{"portId": "9679"}]}},
+    {"profile": {
+      "portId": "9232", "fundFullName": "Vanguard LifeStrategy 100 % Equity Fund Accumulation Shares", "shareClassName": null,
+      "fundCurrency": "GBP", "marketOfDomicile": "UNITED KINGDOM", "polarisPdtTypeIndicator": "FUND",
+      "assetClassificationLevel1": "Multi-Asset", "etfReplicationMethodology": null, "activityStatusCode": "ACTIVE",
+      "identifiers": [{"altIdCode": "ISIN", "altIdValue": "GB00B41XG308"}, {"altIdCode": "SEDL", "altIdValue": "B41XG30"}],
+      "listings": [], "relatedShareClassesPolaris": [{"portId": "9231"}]}},
+    {"profile": {
+      "portId": "9398", "fundFullName": "Vanguard Global Momentum Factor UCITS ETF (USD) Accumulating", "shareClassName": "ETF",
+      "fundCurrency": "USD", "marketOfDomicile": "IRELAND", "polarisPdtTypeIndicator": "ETF",
+      "assetClassificationLevel1": "Equity", "etfReplicationMethodology": "Physical", "activityStatusCode": "DEACTIVE",
+      "identifiers": [{"altIdCode": "ISIN", "altIdValue": "IE00BYYR0935"}], "listings": [], "relatedShareClassesPolaris": []}},
+    {"profile": {
+      "portId": "A358", "fundFullName": "Vanguard U.K. Short-Term Gilt Index Fund", "shareClassName": null,
+      "fundCurrency": "GBP", "marketOfDomicile": "UNITED KINGDOM", "polarisPdtTypeIndicator": "FUND",
+      "assetClassificationLevel1": "Bond", "etfReplicationMethodology": null, "activityStatusCode": "ACTIVE",
+      "identifiers": [], "listings": [], "relatedShareClassesPolaris": []}},
+    {"profile": {
+      "portId": "3141", "fundFullName": "Vanguard Total World Stock ETF", "shareClassName": "ETF",
+      "fundCurrency": "USD", "marketOfDomicile": "UNITED STATES", "polarisPdtTypeIndicator": "ETF",
+      "assetClassificationLevel1": "Equity", "etfReplicationMethodology": null, "activityStatusCode": "ACTIVE",
+      "identifiers": [{"altIdCode": "ISIN", "altIdValue": "US9220427424"}, {"altIdCode": "TICK", "altIdValue": "VT"}],
+      "listings": [], "relatedShareClassesPolaris": [{"portId": "0628"}]}},
+    {"profile": {
+      "portId": "0628", "fundFullName": "Vanguard Total World Stock Index Fund Admiral Shares", "shareClassName": "Admiral",
+      "fundCurrency": "USD", "marketOfDomicile": "UNITED STATES", "polarisPdtTypeIndicator": "FUND",
+      "assetClassificationLevel1": "Equity", "etfReplicationMethodology": null, "activityStatusCode": "ACTIVE",
+      "identifiers": [{"altIdCode": "CUSP", "altIdValue": "922042718"}, {"altIdCode": "TICK", "altIdValue": "VTWAX"}],
+      "listings": [], "relatedShareClassesPolaris": [{"portId": "3141"}]}},
+    {"profile": {
+      "portId": "8205", "fundFullName": "Vanguard Australian Shares Index ETF", "shareClassName": "ETF",
+      "fundCurrency": "AUD", "marketOfDomicile": "AUSTRALIA", "polarisPdtTypeIndicator": "ETF",
+      "assetClassificationLevel1": "Equity", "etfReplicationMethodology": null, "activityStatusCode": "ACTIVE",
+      "identifiers": [{"altIdCode": "ISIN", "altIdValue": "AU000000VAS1"}],
+      "listings": [{"stockExchangeMarketIdentifierCode": "XASX", "fundCurrency": "AUD", "activityStatusCode": "ACTIVE",
+                    "identifiers": [{"altIdCode": "ASX", "altIdValue": "VAS"}]}],
+      "relatedShareClassesPolaris": [{"portId": "8100"}]}},
+    {"profile": {
+      "portId": "1811", "fundFullName": "Vanguard Canadian Long-Term Bond Index ETF", "shareClassName": "ETF",
+      "fundCurrency": "CAD", "marketOfDomicile": "CANADA", "polarisPdtTypeIndicator": "ETF",
+      "assetClassificationLevel1": "Bond", "etfReplicationMethodology": null, "activityStatusCode": "ACTIVE",
+      "identifiers": [{"altIdCode": "ISIN", "altIdValue": "CA92211H1047"}],
+      "listings": [{"stockExchangeMarketIdentifierCode": "XTSE", "fundCurrency": "CAD", "activityStatusCode": "ACTIVE",
+                    "identifiers": [{"altIdCode": "RIC", "altIdValue": "VLB.TO"}, {"altIdCode": "CATK", "altIdValue": "VLB"}]}],
+      "relatedShareClassesPolaris": []}},
+    null
+  ]
+}

@@ -1,0 +1,10 @@
+{"data": {"Portfolio": {"fundname": "Franklin Example World UCITS ETF", "producttype": "ETFs", "assetclass": "Equity", "portfolio": {
+  "dailyholdings": [
+    {"asofdate": "02/11/2026", "frequency": "DAILY", "secticker": "AAPL", "isinsecnbr": "US0378331005", "cusipnbr": "037833100", "secname": "EXAMPLE APPLE LINE", "quantityshrpar": "1,000.00", "pctofnetassets": "60.25", "mktvalue": "1,000.00", "assetclasscatg": "COMMON STOCK", "mktcurr": "USD"},
+    {"asofdate": "02/11/2026", "frequency": "DAILY", "secticker": "NESN", "isinsecnbr": "CH0038863350", "cusipnbr": "7123870", "secname": "EXAMPLE NESTLE LINE", "quantityshrpar": "10.00", "pctofnetassets": "30.00", "mktvalue": "500.00", "assetclasscatg": "COMMON STOCK", "mktcurr": "CHF"},
+    {"asofdate": "02/11/2026", "frequency": "DAILY", "secticker": "—", "isinsecnbr": "XS0000000BAD", "cusipnbr": "BADSEDL", "secname": "EXAMPLE BOND BAD IDS", "quantityshrpar": "100.00", "pctofnetassets": "9.00", "mktvalue": "90.00", "assetclasscatg": "CORPORATE BOND", "mktcurr": "EUR"},
+    {"asofdate": "02/11/2026", "frequency": "DAILY", "secticker": "—", "isinsecnbr": "—", "cusipnbr": "—", "secname": "CURRENCY CONTRACT - USD", "quantityshrpar": "5.00", "pctofnetassets": "(0.25)", "mktvalue": "-5.00", "assetclasscatg": "CURRENCY CONTRACT", "mktcurr": "USD"},
+    {"asofdate": "02/11/2026", "frequency": "DAILY", "secticker": "—", "isinsecnbr": "—", "cusipnbr": "—", "secname": "Net Current Assets", "quantityshrpar": "—", "pctofnetassets": "1.00", "mktvalue": "10.00", "assetclasscatg": "CASH", "mktcurr": "USD"}
+  ],
+  "fullholdings": []
+}}}}

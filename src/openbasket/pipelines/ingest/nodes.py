@@ -10,7 +10,7 @@ import pandas as pd
 
 from ...datasets import connection
 from ...identifiers import is_valid_isin
-from ...sources import FULL_MODE, fund_identity, issuers, ishares, nport, publish_mode, redistribution, sec, spdr
+from ...sources import FULL_MODE, fund_identity, issuers, nport, publish_mode, redistribution, sec, spdr
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,19 @@ def download_fund_tickers() -> pd.DataFrame:
 
 
 #: Issuers whose fund lists are read by code in this package, not by an adapter.
-_BUILTIN = ("ishares", "spdr")
+_BUILTIN = ("spdr",)
+
+
+def products_options(ishares_sites: list[str] | None, issuers_params: dict | None) -> dict[str, dict]:
+    """Keyword arguments for each adapter's ``products()``, by adapter name.
+
+    ``issuers.options.<adapter>`` gives them; ``issuers.ishares_sites`` is the
+    ``sites`` option of the iShares adapter unless that sets its own.
+    """
+    options = {k: dict(v or {}) for k, v in ((issuers_params or {}).get("options") or {}).items()}
+    if ishares_sites is not None:
+        options.setdefault("ishares", {}).setdefault("sites", [str(x) for x in ishares_sites])
+    return options
 
 
 def download_issuer_products(
@@ -49,8 +61,9 @@ def download_issuer_products(
 ) -> pd.DataFrame:
     """Every fund on the issuer lists, keyed by share-class ISIN.
 
-    iShares and SPDR come first, then every adapter registered in
-    :mod:`openbasket.sources.issuers` (``issuers.enabled`` limits them,
+    SPDR comes first, then every adapter registered in
+    :mod:`openbasket.sources.issuers` in name order (iShares among them, over
+    ``issuers.ishares_sites``; ``issuers.enabled`` limits them,
     ``issuers.disabled`` drops some), each row with ``issuer`` set to the
     adapter's name. An adapter that fails, or returns rows that break the
     product contract, is logged and skipped or cleaned; it never stops the
@@ -68,17 +81,22 @@ def download_issuer_products(
     mode = publish_mode(publish_params)
     adapters = issuer_adapters(issuers_params)
     frames = []
+    withheld: list[str] = []
     if mode == FULL_MODE:
-        frames += [ishares.products(s).assign(issuer="ishares") for s in ishares_sites]
-        frames += [spdr.products(r) for r in spdr_regions]
+        for r in spdr_regions or []:
+            try:
+                frames.append(spdr.products(r))
+            except Exception as exc:  # one fund finder down must not stop the others
+                logger.warning("SPDR %s: product list failed: %s: %s", r, type(exc).__name__, exc)
     else:
         withheld = [n for n in _BUILTIN if redistribution(n) != issuers.PUBLIC]
         withheld += [n for n, a in adapters.items() if a.redistribution != issuers.PUBLIC]
         adapters = {n: a for n, a in adapters.items() if a.redistribution == issuers.PUBLIC}
         logger.info("Public build: not reading the fund lists of %s (local_only)", sorted(withheld))
+    options = products_options(ishares_sites, issuers_params)
     for name, adapter in sorted(adapters.items()):
         try:
-            df = adapter.products()
+            df = adapter.products(**options.get(name, {}))
         except Exception as exc:  # one issuer's site must not stop the others
             logger.warning("Issuer %s: product list failed: %s: %s", name, type(exc).__name__, exc)
             continue

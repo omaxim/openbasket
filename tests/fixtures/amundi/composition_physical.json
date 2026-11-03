@@ -1,0 +1,16 @@
+{"products": [
+  {"productId": "LU1437024729", "productType": "PRODUCT",
+   "characteristics": {"ISIN": "LU1437024729", "FUND_REPLICATION_METHODOLOGY": "Direct(Physical)", "POSITION_AS_OF_DATE": "2026-10-30"},
+   "composition": {"totalNumberOfInstruments": 5, "compositionData": [
+     {"weight": 0.5, "compositionCharacteristics": {"date": "2026-10-30", "quantity": 1000.0, "bbg": "AAPL UW", "name": "EXAMPLE TECH INC",
+       "weight": 0.5, "currency": "USD", "type": "EQUITY_ORDINARY", "sector": "Information Technology", "isin": "US0378331005", "countryOfRisk": "United States"}},
+     {"weight": 0.25, "compositionCharacteristics": {"date": "2026-10-30", "quantity": 2000000.0, "bbg": "01F0306B9", "name": "EXAMPLE MBS TBA",
+       "weight": 0.25, "currency": "USD", "type": "SECURITIZED", "sector": "", "isin": "US01F0306B93", "countryOfRisk": "United States"}},
+     {"weight": 0.2, "compositionCharacteristics": {"date": "2026-10-30", "quantity": 500000.0, "bbg": "EXAMPLE 3.5 33", "name": "EXAMPLE REPUBLIC 3.5% 2033",
+       "weight": 0.2, "currency": "EUR", "type": "GOVERNMENT", "sector": "", "isin": "FR001400L834", "countryOfRisk": "France"}},
+     {"weight": 0.04, "compositionCharacteristics": {"date": "2026-10-30", "quantity": 10.0, "bbg": "VGZ6 Index", "name": "EXAMPLE INDEX FUTURE",
+       "weight": 0.04, "currency": "EUR", "type": "FUTURE", "sector": "", "isin": "FR0000000001", "countryOfRisk": null}},
+     {"weight": 0.01, "compositionCharacteristics": {"date": "2026-10-30", "quantity": 1.0, "bbg": null, "name": null,
+       "weight": 0.01, "currency": "EUR", "type": "CASH", "sector": null, "isin": null, "countryOfRisk": null}}
+   ]}}
+]}

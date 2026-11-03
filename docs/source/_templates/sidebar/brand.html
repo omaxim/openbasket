@@ -1,9 +1,13 @@
-{#- The open|basket wordmark of the landing page, and a way back to it. -#}
-{%- set landing = pathto(master_doc)|replace("index.html", "") ~ "../" %}
+{#- The open|basket wordmark of the landing page, and a way back to it.
+    The docs live at /docs/, so the landing page is one level above the docs root.
+    pathto('', 1) is '#' on the docs home page, so the root is found from _static/. -#}
+{%- set docs_root = pathto('_static/', 1)|replace('_static/', '') %}
+{%- set landing = docs_root ~ '../' %}
 <div class="ob-brand">
   <a class="sidebar-brand ob-wordmark" href="{{ pathto(master_doc) }}" aria-label="openbasket documentation">
     <span class="wm-open">open</span><span class="wm-basket">basket</span>
   </a>
   <p class="ob-sub">Documentation · <a href="https://www.leithresearch.org/">by Leith Research</a></p>
   <a class="ob-back" href="{{ landing }}">&larr; Search funds</a>
+  <a class="ob-back ob-pipeline" href="{{ landing }}pipeline/">Pipeline</a>
 </div>

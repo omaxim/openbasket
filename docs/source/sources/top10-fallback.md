@@ -1,6 +1,7 @@
 # Top-holdings fallbacks (justETF, extraETF)
 
-**Status: not built.** Neither site's terms allow what openbasket would need
+**Status: not usable: neither site's terms allow automated retrieval and
+republishing.** Neither site's terms allow what openbasket would need
 to do: fetch pages automatically and republish what they show in a public
 dataset. This page records what was checked on 3 November 2026, so the
 question is not reopened without new terms or written permission.
@@ -13,7 +14,7 @@ mark the rest of the fund as unresolved, and never rescale.
 
 | | justETF | extraETF |
 |---|---|---|
-| Operator | justETF GmbH, Munich (part of the Scalable Group) | Isarvest GmbH, Munich |
+| Operator | justETF GmbH, Munich | Isarvest GmbH, Munich |
 | Profile URL | `https://www.justetf.com/en/etf-profile.html?isin={ISIN}` | `https://extraetf.com/de/etf-profile/{ISIN}` |
 | Holdings shown | Top 10 in the HTML, with names, weights to two decimals and links to `/en/stock-profiles/{ISIN}` | Top 10 in embedded JSON (`items[].isin`, `name`, `weight` in percent to five decimals, `country`) |
 | As-of date | Shown with the holdings ("As of 30/09/2026" for IE00B7K93397) | None found |
@@ -93,6 +94,12 @@ The adapter would be `top10_<site>` in
   unresolved*, so the pipeline reports the remainder as unresolved and never
   rescales;
 - `frequency = "monthly"` for justETF, probably (on 3 November 2026 its
-  holdings were dated 30 September 2026, two month-ends back); unknown for
+  holdings were dated 30 September 2026, one month-end behind); unknown for
   extraETF;
 - one request per fund per day, cached only after a successful parse.
+
+No further automated requests should be made to extraETF profile pages
+without its written permission: its terms (4.5) forbid automated querying in
+any form. The one profile request made while checking this page established
+the evidence above; nothing from it is kept apart from the two aggregate
+percentages in the table.

@@ -3,7 +3,9 @@
 openbasket is an aggregator and a quick-lookup tool. It holds no data of its
 own: every fund, every row and every page says which public source it came
 from, with a link, an as-of date and the source's credit line. It is not
-investment advice and is not affiliated with any fund issuer.
+investment advice and is not affiliated with any fund issuer. The terms
+under which the published data may be reused, including the Open Database
+License that applies where CVM data is included, are on [](data-licence.md).
 
 The scheduled build runs two pipelines after the usual ones:
 

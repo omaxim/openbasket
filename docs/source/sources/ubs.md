@@ -1,8 +1,10 @@
 # UBS Asset Management (not built)
 
-**Status: not buildable as a public source.** Tested on 2026-11-03. No
+**Status: not usable: the UBS site gates fund data behind a legal-terms
+overlay, and its terms forbid automated access.** Tested on 2026-11-03. No
 adapter is registered, so UBS funds stay unresolved, or are covered only
-through a proxy (see below).
+through a proxy (see below). An adapter written for private use must be off
+by default (`enabled_by_default = False`) and switched on in `conf/local`.
 
 ## Why it matters
 
@@ -44,7 +46,7 @@ however, is not in those pages:
   an empty `<div class="georestrictedContent__placeholder">`.
 - The content loads only after the visitor picks a domicile and an investor
   role in the "context disclaimer" overlay. That overlay has confirm and
-  reject redirects and a `data-cookie-expiration` setting, so it records
+  reject redirects and stores the visitor's choice in a cookie, so it records
   that the visitor accepted the legal terms. Accepting that gate for an
   automated client is a terms gate, which this project does not pass.
 - The per-country sitemap (`https://www.ubs.com/ch/en.sitemap.xml`, 2,005

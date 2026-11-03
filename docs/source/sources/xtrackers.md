@@ -1,9 +1,11 @@
 # Xtrackers (DWS): not used
 
-Status as checked on 3 November 2026: **not built**. Xtrackers publishes full
-daily holdings on its own site, but only through paths its `robots.txt`
-disallows, so openbasket does not read them. Xtrackers UCITS ETFs stay
-unresolved unless another source covers them.
+**Status: not usable: `robots.txt` disallows the holdings paths.** Checked
+on 3 November 2026. Xtrackers publishes full daily holdings on its own site,
+but only through paths its `robots.txt` disallows, so openbasket does not
+read them, not even for a private run: there is no adapter, and none may be
+written that fetches those paths. Xtrackers UCITS ETFs stay unresolved unless
+another source covers them.
 
 ## What the site offers
 
@@ -20,10 +22,15 @@ culture sitemaps gave:
 | Union | 474 | 211 | 263 |
 
 70 of the 474 page slugs contain `swap`. No fund is domiciled in Switzerland.
+The sitemaps also list about 18 ETCs (physical metals, carbon EUA and crypto
+notes, with DE, GB, XS and CH ISINs). They are single-asset notes, not funds,
+so there is nothing to look through.
 
 The product page itself is an empty client-side shell (`data-ssr="false"`,
 `ENTRY_GATE_ENABLED:true`). Everything on it is loaded in the browser from
-`PDP_API_BASE_URL = https://etf.dws.com/api/`:
+`PDP_API_BASE_URL = https://etf.dws.com/api/`. The response details below
+come from an earlier survey and the site's JavaScript; they were not fetched
+again for this page, because the paths are disallowed:
 
 - holdings: `GET /api/pdp/{culture}/etf/{ISIN}/holdings`, a JSON table with
   ISIN, name, weight (percent of NAV in `sortValue`), market value, country,

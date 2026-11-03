@@ -1,10 +1,11 @@
 # Swisscanto (Zürcher Kantonalbank)
 
-**Status: not built.** The data is technically reachable, but Swisscanto's
-terms of use forbid systematic access to build a database or directory
-without written permission. openbasket is a public aggregator, so this
-source stays out until Swisscanto or Zürcher Kantonalbank grants that
-permission in writing. Checked on 3 November 2026.
+**Status: not usable: the terms of use forbid systematic access to build a
+database or directory without written permission.** The data is technically
+reachable, but this source stays out until Swisscanto or Zürcher Kantonalbank
+grants that permission in writing. No adapter is registered; one written for
+private use must be off by default (`enabled_by_default = False`) and switched
+on in `conf/local`. Checked on 3 November 2026.
 
 ## Why it is not built
 
@@ -98,9 +99,8 @@ Notes on the files:
 - Cash is not listed; the 0.2 to 0.3% gap would stay unresolved weight.
 - The IE files name HSBC Continental Europe as their source, the CH file
   Swisscanto Fondsleitung AG.
-- Names are as the custodian gives them and are sometimes wrong (one German
-  insurer's ISIN carries the name of an unrelated Allianz fund), so the ISIN
-  is the reliable key.
+- Names are as the custodian gives them and can be wrong, so the ISIN is the
+  reliable key.
 
 The other sampled funds (active and index funds in CH and LU, a pension fund,
 a real estate fund, an investment-foundation group) have no holdings file;

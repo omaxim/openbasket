@@ -1,6 +1,10 @@
-# HSBC Asset Management ETFs (not built)
+# HSBC Asset Management ETFs (not usable)
 
-**Status: not built.** HSBC publishes full holdings files for its UCITS ETFs
+**Status: not usable: the site terms forbid automated access and
+redistribution without written permission.** No adapter is registered. If
+one is written for private use, it must be off by default
+(`enabled_by_default = False`) and switched on in `conf/local` by the person
+running openbasket. HSBC publishes full holdings files for its UCITS ETFs
 with no login, but the website terms forbid automated access and
 redistribution without written permission. This page records what was found
 on 3 November 2026, so the source can be built quickly if HSBC gives
@@ -34,6 +38,9 @@ the shared fallbacks, such as a physical proxy on the same index
 
 ## What exists
 
+The endpoints below must not be used for automated collection until HSBC
+gives written permission; they are recorded so that work can start then.
+
 All of this was seen with anonymous requests: no login, cookie or consent was
 needed. About 40 requests were made while evaluating the source, at most one
 every two seconds.
@@ -59,9 +66,10 @@ Fund details
   Its "Fund information" list (id `86faf988-e2eb-4aba-8874-f41605626665`)
   gives the asset class, domicile and umbrella. For HSBC ETFs plc funds it
   also gives a "Replication method" such as `Physical- Full`; the ICAV funds
-  do not give one. `www.assetmanagement.hsbc.ch` returned 404, so there is
-  no Swiss site. CHF-hedged share classes, such as IE000WMIYI33, are on the
-  UK list.
+  do not give one. A Swiss site exists (`www.assetmanagement.hsbc.ch/de-ch`),
+  but it shows only a client-classification and qualified-investor entry and
+  no public fund list, so it was not used. CHF-hedged share classes, such as
+  IE000WMIYI33, are on the UK list.
 
 Holdings
 : `GET https://www.assetmanagement.hsbc.co.uk/api/v1/download/document/<isin in lower case>/gb/en/holdings`

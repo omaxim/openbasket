@@ -11,7 +11,9 @@ has its own page with its endpoints, coverage, terms and known gaps.
 *
 ```
 
-Status as tested on 2026-11-03.
+Status as tested on 2026-11-03. "Local only" sources are read only for the
+person running openbasket; their rows are never published on the site, the
+API or the releases (see [Adding a source](adding-a-source.md)).
 
 | Source | Status | Used for |
 |---|---|---|
@@ -22,6 +24,12 @@ Status as tested on 2026-11-03.
 | iShares UK | Working | Daily full holdings of UCITS ETFs with ISINs and five-decimal weights, from the issuer's site. |
 | iShares US | Working | Daily full holdings of US iShares ETFs with ISINs; equity weights to two decimals. |
 | SPDR (State Street) | Working | Daily full holdings of US ETFs (including SPY and DIA) and UCITS ETFs. |
+| J.P. Morgan ETFs (`jpmorgan`) | Working, local only | Daily full holdings of Irish UCITS and US ETFs. |
+| Global X ETFs Europe (`globalx`) | Working, local only | Daily full holdings of Irish UCITS ETFs; synthetic funds list their substitute basket. |
+| VanEck Europe (`vaneck`) | Working, local only | Daily full holdings of UCITS ETFs and ETNs, 25 seconds between requests. |
+| BNP Paribas Easy (`bnp_easy`) | Working, local only | Holdings inventories of LU, IE and FR ETFs and index funds, private-investor segment only; updated irregularly. |
+| Asia-Pacific issuers (`ssga_apac`, `nomura`, `kodex`, `ishares_au`, `betashares`, `vanguard_au`, `trahk`) | Working, local only | Full holdings of ETFs domiciled in Australia, Japan, Korea, Hong Kong and Singapore. |
+| Stand-ins (`index_proxy`) | Working, local only | A physically replicating peer ETF's holdings, for blocked physical funds on the SMI, SLI, S&P 500, Nasdaq-100 and MSCI EMU. |
 | justETF, FT and others | Not built | Top holdings only. |
 
 ## SEC Form N-PORT

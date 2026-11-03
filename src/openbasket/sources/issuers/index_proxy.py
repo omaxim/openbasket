@@ -1,32 +1,39 @@
-"""Index composition proxies for physically replicating funds whose issuer
-does not publish holdings openbasket can reach.
+"""Stand-ins for physically replicating funds whose issuer does not publish
+holdings openbasket can reach: the holdings of a peer ETF on the same index.
 
-UBS, Invesco EMEA, WisdomTree, Fidelity and Franklin block automated access
-to their sites, and index providers (SIX, Euronext, STOXX, Solactive, MSCI,
-S&P, FTSE, Nasdaq) license their constituent weights rather than publishing
-them for reuse (see ``docs/source/sources/exchange-index.md``). European
-exchanges do not publish ETF portfolio composition files either.
+UBS, Invesco EMEA, Pictet, WisdomTree, Fidelity, Franklin and Swiss Life
+block automated access to their sites, and index providers (SIX, Euronext,
+STOXX, Solactive, MSCI, S&P, FTSE, Nasdaq) license their constituent weights
+rather than publishing them for reuse (see
+``docs/source/sources/exchange-index.md``). European exchanges do not publish
+ETF portfolio composition files either.
 
 What *is* public is the full holdings file of another physically, fully
 replicating ETF on the same index, published daily by its own issuer
 (iShares, SPDR, ...). For a full-replication fund, that file is the best free
-picture of the index composition, and therefore of the target fund.
+picture of what the target fund holds.
 
 This adapter maps a target fund to its index (a small curated list below, or
 a fund directory's index and replication fields via
 :func:`match_directory`), fetches a peer fund's holdings and returns them
 labelled for what they are::
 
-    index composition proxy: holdings of <peer> (<ISIN>) tracking <index>,
-    positions as of <date>, used as a proxy for <target>; not the fund's
-    own holdings
+    stand-in: holdings of <peer> (<ISIN>), a physically replicating ETF on
+    the <index>, positions as of <date>; used for <target> (<ISIN>); not the
+    fund's own holdings
 
-It is used **only** for physically, fully replicating target funds. Swap
-funds and sampled or optimised funds are refused, because their holdings
-need not resemble the index.
+It is used **only** for physically, fully replicating target funds of the
+blocked issuers above, and only when no direct source lists the fund: the
+adapter is registered as a ``stand_in``, so ``ingest`` lists it after every
+direct adapter and an ISIN a direct adapter lists stays with that adapter.
+Swap funds and sampled or optimised funds are refused, because their
+holdings need not resemble the index. Each peer's own replication is
+recorded (:attr:`Peer.replication_evidence`) and, for iShares peers,
+re-checked against the key facts served with every holdings file.
 
 Weights are percent of the *peer's* net assets as its issuer reports them;
-they are never rescaled.
+they are never rescaled. The peers' issuers restrict republication, so the
+adapter is ``local_only``.
 """
 
 from __future__ import annotations
@@ -46,6 +53,7 @@ from ...identifiers import is_valid_cusip, is_valid_isin
 from .. import ishares, spdr
 from . import (
     HOLDING_COLUMNS,
+    LOCAL_ONLY,
     PRODUCT_COLUMNS,
     FetchContext,
     IssuerAdapter,
@@ -56,7 +64,7 @@ from . import (
 logger = logging.getLogger(__name__)
 
 NAME = "index_proxy"
-KIND = "index composition proxy"
+KIND = "stand-in"
 
 #: The only replication method this adapter accepts for a target fund.
 FULL = "physical-full"
@@ -71,6 +79,7 @@ class Peer:
     name: str
     site: str | None = None  # iShares site ("uk", "us", "ch") or SPDR region ("us", "emea")
     page: str | None = None  # the peer's product page, shown as the source link
+    replication_evidence: str = ""  # where the peer's own full physical replication was confirmed
 
 
 _ISH = "https://www.ishares.com"
@@ -97,7 +106,17 @@ class Target:
     domicile: str | None = None
     currency: str | None = None
     evidence: str = ""            # where the replication method was confirmed
+    portfolio: str | None = None  # shared by the share classes of one fund
 
+
+#: The peers' own replication, as their issuers state it (checked 2026-11-03).
+_EV_ISH = "iShares key facts ({site}, checked 2026-11-03): product structure Physical, methodology {method}"
+_EV_SMI = _EV_ISH.format(site="ishares.com/ch", method="Replicated")
+_EV_SLI = _EV_ISH.format(site="ishares.com/ch", method="Replicated")
+_EV_SP500 = _EV_ISH.format(site="ishares.com/uk", method="Physical Replication")
+_EV_SPDR_SP500 = "State Street fund page (ssga.com/uk, checked 2026-11-03): Replication Method Replicated"
+_EV_NDX = _EV_ISH.format(site="ishares.com/uk", method="Replicated")
+_EV_EMU = _EV_ISH.format(site="ishares.com/uk", method="Replicated")
 
 INDICES: dict[str, IndexSpec] = {
     s.key: s
@@ -106,35 +125,36 @@ INDICES: dict[str, IndexSpec] = {
             "SMI", "Swiss Market Index (SMI)", "SIX",
             ("smi", "swiss market index", "smi index", "smi (tr)", "smi total return", "swiss market index (smi)"),
             (Peer("ishares", "CH0008899764", "iShares SMI ETF (CH)", "ch",
-                  _ISH + "/ch/individuals/en/products/261154/ishares-smi-ch-fund"),),
+                  _ISH + "/ch/individual/en/products/261154/ishares-smi-ch-fund", _EV_SMI),),
         ),
         IndexSpec(
             "SLI", "Swiss Leader Index (SLI)", "SIX",
             ("sli", "swiss leader index", "sli swiss leader index", "sli (tr)"),
             (Peer("ishares", "CH0031768937", "iShares SLI ETF (CH)", "ch",
-                  _ISH + "/ch/individuals/en/products/261153/ishares-sli-ch-fund"),),
+                  _ISH + "/ch/individual/en/products/261153/ishares-sli-ch-fund", _EV_SLI),),
         ),
         IndexSpec(
             "SP500", "S&P 500", "S&P Dow Jones Indices",
             ("s&p 500", "s&p 500 index", "s&p 500 net total return", "s&p 500 (nr)", "s&p 500 net return"),
             (
                 Peer("ishares", "IE00B5BMR087", "iShares Core S&P 500 UCITS ETF (Acc)", "uk",
-                     _ISH + "/uk/individual/en/products/253743/ishares-sp-500-b-ucits-etf-acc-fund"),
+                     _ISH + "/uk/individual/en/products/253743/ishares-sp-500-b-ucits-etf-acc-fund", _EV_SP500),
                 Peer("spdr", "IE00B6YX5C33", "SPDR S&P 500 UCITS ETF", "emea",
-                     "https://www.ssga.com/uk/en_gb/intermediary/etfs/state-street-spdr-sp-500-ucits-etf-dist-spy5-gy"),
+                     "https://www.ssga.com/uk/en_gb/intermediary/etfs/state-street-spdr-sp-500-ucits-etf-dist-spy5-gy",
+                     _EV_SPDR_SP500),
             ),
         ),
         IndexSpec(
             "NDX", "Nasdaq-100", "Nasdaq",
             ("nasdaq-100", "nasdaq 100", "nasdaq-100 index", "nasdaq-100 notional net total return"),
             (Peer("ishares", "IE00B53SZB19", "iShares Nasdaq 100 UCITS ETF (Acc)", "uk",
-                  _ISH + "/uk/individual/en/products/253741/ishares-nasdaq-100-ucits-etf"),),
+                  _ISH + "/uk/individual/en/products/253741/ishares-nasdaq-100-ucits-etf", _EV_NDX),),
         ),
         IndexSpec(
             "MSCI_EMU", "MSCI EMU", "MSCI",
             ("msci emu", "msci emu index", "msci emu net return", "msci emu (nr)", "msci emu nr eur"),
             (Peer("ishares", "IE00B53QG562", "iShares Core MSCI EMU UCITS ETF EUR (Acc)", "uk",
-                  _ISH + "/uk/individual/en/products/253729/ishares-msci-emu-ucits-etf"),),
+                  _ISH + "/uk/individual/en/products/253729/ishares-msci-emu-ucits-etf", _EV_EMU),),
         ),
     ]
 }
@@ -151,10 +171,41 @@ TARGETS: list[Target] = [
     Target("LU0147308422", "UBS Core MSCI EMU UCITS ETF EUR dis", "UBS", "MSCI_EMU", FULL, "LU", "EUR",
            "fund databases: physical, full replication"),
     Target("IE0032077012", "Invesco EQQQ Nasdaq-100 UCITS ETF Dist", "Invesco", "NDX", FULL, "IE", "USD",
-           "Invesco product sheet: full physical replication"),
+           "Invesco product sheet: full physical replication", "invesco-eqqq"),
+    # The Acc class's own factsheet says only "physical"; it is a share class of
+    # the same portfolio as the Dist class, whose product sheet says full physical.
     Target("IE00BFZXGZ54", "Invesco EQQQ Nasdaq-100 UCITS ETF Acc", "Invesco", "NDX", FULL, "IE", "USD",
-           "Invesco factsheet: physical replication"),
+           "same portfolio as the Dist class IE0032077012, whose Invesco product sheet says full physical "
+           "replication", "invesco-eqqq"),
 ]
+
+#: Issuers whose sites block automated access, so their physical funds may
+#: get a stand-in. :func:`match_directory` matches no other issuer: a fund of
+#: any other issuer either has a direct source or stays unresolved.
+BLOCKED_ISSUERS: dict[str, re.Pattern] = {
+    "UBS": re.compile(r"\bubs\b", re.I),
+    "Invesco EMEA": re.compile(r"\binvesco\b", re.I),
+    "Pictet": re.compile(r"\bpictet\b", re.I),
+    "WisdomTree": re.compile(r"\bwisdom\s?tree\b", re.I),
+    "Fidelity": re.compile(r"\bfidelity\b", re.I),
+    "Franklin": re.compile(r"\bfranklin\b", re.I),
+    "Swiss Life": re.compile(r"\bswiss\s?life\b", re.I),
+}
+
+
+def blocked_issuer(name: object, isin: object = None) -> str | None:
+    """The :data:`BLOCKED_ISSUERS` key an issuer name belongs to, else None.
+
+    Invesco counts only outside the US (Invesco's US ETFs file N-PORT).
+    """
+    if not isinstance(name, str):
+        return None
+    for key, pattern in BLOCKED_ISSUERS.items():
+        if pattern.search(name):
+            if key == "Invesco EMEA" and isinstance(isin, str) and isin.upper().startswith("US"):
+                return None
+            return key
+    return None
 
 #: Credit lines for peer issuers, shown with every row.
 PEER_CREDIT = {
@@ -200,7 +251,7 @@ def _product_row(t: Target, idx: IndexSpec) -> dict:
     return {
         "issuer": NAME,
         "site": None,
-        "portfolio_id": f"{idx.key}:{t.isin}",
+        "portfolio_id": f"{idx.key}:{t.portfolio or t.isin}",
         "isin": t.isin,
         "ticker": None,
         "fund_name": t.fund_name,
@@ -216,6 +267,7 @@ def _product_row(t: Target, idx: IndexSpec) -> dict:
         "fund_issuer": t.issuer,
         "peer_isin": peer.isin,
         "peer_name": peer.name,
+        "peer_replication_evidence": peer.replication_evidence,
         "replication_method": t.replication,
         "replication_evidence": t.evidence,
         "kind": KIND,
@@ -248,24 +300,37 @@ def index_for(name: object) -> IndexSpec | None:
     return None
 
 
-def match_directory(directory: pd.DataFrame, index_col: str = "index", replication_col: str = "replication") -> pd.DataFrame:
-    """Products rows for directory funds on a known index with full physical
-    replication. ``directory`` needs ``isin`` and ``fund_name`` plus the two
-    named columns (for example SIX's ``FundUnderlyingDescription`` and
-    ``ReplicationMethodDesc``). Funds already in :data:`TARGETS` keep their
-    curated row."""
-    known = {t.isin for t in TARGETS}
+def match_directory(
+    directory: pd.DataFrame,
+    index_col: str = "index",
+    replication_col: str = "replication",
+    issuer_col: str = "issuer",
+    covered: set[str] | frozenset[str] | None = None,
+) -> pd.DataFrame:
+    """Products rows for directory funds of a blocked issuer on a known index
+    with full physical replication.
+
+    ``directory`` needs ``isin``, ``fund_name`` and the three named columns
+    (for example SIX's ``IssuerNameFull``, ``FundUnderlyingDescription`` and
+    ``ReplicationMethodDesc``). Only issuers in :data:`BLOCKED_ISSUERS` are
+    matched; ISINs in ``covered`` (those a direct adapter already lists) are
+    skipped. Funds already in :data:`TARGETS` keep their curated row.
+    """
+    known = {t.isin for t in TARGETS} | set(covered or ())
     rows = []
     for r in directory.to_dict("records"):
         isin = r.get("isin")
         if not isinstance(isin, str) or isin in known:
+            continue
+        issuer = blocked_issuer(r.get(issuer_col), isin)
+        if issuer is None:
             continue
         spec = index_for(r.get(index_col))
         if spec is None or normalise_replication(r.get(replication_col)) != FULL:
             continue
         if any(p.isin == isin for p in spec.peers):
             continue
-        t = Target(isin, r.get("fund_name") or isin, r.get("issuer") or "unknown", spec.key, FULL,
+        t = Target(isin, r.get("fund_name") or isin, r.get(issuer_col) or issuer, spec.key, FULL,
                    r.get("domicile"), r.get("currency"),
                    f"fund directory: {r.get(replication_col)}")
         rows.append(_product_row(t, spec))
@@ -296,6 +361,17 @@ def _get_json(url: str, params: dict | None = None) -> object:
     return r.json()
 
 
+def _page_url(path: object) -> str | None:
+    """An iShares product page URL from the screener's path.
+
+    The Swiss screener gives ``/ch/individuals/en/...``, which is a 404; the
+    page lives at ``/ch/individual/en/...`` (checked 2026-11-03).
+    """
+    if not isinstance(path, str) or not path:
+        return None
+    return ishares.HOST + path.replace("/ch/individuals/", "/ch/individual/")
+
+
 def ishares_portfolio(site: str, isin: str, ctx: FetchContext | None = None) -> dict:
     """``{portfolio_id, fund_name, product_page_url}`` for an iShares ISIN,
     from the site's product screener (only these fields are cached)."""
@@ -317,7 +393,7 @@ def ishares_portfolio(site: str, isin: str, ctx: FetchContext | None = None) -> 
                 out[i.strip().upper()] = {
                     "portfolio_id": str(p.get("portfolioId")),
                     "fund_name": p.get("fundName"),
-                    "product_page_url": ishares.HOST + p["productPageUrl"] if p.get("productPageUrl") else None,
+                    "product_page_url": _page_url(p.get("productPageUrl")),
                 }
         return out
 
@@ -334,11 +410,44 @@ def _ishares_holdings(peer: Peer, ctx: FetchContext | None) -> tuple[str | None,
     params = {
         "appType": "PRODUCT_PAGE", "appSubType": "ISHARES", "targetSite": cfg["targetSite"],
         "locale": cfg["locale"], "userType": "individual", "portfolioId": info["portfolio_id"],
-        "component": "holdings",
+        "component": "holdings,keyFundFacts",
     }
     payload = _cached_json(_cache_path(ctx, f"ishares_{peer.site}_{info['portfolio_id']}"), lambda: _get_json(url, params))
+    facts = key_facts(payload)
+    if peer_replication(facts) in ("swap", "physical-sampled"):
+        raise ValueError(f"{peer.isin} key facts say {facts}; not a full physical peer")
     as_of, raw = ishares.parse_holdings(payload)
-    return as_of, normalise_ishares(raw), requests.Request("GET", url, params=params).prepare().url, info["product_page_url"]
+    df = normalise_ishares(raw)
+    df.attrs["key_facts"] = facts
+    return as_of, df, requests.Request("GET", url, params=params).prepare().url, info["product_page_url"]
+
+
+def key_facts(payload: dict) -> dict:
+    """``productStructure`` and ``fundMethodologyTypeCode`` from an iShares
+    product-data response that asked for ``keyFundFacts`` (EMEA sites serve
+    them; the values are empty when absent)."""
+    comp = (payload.get("componentsByNameMap") or {}).get("keyFundFacts") or {}
+    out = {}
+    for container in (comp.get("containersByNameMap") or {}).values():
+        for k, v in (container.get("dataPointsByNameMap") or {}).items():
+            if k in ("productStructure", "fundMethodologyTypeCode") and isinstance(v, dict) and v.get("value"):
+                out[k] = str(v["value"])
+    return out
+
+
+def peer_replication(facts: dict) -> str | None:
+    """``physical-full``, ``physical-sampled``, ``swap`` or None from iShares key facts."""
+    structure = (facts.get("productStructure") or "").lower()
+    method = (facts.get("fundMethodologyTypeCode") or "").lower()
+    if structure.startswith("synth") or "swap" in structure:
+        return "swap"
+    if method.startswith(("optim", "sampl")):
+        return "physical-sampled"
+    # iShares tells full replication ("Replicated", "Physical Replication")
+    # from sampling ("Optimised") in this field.
+    if structure.startswith("phys") and (method.startswith("replic") or method.startswith("physical replic")):
+        return FULL
+    return None
 
 
 def normalise_ishares(raw: pd.DataFrame) -> pd.DataFrame:
@@ -382,6 +491,15 @@ def _spdr_holdings(peer: Peer, ctx: FetchContext | None) -> tuple[str | None, pd
     return as_of, normalise_spdr(raw), url, found[peer.isin]["product_page_url"]
 
 
+#: SPDR names currency balances in full ("U.S. Dollar", "British Pounds") and
+#: futures by contract ("EMINI S&P DEC26"); such lines have no identifier.
+_SPDR_CURRENCY = re.compile(
+    r"\b(DOLLARS?|EUROS?|POUNDS?|STERLING|YEN|FRANCS?|KRON[AEOR]+|PESOS?|REAL|RAND|YUAN|RENMINBI|RUPEES?|"
+    r"WON|ZLOTY|FORINT|SHEKELS?|RINGGIT|BAHT|DIRHAMS?|RIYALS?|LIRA)\b"
+)
+_SPDR_FUTURE = re.compile(r"\b(EMINI|E-MINI|FUTURES?|FUT)\b|\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\d{2}\b")
+
+
 def normalise_spdr(raw: pd.DataFrame) -> pd.DataFrame:
     """SPDR holdings columns to :data:`HOLDING_COLUMNS`. SPDR files carry no
     asset class, so equity-index lines are ``equity`` and lines without an
@@ -393,8 +511,11 @@ def normalise_spdr(raw: pd.DataFrame) -> pd.DataFrame:
 
     def asset(r) -> str:
         name = r["name"].upper() if isinstance(r["name"], str) else ""
-        no_id = not isinstance(r["isin"], str) and not isinstance(r["cusip"], str)
-        if no_id and ("CASH" in name or name in ("USD", "EUR", "GBP", "CHF")):
+        no_id = not any(isinstance(r[c], str) and r[c].strip() and r[c].strip().lower() != "unassigned"
+                        for c in ("isin", "cusip", "sedol"))
+        if no_id and _SPDR_FUTURE.search(name):
+            return "derivative (futures)"
+        if no_id and ("CASH" in name or name in ("USD", "EUR", "GBP", "CHF") or _SPDR_CURRENCY.search(name)):
             return "cash"
         return "debt" if debt else "equity"
 
@@ -463,9 +584,9 @@ def _target(product: dict) -> Target:
 
 def proxy_note(target: Target, idx: IndexSpec, peer: Peer, as_of: str | None) -> str:
     return (
-        f"{KIND}: index composition of the {idx.name} ({idx.provider}) as held by {peer.name} "
-        f"({peer.isin}), a physically replicating ETF on the same index, positions as of {as_of or 'unknown date'}; "
-        f"used as a proxy for {target.fund_name} ({target.isin}); not the fund's own holdings"
+        f"{KIND}: holdings of {peer.name} ({peer.isin}), a physically replicating ETF on the {idx.name}, "
+        f"positions as of {as_of or 'unknown date'}; used for {target.fund_name} ({target.isin}); "
+        "not the fund's own holdings"
     )
 
 
@@ -488,13 +609,20 @@ def holdings(product: dict, ctx: FetchContext | None = None) -> IssuerHoldings:
             errors.append(f"{peer.isin}: {e}")
             continue
         credit, home = PEER_CREDIT.get(peer.issuer, (peer.issuer, None))
+        facts = df.attrs.get("key_facts") or {}
+        live = (
+            f"; {credit} key facts with this file: product structure {facts.get('productStructure', '?')}, "
+            f"methodology {facts.get('fundMethodologyTypeCode', '?')}"
+            if facts else ""
+        )
         notes = [
             proxy_note(target, idx, peer, as_of),
             f"kind: {KIND} (not the fund's own holdings)",
             f"source: {credit}, holdings file of {peer.name}; {page or peer.page or home or url}",
-            f"credit: {credit}; index {idx.name} by {idx.provider}",
+            f"credit: {credit}; the {idx.name} is an index of {idx.provider}",
             f"weights: percent of {peer.name}'s net assets as reported by its issuer, not rescaled",
             f"target replication: {target.evidence or target.replication}",
+            f"peer replication: {peer.replication_evidence or 'not recorded'}{live}",
         ]
         return IssuerHoldings(as_of=as_of, holdings=df, url=url, notes=notes)
     raise LookupError(f"no peer answered for {target.isin}: {'; '.join(errors)}")
@@ -530,19 +658,22 @@ def compare(a: pd.DataFrame, b: pd.DataFrame) -> dict:
 ADAPTER = register(
     IssuerAdapter(
         name=NAME,
-        title="Index composition proxy (peer ETF holdings)",
+        title="Stand-in: a peer ETF's holdings on the same index",
         homepage="https://openbasket.leithresearch.org",
         credit=(
-            "Index composition taken from the published holdings of a physically replicating peer ETF "
-            "(credited per row to its issuer); not the target fund's own holdings"
+            "Holdings of a physically replicating peer ETF on the same index (credited per row to its "
+            "issuer); not the target fund's own holdings"
         ),
         licence=(
-            "Peer holdings are public issuer data under the peer issuer's site terms (not reviewed for bulk "
-            "use). Index constituent weights from index providers are licensed and are not used."
+            "Peer holdings are public issuer data under the peer issuer's site terms, which restrict "
+            "republication (iShares, State Street), so stand-ins are read locally only and never "
+            "republished. Index constituent weights from index providers are licensed and are not used."
         ),
         regions=("CH", "IE", "LU"),
         products=products,
         holdings=holdings,
         frequency="daily (the peer's holdings file)",
+        redistribution=LOCAL_ONLY,
+        stand_in=True,
     )
 )

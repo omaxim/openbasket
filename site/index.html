@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>openbasket — what an ETF or fund holds, by ISIN, from public sources</title>
-  <meta name="description" content="openbasket is a free look-through aggregator: type an ETF or fund and see the securities it holds, by ISIN and percent of net assets, from issuer files, SEC N-PORT filings and TickerInside, each with its source and date.">
+  <meta name="description" content="openbasket is a free look-through aggregator: type an ETF or fund and see the securities it holds, by ISIN and percent of net assets, from openly licensed sources such as SEC N-PORT filings and TickerInside, each with its source and date. Run it yourself for issuer files.">
   <link rel="canonical" href="https://openbasket.leithresearch.org/">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -32,7 +32,7 @@
 <header class="hero" id="search">
   <p class="eyebrow">Open fund look-through · free sources</p>
   <h1>Every fund, <em>opened up.</em></h1>
-  <p class="lede">openbasket is a quick-lookup aggregator. Type an ETF or fund and see the securities it holds, each by ISIN and as a percent of the fund's net assets, gathered from public sources: issuer holdings files, SEC filings and TickerInside. Every figure names its source and the date of that source, so you can check it there.</p>
+  <p class="lede">openbasket is a look-through tool. Type an ETF or fund and see the securities it holds, each by ISIN and as a percent of the fund's net assets. This site shows holdings from sources whose licences allow it, such as SEC filings and TickerInside; for issuers whose terms do not, you run openbasket on your own computer. Every figure names its source and the date of that source, so you can check it there.</p>
 
   <form class="search" role="search" id="search-form" autocomplete="off" novalidate>
     <label class="search-label" for="q">Find a fund by name, ticker or ISIN</label>
@@ -57,12 +57,13 @@
 <section class="strip" aria-label="Sources">
   <p>Holdings from</p>
   <ul class="source-strip">
-    <li><a href="https://www.ishares.com/">iShares</a></li>
-    <li><a href="https://www.ssga.com/">SPDR</a></li>
     <li><a href="https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets">SEC Form N-PORT</a></li>
     <li><a href="https://tickerinside.com/">TickerInside</a></li>
+    <li><a href="https://www.cnmv.es/">CNMV</a></li>
+    <li><a href="https://dados.cvm.gov.br/">CVM</a></li>
     <li><a href="https://www.openfigi.com/">OpenFIGI</a> <span>(names)</span></li>
   </ul>
+  <p class="strip-local">Issuer files, such as iShares and SPDR: <a href="docs/running-locally.html">run it yourself</a></p>
 </section>
 
 <section id="fund" class="section fund" aria-label="Fund look-through" hidden>
@@ -84,6 +85,10 @@
     <div>
       <h3>Every row names its source</h3>
       <p>openbasket only gathers what others publish. Each fund and each row says where it came from and on what date, with a link and the credit the source asks for. Check the source before relying on a figure.</p>
+    </div>
+    <div>
+      <h3>Some holdings you run yourself</h3>
+      <p>Many issuers publish holdings files whose terms do not allow republishing. Those funds are listed here, marked “run locally”, without their holdings. Clone openbasket and run it on your computer to see them; the holdings it reads stay on your machine. <a href="docs/running-locally.html">How to run it locally</a>.</p>
     </div>
   </div>
 </section>
@@ -134,6 +139,7 @@
 </footer>
 
 <script src="assets/core.js" defer></script>
+<script src="assets/treemap.js" defer></script>
 <script src="assets/app.js" defer></script>
 </body>
 </html>

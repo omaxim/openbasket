@@ -8,16 +8,25 @@ from pathlib import Path
 import pytest
 
 from openbasket.lookthrough import STATUSES
-from openbasket.pipelines.publish.nodes import FUND_FILE_KEYS
+from openbasket.pipelines.publish.nodes import FUND_FILE_KEYS, INDEX_FIELDS
+from openbasket.sources import redistribution
 
 ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "site"
 FIXTURES = SITE / "fixtures" / "api" / "v1"
 CORE_JS = SITE / "assets" / "core.js"
+TREEMAP_JS = SITE / "assets" / "treemap.js"
 
-_spec = importlib.util.spec_from_file_location("assemble_site", ROOT / "scripts" / "assemble_site.py")
-assemble_site = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(assemble_site)
+
+def _module(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+assemble_site = _module("assemble_site", ROOT / "scripts" / "assemble_site.py")
+make_fixtures = _module("make_fixtures", SITE / "fixtures" / "make_fixtures.py")
 
 
 @pytest.fixture
@@ -40,6 +49,7 @@ def test_assemble_lays_out_pages_directory(inputs):
     assert (out / "index.html").is_file()
     assert (out / "assets" / "app.js").is_file()
     assert (out / "assets" / "core.js").is_file()
+    assert (out / "assets" / "treemap.js").is_file()
     assert (out / "assets" / "app.css").is_file()
     assert (out / "docs" / "index.html").read_text() == "<html>docs</html>"
     assert (out / "docs" / "_static" / "openbasket.css").is_file()
@@ -161,7 +171,7 @@ def test_landing_page_references_existing_assets():
     assert 'data-api="api/v1"' in html
     for ref in re.findall(r'(?:href|src)="(assets/[^"?#]+)', html):
         assert (SITE / ref).is_file(), ref
-    assert html.index("assets/core.js") < html.index("assets/app.js")
+    assert html.index("assets/core.js") < html.index("assets/treemap.js") < html.index("assets/app.js")
     assert "not investment advice" in html
     assert "not affiliated" in html
     assert "https://github.com/omaxim/openbasket" in html
@@ -203,7 +213,12 @@ def test_docs_templates_find_the_landing_page_from_any_depth():
 
 # The fixtures stand in for the real build, so they must keep to data-api.md v1.1.
 
-INDEX_FIELDS = ["id", "isin", "name", "ticker", "issuer", "kind", "source", "as_of", "resolved_pct", "n_constituents"]
+#: The fixture index adds a status after the contract's fields, so search can mark local_only funds.
+FIXTURE_INDEX_FIELDS = [*INDEX_FIELDS, "status"]
+#: Statuses a fund file can carry: the engine's, and local_only for a fund only a local_only source covers.
+FUND_STATUSES = {*STATUSES, "local_only"}
+#: The made-up fund's source; the only fixture source that is not public.
+SYNTHETIC = "synthetic"
 FUND_FIELDS = ["isin", "name", "weight_pct", "asset_class", "source", "as_of", "depth", "via", "country", "sector"]
 # The same keys, in the same order, as the publish pipeline writes them.
 FUND_KEYS = FUND_FILE_KEYS
@@ -231,7 +246,8 @@ def test_fixture_meta_and_index_follow_contract():
         assert s["name"] and s["url"].startswith("https://") and s["licence"] and s["credit"], s["id"]
         assert set(s) == {"id", "name", "url", "licence", "credit", "n_funds", "as_of_min", "as_of_max"}
     assert "openfigi" in {s["id"] for s in meta["sources"]}
-    assert index["fields"] == INDEX_FIELDS
+    assert index["fields"] == FIXTURE_INDEX_FIELDS
+    assert all(r[-1] in FUND_STATUSES for r in index["rows"])
     assert meta["n_funds"] == len(index["rows"])
     ids = {r[0] for r in index["rows"]}
     assert set(index["aliases"].values()) <= ids
@@ -243,7 +259,7 @@ def test_fixture_fund_files_follow_contract():
     for fund in _funds():
         fid = fund["id"]
         assert list(fund) == FUND_KEYS, fid
-        assert fund["status"] in STATUSES and fund["unexpanded_fund_pct"] == 0.0, fid
+        assert fund["status"] in FUND_STATUSES and fund["unexpanded_fund_pct"] >= 0, fid
         assert list(fund["unresolved"]) == ["weight_pct", "note", "source", "source_url", "as_of"], fid
         assert fund["fields"] == FUND_FIELDS
         assert fund["source"] in listed and fund["source_url"].startswith("https://") and fund["credit"]
@@ -253,7 +269,8 @@ def test_fixture_fund_files_follow_contract():
         assert weights == sorted(weights, reverse=True)
         assert {c[4] for c in rows} <= set(listed)
         assert all(c[8] is None or isinstance(c[8], str) for c in rows)
-        assert fund["unresolved"]["weight_pct"] == pytest.approx(100 - fund["resolved_pct"], abs=1e-4)
+        in_rows = fund["resolved_pct"] + fund["unexpanded_fund_pct"]
+        assert fund["unresolved"]["weight_pct"] == pytest.approx(100 - in_rows, abs=1e-4), fid
         assert fund["unresolved"].get("source", fund["source"]) == fund["source"]
         assert fund["unresolved"].get("source_url", fund["source_url"]) == fund["source_url"]
         assert fund["truncated"] == (fund["n_rows"] > len(rows))
@@ -261,7 +278,7 @@ def test_fixture_fund_files_follow_contract():
         assert fund["listed_pct"] == pytest.approx(sum(c[2] for c in rows), abs=1e-3)
         if not fund["truncated"]:
             assert fund["n_constituents"] == len({c[0] for c in rows})
-            assert fund["listed_pct"] == pytest.approx(fund["resolved_pct"], abs=1e-3)
+            assert fund["listed_pct"] == pytest.approx(in_rows, abs=1e-3)
 
 
 def test_fixture_rows_are_unique_per_isin_source_as_of_and_via():
@@ -284,7 +301,7 @@ def test_fixture_breakdowns_cover_the_full_holdings():
             assert values == sorted(values, reverse=True), (fund["id"], key)
             # Over every row of the fund, so resolved + unresolved, never rescaled.
             assert sum(e[1] for e in entries) == pytest.approx(100, abs=1e-2), (fund["id"], key)
-        assert b["top10_pct"] <= fund["resolved_pct"] + 1e-6 or fund["resolved_pct"] < 0
+        assert b["top10_pct"] <= fund["resolved_pct"] + fund["unexpanded_fund_pct"] + 1e-6 or fund["resolved_pct"] < 0
 
 
 def test_fixture_covers_the_cases_the_page_handles():
@@ -296,23 +313,69 @@ def test_fixture_covers_the_cases_the_page_handles():
     funds = _funds()
     assert any(f["truncated"] for f in funds)
     assert any(f["isin"] is None and re.fullmatch(r"S\d{9}", f["id"]) for f in funds)
-    assert any(c[6] > 0 for f in funds for c in f["constituents"])  # a fund of funds
+    rows = [c for f in funds for c in f["constituents"]]
+    assert any(c[6] > 0 and not c[7].endswith("(via derivatives)") for c in rows)  # a fund of funds
+    assert any(c[6] > 0 and c[7].endswith("(via derivatives)") for c in rows)  # looked through its options
+    assert any(c[2] < 0 for c in rows)  # short positions
     assert any(f["n_rows"] > f["n_constituents"] for f in funds)  # an ISIN reached by two routes
     assert any(f["note"] and "swap" in f["note"] for f in funds)
     assert any(f["unresolved_pct"] < 0 for f in funds)
+    assert any(f["unexpanded_fund_pct"] > 0 for f in funds)
+    assert any(f["status"] == "local_only" for f in funds)
+    assert any(f["n_rows"] == 0 and f["status"] != "local_only" for f in funds)
     assert any(any(c[8] for c in f["constituents"]) and any(c[9] for c in f["constituents"]) for f in funds)
 
 
-def test_fixture_no_holdings_fund():
+def test_fixture_funds_without_rows():
     empty = [f for f in _funds() if f["n_rows"] == 0]
     assert empty
     for f in empty:
         assert f["constituents"] == [] and f["resolved_pct"] == 0 and f["unresolved_pct"] == 100
-        assert f["as_of"] and f["note"] and "listed" in f["credit"].lower() and "no holdings" in f["credit"].lower()
+        assert f["as_of"] and f["note"]
         assert f["unresolved"] == {"weight_pct": 100, "note": f["note"], "source": f["source"], "source_url": f["source_url"],
                                    "as_of": f["as_of"]}
-        assert f["status"] == "no_holdings"
         assert all(f["breakdowns"][k] == [["Unresolved", 100]] for k in BREAKDOWNS)
+
+
+def test_fixture_local_only_funds_say_how_to_see_their_holdings():
+    local = [f for f in _funds() if f["status"] == "local_only"]
+    assert local
+    for f in local:
+        assert redistribution(f["source"]) == "local_only", f["id"]
+        assert f["constituents"] == [] and f["n_rows"] == 0, f["id"]
+        assert f["note"].startswith(f"Holdings for this fund are available from {f['issuer']} when you run openbasket yourself")
+        assert "running-locally" in f["note"]
+        assert "not republished" in f["credit"]
+    rows = {r[0]: r for r in _load("index.json")["rows"]}
+    assert all(rows[f["id"]][-1] == "local_only" and rows[f["id"]][8] is None for f in local)
+
+
+def test_fixtures_hold_nothing_from_local_only_sources():
+    """The repository is public: no row, breakdown or fund may come from a local_only source."""
+    for f in _funds():
+        named = {c[4] for c in f["constituents"]} | {k for k, _ in f["breakdowns"]["source"] if k not in ("Unresolved", "Unknown")}
+        if f["status"] != "local_only":
+            named |= {f["source"], f["unresolved"]["source"]}
+        assert all(redistribution(s) == "public" for s in named - {SYNTHETIC}), (f["id"], named)
+    meta = _load("meta.json")
+    for s in meta["sources"]:
+        if redistribution(s["id"]) != "public" and s["id"] != SYNTHETIC:
+            assert all(f["status"] == "local_only" for f in _funds() if f["source"] == s["id"]), s["id"]
+
+
+def test_make_fixtures_refuses_local_only_sources():
+    ok = {"id": "X", "source": "nport", "fields": ["isin", "source"], "constituents": [["US0378331005", "tickerinside"]],
+          "breakdowns": {"source": [["tickerinside", 100.0], ["Unresolved", 0.0]]}, "unresolved": {"source": "nport"}}
+    make_fixtures.check_public(ok)
+    for bad in (
+        {**ok, "constituents": [["US0378331005", "ishares"]]},
+        {**ok, "source": "spdr"},
+        {**ok, "breakdowns": {"source": [["vanguard", 100.0], ["Unresolved", 0.0]]}},
+        {**ok, "unresolved": {"source": "some_new_issuer"}},
+    ):
+        with pytest.raises(SystemExit, match="local_only"):
+            make_fixtures.check_public(bad)
+    make_fixtures.check_public({**ok, "source": SYNTHETIC}, allow=frozenset({SYNTHETIC}))
 
 
 def test_fixture_nport_funds_name_their_registrant_and_tickerinside_says_what_changed():
@@ -320,10 +383,10 @@ def test_fixture_nport_funds_name_their_registrant_and_tickerinside_says_what_ch
     assert all(f["issuer"] for f in funds if f["source"] == "nport")
     sources = {s["id"]: s for s in _load("meta.json")["sources"]}
     ti = sources["tickerinside"]["credit"]
-    assert "creativecommons.org/licenses/by/4.0" in ti and "Changed" in ti
+    assert "creativecommons.org/licenses/by/4.0" in ti and "changed by openbasket" in ti.lower()
     for f in funds:
-        if f["source"] == "tickerinside":
-            assert "creativecommons.org/licenses/by/4.0" in f["credit"] and "Changed" in f["credit"]
+        if "tickerinside" in {c[4] for c in f["constituents"]}:
+            assert "creativecommons.org/licenses/by/4.0" in f["credit"] and "changed by openbasket" in f["credit"].lower()
 
 
 # The page logic in site/assets/core.js, run with node.
@@ -408,7 +471,7 @@ def test_core_totals_count_unexpanded_funds_as_listed_rows():
 
 @needs_node
 def test_core_totals_for_a_complete_and_an_empty_fund():
-    full = _load("funds/US78467X1090.json")
+    full = _load("funds/US78462F1030.json")
     t = _core(f"(() => {{ const f = {json.dumps(full)}; return core.totals(f, core.rowsOf(f)); }})()")
     assert t["truncated"] is False and t["notListed"] == 0 and t["noHoldings"] is False
     rows = _core(f"(() => {{ const f = {json.dumps(full)}; const r = core.rowsOf(f); return core.closingRows(f, r, core.totals(f, r)); }})()")
@@ -462,7 +525,7 @@ def test_core_top_holdings_add_up_an_isin_across_routes():
 
 @needs_node
 def test_core_top_ten_matches_the_fixture_breakdown():
-    for fid in ("US4642898674", "IE00B4L5Y983", "US78462F1030"):
+    for fid in ("US4642898674", "S000002848", "US78462F1030"):
         fund = _load(f"funds/{fid}.json")
         top = _core(f"(() => {{ const f = {json.dumps(fund)}; return core.topHoldings(core.rowsOf(f), 10); }})()")
         assert sum(x["value"] for x in top) == pytest.approx(fund["breakdowns"]["top10_pct"], abs=1e-3), fid
@@ -489,7 +552,103 @@ def test_core_link_parts_leave_trailing_punctuation_out():
     assert _core('core.linkParts("javascript:alert(1)")') == [{"text": "javascript:alert(1)"}]
 
 
+# The treemap logic in site/assets/treemap.js, run with node.
+
+
+def _treemap(expr: str):
+    """Evaluate ``expr`` with ``tm`` bound to treemap.js and ``core`` to core.js; return its JSON value."""
+    script = (f"const tm = require({json.dumps(str(TREEMAP_JS))}); const core = require({json.dumps(str(CORE_JS))}); "
+              f"process.stdout.write(JSON.stringify({expr}));")
+    out = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True, timeout=30)
+    return json.loads(out.stdout)
+
+
+def _fund_model(fid: str, dim: str, opts: str = "{}"):
+    fund = _load(f"funds/{fid}.json")
+    return _treemap(f"(() => {{ const f = {json.dumps(fund)}; const r = core.rowsOf(f); "
+                    f"return tm.model(f, r, core.totals(f, r), {json.dumps(dim)}, {opts}); }})()")
+
+
+@needs_node
+def test_squarify_matches_the_paper_and_fills_the_rectangle():
+    cells = _treemap("tm.squarify([6, 6, 4, 3, 2, 2, 1].map((v) => ({ v })), 0, 0, 6, 4, (d) => d.v)")
+    # Bruls, Huizing and van Wijk (2000), figure 4: the two 6s fill a 3 x 4 column, then 4 and 3 side by side.
+    assert [(c["item"]["v"], round(c["x"], 2), round(c["y"], 2), round(c["w"], 2), round(c["h"], 2)) for c in cells[:3]] == [
+        (6, 0, 0, 3, 2), (6, 0, 2, 3, 2), (4, 3, 0, 1.71, 2.33)]
+    for c in cells:
+        assert c["w"] * c["h"] == pytest.approx(c["item"]["v"], rel=1e-9)
+    assert sum(c["w"] * c["h"] for c in cells) == pytest.approx(24)
+
+
+@needs_node
+def test_squarify_leaves_out_zero_and_negative_values():
+    cells = _treemap("tm.squarify([{ v: 3 }, { v: 0 }, { v: -2 }, { v: 1 }], 10, 20, 40, 10, (d) => d.v)")
+    assert [c["item"]["v"] for c in cells] == [3, 1]
+    assert sum(c["w"] * c["h"] for c in cells) == pytest.approx(400)
+    assert all(10 <= c["x"] and c["x"] + c["w"] <= 50 + 1e-9 and 20 <= c["y"] and c["y"] + c["h"] <= 30 + 1e-9 for c in cells)
+
+
+@needs_node
+def test_treemap_lists_shorts_beside_the_map_and_keeps_unresolved_apart():
+    m = _fund_model("ZZ0000000008", "sector")
+    tiles = [t for b in m["blocks"] for t in b["tiles"]]
+    assert all(t["value"] > 0 for t in tiles)
+    assert [n["row"]["isin"] for n in m["negatives"]] == ["US4581401001"]
+    assert m["negativeTotal"] == pytest.approx(-0.6)
+    fund = _load("funds/ZZ0000000008.json")
+    assert m["unresolved"] == pytest.approx(fund["unresolved_pct"])
+    assert "Unresolved" not in {b["key"] for b in m["blocks"]}
+    # Drawn area + shorts = everything in rows; + unresolved = 100.
+    assert m["total"] + m["negativeTotal"] == pytest.approx(100, abs=1e-3)
+    assert any(t["kind"] == "unexpanded" for t in tiles)
+
+
+@needs_node
+def test_treemap_blocks_of_a_cut_file_use_the_breakdowns():
+    fund = _load("funds/US4642898674.json")
+    assert fund["truncated"]
+    m = _fund_model("US4642898674", "country")
+    totals = {k: v for k, v in fund["breakdowns"]["country"] if k != "Unresolved"}
+    for b in m["blocks"]:
+        assert b["net"] == pytest.approx(totals[b["key"]], abs=1e-6)
+    others = [t for b in m["blocks"] for t in b["tiles"] if t["kind"] == "others"]
+    assert others and sum(t["value"] for t in others) > 0
+    # Nothing is lost: drawn blocks + negatives (net) = the rows' total, but for blocks under 0.0005%.
+    assert sum(b["value"] for b in m["blocks"]) + m["negativeTotal"] == pytest.approx(
+        fund["resolved_pct"] + fund["unexpanded_fund_pct"], abs=1e-2)
+    assert m["unresolvedNegative"] == pytest.approx(fund["unresolved_pct"])  # AOR's lines add up to more than 100
+
+
+@needs_node
+def test_treemap_groups_rows_by_route_and_merges_small_tiles():
+    m = _fund_model("S000083284", "route")
+    keys = {b["key"] for b in m["blocks"]}
+    assert any(k.endswith("(via derivatives)") for k in keys) and "__direct" in keys
+    small = _fund_model("S000083284", "route", "{ minValue: 0.2 }")
+    tiles = [t for b in small["blocks"] for t in b["tiles"]]
+    merged = [t for t in tiles if t["kind"] == "small"]
+    assert merged and all(t["value"] >= 0.2 for t in tiles if t["kind"] == "row")
+    assert sum(t["value"] for t in tiles) == pytest.approx(sum(t["value"] for b in m["blocks"] for t in b["tiles"]))
+
+
+@needs_node
+def test_treemap_default_grouping_follows_the_labels_the_source_gives():
+    picks = {}
+    for fid in ("ZZ0000000008", "S000002839", "S000083284"):
+        fund = _load(f"funds/{fid}.json")
+        picks[fid] = _treemap(f"(() => {{ const f = {json.dumps(fund)}; return tm.defaultDimension(f, core.rowsOf(f)); }})()")
+    # Sector labels where the source has them; N-PORT gives countries only; TickerInside rows have neither.
+    assert picks == {"ZZ0000000008": "sector", "S000002839": "country", "S000083284": "asset"}
+
+
+@needs_node
+def test_treemap_text_colour_and_fit():
+    assert _treemap('[tm.textOn("#9c3848", "#1b1a19", "#f6f2ec"), tm.textOn("#c9a96e", "#1b1a19", "#f6f2ec")]') == [
+        "#f6f2ec", "#1b1a19"]
+    assert _treemap('[tm.fit("APPLE INC", 20), tm.fit("APPLE INC", 6), tm.fit("APPLE", 1)]') == ["APPLE INC", "APPLE…", ""]
+
+
 @needs_node
 def test_page_scripts_parse():
-    for name in ("core.js", "app.js"):
+    for name in ("core.js", "treemap.js", "app.js"):
         subprocess.run([NODE, "--check", str(SITE / "assets" / name)], check=True, timeout=30)

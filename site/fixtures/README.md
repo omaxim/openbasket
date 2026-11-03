@@ -4,33 +4,48 @@
 built and tested without running the pipelines. It is never deployed:
 `scripts/assemble_site.py` leaves `site/fixtures/` out.
 
-The files are cut from the project's cached source data by
-`make_fixtures.py`, so names, ISINs, weights, countries, sectors, dates and
-source links are real but not maintained:
+The repository is public, so the fixtures hold nothing from a source whose
+terms do not allow republication (a `local_only` source; see
+`openbasket.sources.redistribution`). `make_fixtures.py` stops if a file it
+copies names one, and a test checks every row, breakdown and fund.
 
-- iShares UK and US, and SPDR US and UCITS, from the cached issuer holdings
-  files. Countries are the issuer's country of risk or of issue, mapped to
-  ISO 3166 codes where the name is known; sectors are the issuer's labels.
-  AOR (`US4642898674`) is expanded one level through its iShares sub-funds,
-  so its rows carry `depth` 1 and `via`, and an ISIN held through two
-  sub-funds has a row for each (`n_rows` > `n_constituents`).
-- SEC N-PORT for seven Vanguard, Fidelity and American Funds series; four of
-  them have no ISIN and use their series ID as `id`. `issuer` is the
-  registrant named in the filing; N-PORT gives a country but no sector.
-- TickerInside for QQQ, with its CC BY 4.0 credit and what was changed.
-- `IE000TOBHQ26`, an iShares index fund whose page lists only its ten
-  largest holdings, as a fund with no holdings.
-- `IE000OY7BDY9`, a swap-based fund whose note says so.
+What is in them:
 
-Fund files are cut at 500 rows (`truncated: true` above that); `breakdowns`
-are computed over every row, so they are right for the cut files too.
-`funds/IE000XZSV718.json` is an alias file for the accumulating share class of
-the SPDR S&P 500 UCITS ETF.
+- Funds with holdings, cut by the `publish` pipeline from a run on public
+  sources only (`conf/parameters.yml`: SEC Form N-PORT and TickerInside).
+  Names, ISINs, weights, countries, dates and links are real but not
+  maintained. Among them:
+  - `US4642898674` (AOR), a fund of funds expanded through its sub-funds'
+    filings, cut at 500 rows (`truncated`), whose lines add up to more than
+    100% (negative unresolved weight);
+  - `S000083284` (PGIM S&P 500 Buffer 12 ETF - January), looked through its
+    SPY options to the S&P 500 companies, `via` "... (via derivatives)";
+  - `S000074838` (Convergence Long/Short Equity ETF), with short positions,
+    some of them through ETFs it sells short;
+  - `US02072L5654` (BOXX) and `S000084489` (BTCU), whose lines have no ISIN,
+    so they have no rows.
+- Funds only a `local_only` issuer covers (iShares and SPDR UCITS funds,
+  DIA), as the public build lists them: identity from the issuer's public
+  fund list, status `local_only`, no constituents, and a note that points
+  to running openbasket yourself. `IE000XZSV718` is an alias of
+  `IE00B6YX5C33`.
+- `ZZ0000000008`, a made-up "Synthetic Example Fund of Funds" (source
+  `synthetic`) with sector labels, a sub-fund looked through, one that is
+  not (`unexpanded_fund_pct`), and a short position. Its weights are
+  invented; its constituent ISINs are real companies'.
 
-To rebuild them (reads `data/` read-only; pass `--data` for another copy):
+`index.json` has one field more than the contract, `status`, after
+`n_constituents`, so the search can mark `local_only` funds.
+
+To rebuild them (the two runs write their outputs under `data/` and `build/`
+like any run, and make a few TickerInside requests):
 
 ```bash
-.venv/bin/python site/fixtures/make_fixtures.py --data /path/to/openbasket/data
+mkdir -p conf/fixtures && cp site/fixtures/conf/parameters.yml conf/fixtures/
+kedro run --env fixtures --pipeline=universe
+kedro run --env fixtures --pipeline=publish
+.venv/bin/python site/fixtures/make_fixtures.py --api build/fixture-site/api
+rm -r conf/fixtures
 ```
 
 To preview the page against these files:

@@ -6,6 +6,7 @@
   "use strict";
 
   const core = window.OpenbasketCore;
+  const tm = window.OpenbasketTreemap;
   const { UNRESOLVED, ISIN_RE, SERIES_RE, compact, sum, isValidIsin, rowsOf, totals, topHoldings } = core;
   const body = document.body;
   const API = (body.dataset.api || "api/v1").replace(/\/+$/, "");
@@ -29,6 +30,31 @@
   /* Shares in a strip: wine for the largest entry, then wine fading into paper. Bars are all
      wine; "others" are stone and Unresolved is a dashed paper bar. */
   const SERIES = [C.wine, "#b0606d", "#c48b94", "#d6b2b5", "#e4cdcc", "#ecdcd9"];
+  /* Treemap blocks: a calm categorical palette led by the Leith wine, muted to sit on paper.
+     Unknown labels are stone; Unresolved is a pale grey of its own. */
+  const PALETTE = ["#9c3848", "#4f6d7a", "#c9a96e", "#6f8455", "#7a5374", "#3f7f7b", "#b9803f", "#c98c92",
+    "#8a9fae", "#a39a5a", "#a65f4b", "#9fb39a"];
+  const TM = { unknown: "#b8aea3", unresolved: "#dcd5ca", paper: "#f6f2ec", ink: "#1b1a19", ink2: "#4a4744", muted: "#7d7873" };
+  const TM_DIMS = [
+    { id: "sector", label: "Sector", short: "Sector", all: "All sectors" },
+    { id: "country", label: "Country", short: "Country", all: "All countries" },
+    { id: "asset", label: "Asset class", short: "Asset class", all: "All asset classes" },
+    { id: "source", label: "Source", short: "Source", all: "All sources" },
+    { id: "route", label: "By route", short: "Route", all: "All routes" },
+  ];
+  /* Status flags (data-api.md, Status), in plain words. */
+  const STATUS = {
+    ok: ["OK", "The lines add up to about 100% of net assets and most of it resolves to securities with an ISIN."],
+    partial: ["Partial", "The source's lines are well under 100% of net assets, or less than 90% resolves to securities with an ISIN. The note says why."],
+    over_100: ["Over 100%", "The lines add up to more than 105% of net assets, for example with borrowing or trades not yet settled. Nothing is rescaled."],
+    leveraged: ["Leveraged", "A leveraged or inverse fund, or lines far from 100%: the weights are market values, not economic exposure."],
+    no_holdings: ["No holdings", "The source lists this fund, but no holdings could be read from it."],
+    local_only: ["Run locally", "The holdings come from a source whose terms do not allow republishing them. Run openbasket yourself to see them."],
+    error: ["Error", "The build could not read this fund's holdings. The note says what went wrong."],
+    no_match: ["Not matched", "No source could be matched to this fund."],
+  };
+  const RUN_LOCALLY = "running-locally.html";
+  const REPO = "https://github.com/omaxim/openbasket.git";
 
   const state = {
     meta: null, sources: {}, index: null, indexPromise: null, fund: null, token: 0,
@@ -280,7 +306,7 @@
         const e = {
           id: r[f.id], isin: r[f.isin], name: r[f.name] || "", ticker: r[f.ticker] || "", issuer: r[f.issuer] || "",
           kind: r[f.kind], source: r[f.source], as_of: r[f.as_of], resolved_pct: r[f.resolved_pct],
-          n_constituents: r[f.n_constituents],
+          n_constituents: r[f.n_constituents], status: f.status != null ? r[f.status] : null,
         };
         e.keys = new Set([e.id, e.isin].filter(Boolean));
         e.nName = norm(e.name);
@@ -408,7 +434,12 @@
       const e = r.e;
       const ids = [e.ticker, e.isin || e.id, e.issuer].filter(Boolean).join(" · ");
       const li = h("li", { role: "option", id: `opt-${i}`, "aria-selected": i === active ? "true" : "false" },
-        h("div", { class: "opt-main" }, h("span", { class: "opt-name" }, highlight(e.name, q)), badge(e.source)),
+        h("div", { class: "opt-main" }, h("span", { class: "opt-name" }, highlight(e.name, q)),
+          h("span", { class: "opt-badges" },
+            e.status === "local_only"
+              ? h("span", { class: "badge badge-local", title: "Holdings available when you run openbasket yourself" }, "run locally")
+              : null,
+            badge(e.source))),
         h("div", { class: "opt-meta" }, ids, r.via ? ` · share class ${r.via}` : null,
           e.as_of ? ` · as of ${e.as_of}` : null));
       li.addEventListener("mousedown", (ev) => ev.preventDefault());
@@ -618,19 +649,14 @@
     return [...m.values()].sort((a, b) => b.weight - a.weight);
   }
 
-  function renderFund(f, requested) {
-    const rows = rowsOf(f);
-    const t = totals(f, rows);
-    const noHoldings = t.noHoldings;
-    const fof = rows.some((r) => r.depth > 0);
-    const src = state.sources[f.source] || {};
+  /** The fund's name, identifiers, share classes and status: the same for every kind of fund file. */
+  function fundHead(f, requested) {
     const label = f.isin || f.id;
-    document.title = `${f.name} (${f.ticker || label}) · openbasket`;
-
     const otherIsins = (f.isins || []).filter((x) => x !== f.isin);
     const issuerTitle = f.source === "nport" ? "Registrant named in the fund's SEC Form N-PORT filing" : null;
-    const head = h("div", { class: "fund-head" },
-      h("p", { class: "eyebrow" }, `Fund look-through${f.issuer ? ` · ${f.issuer}` : ""}`),
+    const local = f.status === "local_only";
+    return h("div", { class: "fund-head" },
+      h("p", { class: "eyebrow" }, `${local ? "Fund" : "Fund look-through"}${f.issuer ? ` · ${f.issuer}` : ""}`),
       h("h2", {}, f.name || label),
       h("ul", { class: "ids" },
         h("li", {}, h("b", {}, "ISIN"), f.isin ? h("code", {}, f.isin) : "not known"),
@@ -639,8 +665,72 @@
         f.id !== f.isin ? h("li", {}, h("b", {}, "SEC series"), h("code", {}, f.id)) : null),
       otherIsins.length ? h("p", { class: "also" }, `Also covers share classes: ${otherIsins.slice(0, 12).join(", ")}${otherIsins.length > 12 ? ` and ${otherIsins.length - 12} more` : ""}.`) : null,
       requested && requested !== f.id && requested !== f.isin
-        ? h("p", { class: "notice" }, "You looked up ", h("code", {}, requested), ", a share class of this fund. Share classes hold the same portfolio, so these are its holdings.")
-        : null);
+        ? h("p", { class: "notice" }, "You looked up ", h("code", {}, requested),
+          `, a share class of this fund. Share classes hold the same portfolio, so ${local ? "it has the same holdings" : "these are its holdings"}.`)
+        : null,
+      statusLine(f.status));
+  }
+
+  /** A status chip with its meaning in plain words (data-api.md, Status). */
+  function statusLine(status) {
+    if (!status) return null;
+    const [label, why] = STATUS[status] || [titleCase(status), "A status this page does not know; see the Data API documentation."];
+    return h("p", { class: "status-line" },
+      h("span", { class: `status status-${String(status).replace(/[^a-z0-9_]/gi, "")}` }, h("span", { class: "sr-only" }, "Status: "), label),
+      h("span", { class: "status-why" }, why));
+  }
+
+  /** A fund whose holdings come only from a local_only source: identity, the issuer, and how to run it yourself. */
+  function renderLocalOnly(f, requested) {
+    const issuer = f.issuer || sourceName(f.source);
+    const src = state.sources[f.source] || {};
+    document.title = `${f.name} (${f.ticker || f.isin || f.id}) · openbasket`;
+    const id = f.isin || f.id;
+    const commands = [
+      `git clone ${REPO} && cd openbasket`,
+      "uv venv --python 3.12 .venv && uv pip install --python .venv -e .",
+      `.venv/bin/kedro run --params=isin=${id}`,
+    ].join("\n");
+    const code = h("code", {}, commands);
+    const copyBtn = h("button", { class: "copy", type: "button", "aria-label": "Copy the commands" }, "Copy");
+    copyBtn.addEventListener("click", () => copy(commands, copyBtn));
+    const panel = h("aside", { class: "source-panel", "aria-label": "Where this fund is listed" },
+      h("p", { class: "label" }, "Listed by"),
+      h("p", { class: "source-name" }, safeUrl(f.source_url) ? ext(f.source_url, issuer) : issuer),
+      f.credit ? h("p", { class: "credit" }, linkify(f.credit)) : null,
+      h("dl", { class: "kv" },
+        h("dt", {}, "Listed on"), h("dd", {}, fmtDate(f.as_of)),
+        h("dt", {}, "Matched via"), h("dd", {}, matchedVia(f.matched_via)),
+        src.licence ? [h("dt", {}, "Terms"), h("dd", {}, licence(src.licence))] : null),
+      h("p", { class: "links" },
+        safeUrl(f.source_url) ? ext(f.source_url, `See the fund at ${issuer} ↗`) : null));
+    const local = h("section", { class: "local-panel", "aria-labelledby": "local-title" },
+      h("p", { class: "eyebrow" }, "Run it yourself"),
+      h("h3", { id: "local-title" }, "The holdings stay ", h("em", {}, "on your computer")),
+      h("p", { class: "local-lede" },
+        `Holdings for this fund come from ${issuer}, whose terms do not allow us to republish them. `,
+        "Clone openbasket and run it yourself to see the full breakdown."),
+      h("div", { class: "code" },
+        h("p", { class: "code-title" }, "Three commands: get the code, install it, look this fund through"),
+        h("pre", {}, code, copyBtn)),
+      h("p", { class: "local-foot" },
+        "The first run downloads SEC N-PORT data and each issuer's files, so it takes a while. ",
+        h("a", { href: `${DOCS}${RUN_LOCALLY}` }, "How to run openbasket locally"),
+        ", including the local site with every source switched on."));
+    show(fundHead(f, requested), h("div", { class: "local-grid" }, local, panel));
+    announce(`${f.name}: holdings available from ${issuer} when you run openbasket yourself.`);
+  }
+
+  function renderFund(f, requested) {
+    if (f.status === "local_only") return renderLocalOnly(f, requested);
+    const rows = rowsOf(f);
+    const t = totals(f, rows);
+    const noHoldings = t.noHoldings;
+    const fof = rows.some((r) => r.depth > 0);
+    const src = state.sources[f.source] || {};
+    const label = f.isin || f.id;
+    document.title = `${f.name} (${f.ticker || label}) · openbasket`;
+    const head = fundHead(f, requested);
 
     const age = ageText(f.as_of);
     const rowSources = rowSourceSummary(rows);
@@ -830,8 +920,479 @@
       h("h3", { id: "dist-title" }, "Where the ", h("em", {}, "money"), " is"),
       h("p", { class: "dist-intro" },
         `Percent of the fund's net assets over ${scope}, as the source reports them and never rescaled. `,
-        "Unresolved, the weight the source does not tie to an ISIN, is always shown as its own dashed bar."),
+        "Each tile is one holding and its area is its weight; Unresolved, the weight the source does not tie to an ISIN, is always its own grey tile."),
+      renderTreemap(f, rows, t),
+      h("h4", { class: "dist-alt-title", id: "dist-alt" }, "The same weights as bars and tables"),
       h("div", { class: "dist-grid" }, cards));
+  }
+
+  /* ---------- treemap ---------- */
+
+  function blockLabel(dim, key) {
+    if (key === tm.DIRECT) return "Held directly";
+    if (key === tm.NOT_LISTED) return "Not listed in this file";
+    if (unknown(key)) return NOT_STATED;
+    if (dim === "country") return countryName(key);
+    if (dim === "asset") return key.charAt(0).toUpperCase() + key.slice(1);
+    if (dim === "source") return sourceName(key);
+    return key;
+  }
+
+  /** Block colours by rank, so a block keeps its colour when zoomed into. */
+  function blockColours(blocks) {
+    const out = new Map();
+    let i = 0;
+    for (const b of blocks) {
+      if (unknown(b.key) || b.key === tm.NOT_LISTED) out.set(b.key, TM.unknown);
+      else out.set(b.key, PALETTE[i++ % PALETTE.length]);
+    }
+    return out;
+  }
+
+  /* Text widths for fitting tile labels, measured with the page fonts on a canvas. */
+  let measureCtx = null;
+  function textWidth(text, font) {
+    if (!measureCtx) {
+      try {
+        measureCtx = document.createElement("canvas").getContext("2d");
+      } catch (e) {
+        measureCtx = null;
+      }
+    }
+    if (!measureCtx) return String(text).length * (parseFloat(font.split(" ")[1]) || 12) * 0.6;
+    measureCtx.font = font;
+    return measureCtx.measureText(String(text)).width;
+  }
+
+  /** The longest start of `text` that fits in `width` pixels, with an ellipsis when cut. */
+  function fitText(text, width, font) {
+    const str = String(text || "");
+    if (width <= 0 || !str) return "";
+    if (textWidth(str, font) <= width) return str;
+    let lo = 0;
+    let hi = str.length;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (textWidth(`${str.slice(0, mid).trimEnd()}…`, font) <= width) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo >= 2 ? `${str.slice(0, lo).trimEnd()}…` : "";
+  }
+
+  /** Mix a #rrggbb colour with paper: 0 keeps it, 1 is paper. */
+  function tint(hex, amount) {
+    const a = /^#(..)(..)(..)$/.exec(hex);
+    const b = /^#(..)(..)(..)$/.exec(TM.paper);
+    if (!a) return hex;
+    return `#${[1, 2, 3].map((i) => Math.round(parseInt(a[i], 16) * (1 - amount) + parseInt(b[i], 16) * amount)
+      .toString(16).padStart(2, "0")).join("")}`;
+  }
+
+  /**
+   * The treemap: the fund's rows as tiles, area = weight, grouped into blocks by
+   * sector, country, asset class, source or route. Blocks zoom in on click or tap;
+   * negative weights are listed beside it, never drawn. The bars and tables below
+   * it are its text alternative.
+   */
+  function renderTreemap(f, rows, t) {
+    const dims = TM_DIMS.filter((d) => d.id !== "route" || tm.hasRoutes(rows));
+    const st = { dim: tm.defaultDimension(f, rows), zoom: null, pinned: null, width: 0 };
+    const uid = `tm${state.token}`;
+    const map = h("div", { class: "tm-map" });
+    const tip = h("div", { class: "tm-tip", role: "tooltip", id: `${uid}-tip`, hidden: true });
+    const crumbs = h("nav", { class: "tm-crumbs", "aria-label": "Treemap level" });
+    const side = h("div", { class: "tm-side" });
+    const detail = h("p", { class: "tm-detail", "aria-live": "polite" });
+    const hoverable = typeof matchMedia === "function" && matchMedia("(hover: hover)").matches;
+    let infos = [];
+
+    const radios = h("div", { class: "tm-switch", role: "radiogroup", "aria-label": "Group the holdings by" },
+      h("span", { class: "tm-switch-label", "aria-hidden": "true" }, "Group by"),
+      dims.map((d) => {
+        const input = h("input", { type: "radio", name: `${uid}-dim`, value: d.id, id: `${uid}-${d.id}` });
+        input.checked = d.id === st.dim;
+        input.addEventListener("change", () => {
+          if (!input.checked) return;
+          st.dim = d.id;
+          st.zoom = null;
+          draw();
+          announce(`Holdings grouped by ${d.short.toLowerCase()}.`);
+        });
+        return h("label", { class: "tm-opt", for: `${uid}-${d.id}` }, input, h("span", {}, d.label));
+      }));
+
+    const pct = (v) => `${fmtPct(v)}%`;
+    const dimInfo = () => dims.find((d) => d.id === st.dim) || TM_DIMS[0];
+    /** A block's label and size; with short positions in it, its long weight and its net weight. */
+    const blockSummary = (b, lbl) => (Math.abs(b.net - b.value) > 0.005
+      ? `${lbl} · ${pct(b.value)} long, ${pct(b.net)} net` : `${lbl} · ${pct(b.value)}`);
+
+    function rowInfo(r, block) {
+      return {
+        title: r.name || r.isin || "Unnamed holding",
+        lines: [
+          r.isin ? ["ISIN", r.isin] : null,
+          ["Weight", `${pct(r.weight)} of net assets`],
+          ["Source", sourceName(r.source)],
+          ["As of", r.as_of ? fmtDate(r.as_of) : "–"],
+          r.depth > 0 && r.via ? ["Via", r.via] : null,
+          r.asset === "fund" ? ["Note", "A fund no source has holdings for: not looked through"] : null,
+          [dimInfo().short, block],
+        ].filter(Boolean),
+        isin: r.isin,
+      };
+    }
+
+    function tileInfo(tile, block, blockKey) {
+      if (tile.kind === "row" || tile.kind === "unexpanded") return rowInfo(tile.row, block);
+      if (tile.kind === "small") {
+        return { title: `${fmtInt(tile.n)} smaller holdings`, lines: [["Weight", `${pct(tile.value)} of net assets together`],
+          [dimInfo().short, block], ["Note", "Too small to draw one by one; each is in the table below"]] };
+      }
+      if (blockKey === tm.NOT_LISTED) {
+        return { title: "Not listed in this file", lines: [["Weight", `${pct(tile.value)} of net assets`],
+          ["Note", `The other ${fmtInt(t.nRows - rows.length)} rows are in the full data of the release`]] };
+      }
+      return { title: `Others in ${block}`, lines: [["Weight", `${pct(tile.value)} of net assets`],
+        ["Note", "Rows this file does not list (in the full data of the release)"]] };
+    }
+
+    function unresolvedInfo(v) {
+      const un = f.unresolved || {};
+      return { title: UNRESOLVED, lines: [["Weight", `${pct(v)} of net assets`],
+        ["Note", un.note || "What the source does not tie to an ISIN: cash, derivatives, pools and lines without an identifier"],
+        ["Source", sourceName(un.source || f.source)], ["As of", fmtDate(un.as_of || f.as_of)]] };
+    }
+
+    const ariaOf = (info) => `${info.title}: ${info.lines.map(([k, v]) => `${k} ${v}`).join("; ")}`;
+
+    function showTip(info, x, y) {
+      tip.replaceChildren(h("strong", {}, info.title),
+        h("dl", {}, info.lines.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)])));
+      tip.hidden = false;
+      const mw = map.clientWidth;
+      const tw = tip.offsetWidth;
+      const th = tip.offsetHeight;
+      let left = x + 14;
+      if (left + tw > mw) left = Math.max(0, x - tw - 14);
+      let top = y + 14;
+      if (top + th > map.clientHeight + 40) top = Math.max(0, y - th - 14);
+      tip.style.left = `${left}px`;
+      tip.style.top = `${top}px`;
+    }
+    const hideTip = () => (tip.hidden = true);
+
+    function setDetail(info) {
+      if (!info) return detail.replaceChildren();
+      const fundIsin = info.isin && state.index && state.index.aliases[info.isin] && info.isin;
+      detail.replaceChildren(h("span", {}, h("strong", {}, info.title), " · ",
+        info.lines.map(([k, v], i) => [i ? " · " : null, `${k}: ${v}`]),
+        fundIsin ? [" · ", h("a", { href: `?isin=${encodeURIComponent(fundIsin)}`, onclick: (ev) => {
+          if (ev.metaKey || ev.ctrlKey) return;
+          ev.preventDefault();
+          openFund(fundIsin, { focus: true });
+        } }, "Open its look-through")] : null));
+    }
+
+    function zoomTo(key, focusFirst) {
+      st.zoom = key;
+      st.pinned = null;
+      hideTip();
+      draw();
+      const b = st.model.blocks.find((x) => x.key === key);
+      if (b) announce(`${blockLabel(st.dim, key)}: ${pct(b.value)} of net assets in ${fmtInt(b.tiles.length)} tiles. Escape goes back.`);
+      if (focusFirst) {
+        const first = map.querySelector("[data-tile]");
+        if (first) first.focus({ preventScroll: true });
+      }
+    }
+
+    function zoomOut() {
+      const back = st.zoom;
+      st.zoom = null;
+      hideTip();
+      draw();
+      announce(`${dimInfo().all}.`);
+      const el = back != null ? [...map.querySelectorAll("[data-block]")].find((g) => g.dataset.block === back) : null;
+      if (el) el.focus({ preventScroll: true });
+    }
+
+    function label(g, x, y, w, hgt, fill, lines, opts) {
+      const o = opts || {};
+      const fs = Math.max(9.5, Math.min(o.max || 20, Math.sqrt(w * hgt) / 8.5));
+      if (w < 30 || hgt < fs * 1.45) return;
+      const colour = o.colour || tm.textOn(fill, TM.ink, TM.paper);
+      const first = fitText(lines[0], w - 9, `600 ${fs}px Inter, system-ui, sans-serif`);
+      if (!first) return;
+      g.append(s("text", { x: (x + 5).toFixed(1), y: (y + 4 + fs).toFixed(1), "font-size": fs.toFixed(1), fill: colour,
+        class: "tm-label" }, first));
+      if (lines[1] && hgt >= fs * 2.75) {
+        const fs2 = Math.max(9, fs * 0.82);
+        g.append(s("text", { x: (x + 5).toFixed(1), y: (y + 6 + fs + fs2 * 1.15).toFixed(1), "font-size": fs2.toFixed(1),
+          fill: colour, class: "tm-value" }, fitText(lines[1], w - 9, `400 ${fs2}px Inter, system-ui, sans-serif`)));
+      }
+    }
+
+    function tileFill(tile, colour) {
+      if (tile.kind === "small") return tint(colour, 0.38);
+      if (tile.kind === "others") return tint(colour, 0.55);
+      if (tile.kind === "unexpanded") return tint(colour, 0.25);
+      return colour;
+    }
+
+    function drawTiles(parent, block, colour, x, y, w, hgt, interactive) {
+      const lbl = blockLabel(st.dim, block.key);
+      for (const c of tm.squarify(block.tiles, x, y, w, hgt)) {
+        const tile = c.item;
+        const fill = tileFill(tile, colour);
+        const info = tileInfo(tile, lbl, block.key);
+        const idx = infos.push(info) - 1;
+        const g = s("g", { "data-tile": idx, class: `tm-tile tm-${tile.kind}` });
+        if (interactive) {
+          g.setAttribute("tabindex", "0");
+          g.setAttribute("role", "button");
+          g.setAttribute("aria-label", ariaOf(info));
+        }
+        g.append(s("rect", { x: c.x.toFixed(2), y: c.y.toFixed(2), width: Math.max(0, c.w).toFixed(2),
+          height: Math.max(0, c.h).toFixed(2), fill, class: "tm-cell" }));
+        if (tile.kind === "others" || tile.kind === "unexpanded") {
+          g.append(s("rect", { x: c.x.toFixed(2), y: c.y.toFixed(2), width: Math.max(0, c.w).toFixed(2),
+            height: Math.max(0, c.h).toFixed(2), fill: `url(#${uid}-hatch)`, "pointer-events": "none" }));
+        }
+        const name = tile.kind === "row" || tile.kind === "unexpanded" ? tile.row.name || tile.row.isin
+          : tile.kind === "small" ? `${fmtInt(tile.n)} smaller`
+            : block.key === tm.NOT_LISTED ? "Not listed here" : "Others";
+        const second = tile.kind === "others" ? `${pct(tile.value)} in the full data`
+          : tile.kind === "unexpanded" ? `${pct(tile.value)} not looked through` : pct(tile.value);
+        label(g, c.x, c.y, c.w, c.h, fill, [name, second]);
+        parent.append(g);
+      }
+    }
+
+    function drawUnresolved(svg, c, v) {
+      const info = unresolvedInfo(v);
+      const idx = infos.push(info) - 1;
+      const g = s("g", { "data-tile": idx, class: "tm-tile tm-unresolved", tabindex: 0, role: "button", "aria-label": ariaOf(info) },
+        s("rect", { x: c.x.toFixed(2), y: c.y.toFixed(2), width: c.w.toFixed(2), height: c.h.toFixed(2), fill: TM.unresolved, class: "tm-cell" }));
+      label(g, c.x, c.y, c.w, c.h, TM.unresolved, [UNRESOLVED, pct(v)], { colour: TM.ink2 });
+      svg.append(g);
+    }
+
+    function measure() {
+      const w = Math.max(280, Math.round(map.clientWidth || 640));
+      const hgt = w >= 640 ? Math.round(Math.min(620, Math.max(340, w * 0.56))) : Math.round(Math.min(560, w * 1.15));
+      return [w, hgt];
+    }
+
+    function draw() {
+      const [W, H] = measure();
+      st.width = W;
+      infos = [];
+      const area = W * H;
+      const rough = tm.model(f, rows, t, st.dim);
+      let zoomBlock = st.zoom != null ? rough.blocks.find((b) => b.key === st.zoom) : null;
+      if (st.zoom != null && !zoomBlock) st.zoom = null;
+      // Tiles under about 10 square pixels at this level are merged into one "smaller holdings" tile.
+      const scope = zoomBlock ? zoomBlock.value : rough.total;
+      const m = tm.model(f, rows, t, st.dim, { minValue: scope > 0 ? (scope * 10) / area : 0 });
+      st.model = m;
+      const colours = blockColours(m.blocks);
+      zoomBlock = st.zoom != null ? m.blocks.find((b) => b.key === st.zoom) : null;
+
+      const svg = s("svg", { class: "tm-svg", viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "group",
+        "aria-label": zoomBlock
+          ? `Treemap of ${blockLabel(st.dim, zoomBlock.key)}, ${pct(zoomBlock.value)} of net assets. Each holding is a button; Escape goes back.`
+          : `Treemap of the fund's holdings by ${dimInfo().short.toLowerCase()}. Each block is a button that zooms in.` },
+        s("defs", {}, s("pattern", { id: `${uid}-hatch`, width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" },
+          s("rect", { width: 2, height: 6, fill: TM.paper, opacity: 0.55 }))));
+
+      if (zoomBlock) {
+        drawTiles(svg, zoomBlock, colours.get(zoomBlock.key), 0, 0, W, H, true);
+      } else {
+        const items = m.blocks.map((b) => ({ block: b, value: b.value }));
+        if (m.unresolved) items.push({ unresolved: true, value: m.unresolved });
+        for (const c of tm.squarify(items, 0, 0, W, H)) {
+          if (c.item.unresolved) {
+            drawUnresolved(svg, c, c.item.value);
+            continue;
+          }
+          const b = c.item.block;
+          const colour = colours.get(b.key);
+          const lbl = blockLabel(st.dim, b.key);
+          const g = s("g", { class: "tm-block", "data-block": b.key, tabindex: 0, role: "button",
+            "aria-label": `${lbl}: ${pct(b.value)} of net assets${Math.abs(b.net - b.value) > 0.005 ? ` in long positions, ${pct(b.net)} net` : ""}, ${fmtInt(b.n)} holdings${b.tiles.some((x) => x.kind === "others") ? " and others in the full data" : ""}. Zoom in.` });
+          const band = c.h > 64 && c.w > 70 ? Math.min(22, Math.max(17, c.h * 0.08)) : 0;
+          if (band) {
+            g.append(s("rect", { x: c.x.toFixed(2), y: c.y.toFixed(2), width: c.w.toFixed(2), height: band.toFixed(2), fill: colour, class: "tm-band" }));
+            const fs = Math.min(12.5, band * 0.62);
+            const font = `700 ${fs}px Sora, Inter, system-ui, sans-serif`;
+            // The share always shows; the label gives way first.
+            const need = Math.min(textWidth(lbl, font), fs * 7);
+            const tail = [blockSummary(b, ""), ` · ${pct(b.value)}`].find((x) => c.w - 10 - textWidth(x, font) >= need) || ` · ${pct(b.value)}`;
+            const room = c.w - 10 - textWidth(tail, font);
+            const head = room > fs * 2 ? fitText(lbl, room, font) : "";
+            g.append(s("text", { x: (c.x + 5).toFixed(1), y: (c.y + band * 0.5 + fs * 0.36).toFixed(1), "font-size": fs.toFixed(1),
+              fill: tm.textOn(colour, TM.ink, TM.paper), class: "tm-block-label" },
+              head ? `${head}${tail}` : fitText(tail.replace(/^ · /, ""), c.w - 10, font)));
+          }
+          drawTiles(g, b, colour, c.x, c.y + band, c.w, c.h - band, false);
+          g.append(s("rect", { x: c.x.toFixed(2), y: c.y.toFixed(2), width: c.w.toFixed(2), height: c.h.toFixed(2), class: "tm-outline" }));
+          g.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            zoomTo(b.key, false);
+          });
+          g.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter" || ev.key === " ") {
+              ev.preventDefault();
+              zoomTo(b.key, true);
+            }
+          });
+          svg.append(g);
+        }
+      }
+      map.replaceChildren(svg, tip);
+      tip.hidden = true;
+      drawCrumbs(zoomBlock);
+      drawSide(m, colours, zoomBlock);
+      if (!zoomBlock) setDetail(null);
+    }
+
+    function drawCrumbs(zoomBlock) {
+      const all = dimInfo().all;
+      if (!zoomBlock) {
+        crumbs.replaceChildren(h("span", { class: "tm-crumb", "aria-current": "true" }, all),
+          h("span", { class: "tm-hint" }, hoverable ? "Click a block to zoom in." : "Tap a block to zoom in."));
+        return;
+      }
+      const back = h("button", { type: "button", class: "tm-crumb tm-back" }, all);
+      back.addEventListener("click", zoomOut);
+      crumbs.replaceChildren(back, h("span", { class: "tm-sep", "aria-hidden": "true" }, "›"),
+        h("span", { class: "tm-crumb", "aria-current": "true" }, blockSummary(zoomBlock, blockLabel(st.dim, zoomBlock.key))),
+        h("span", { class: "tm-hint" }, hoverable ? "Esc or the first link goes back." : "Tap a tile for its details."));
+    }
+
+    function drawSide(m, colours, zoomBlock) {
+      const parts = [];
+      if (!zoomBlock) {
+        const shown = m.blocks.slice(0, 12);
+        parts.push(h("h4", {}, `Blocks by ${dimInfo().short.toLowerCase()}`),
+          h("ol", { class: "tm-legend" }, shown.map((b) => {
+            const btn = h("button", { type: "button" },
+              h("i", { class: "sw", style: `background:${colours.get(b.key)}` }),
+              h("span", { class: "tm-leg-label" }, blockLabel(st.dim, b.key)), h("span", { class: "tm-leg-val" }, pct(b.value)));
+            btn.addEventListener("click", () => zoomTo(b.key, true));
+            return h("li", {}, btn);
+          }),
+          m.unresolved ? h("li", { class: "is-unresolved" }, h("span", { class: "tm-leg-static" },
+            h("i", { class: "sw sw-unresolved" }), h("span", { class: "tm-leg-label" }, UNRESOLVED), h("span", { class: "tm-leg-val" }, pct(m.unresolved)))) : null),
+          m.blocks.length > shown.length ? h("p", { class: "tm-more" }, `and ${fmtInt(m.blocks.length - shown.length)} smaller blocks, ${pct(sum(m.blocks.slice(12).map((b) => b.value)))} together`) : null);
+      }
+      const negs = zoomBlock ? m.negatives.filter((x) => x.key === zoomBlock.key) : m.negatives;
+      const unlisted = zoomBlock ? m.unlisted.filter((x) => x.key === zoomBlock.key) : m.unlisted;
+      if (negs.length || unlisted.length) {
+        const top = negs.slice(0, 10);
+        const total = sum(negs.map((x) => x.row.weight)) + sum(unlisted.map((x) => x.value));
+        parts.push(h("h4", {}, "Short positions and written options"),
+          h("p", { class: "tm-side-note" }, `Negative weights have no area, so they are listed here and not drawn: ${pct(total)} together${zoomBlock ? " in this block" : ""}.`),
+          h("ol", { class: "tm-negs" },
+            top.map((x) => h("li", {}, h("span", { class: "tm-neg-name" }, x.row.name || x.row.isin,
+              h("span", { class: "sub" }, [x.row.isin, x.row.depth > 0 && x.row.via ? `via ${x.row.via}` : null, sourceLabel(x.row.source)].filter(Boolean).join(" · "))),
+            h("span", { class: "tm-neg-val neg" }, pct(x.row.weight)))),
+            unlisted.map((x) => h("li", {}, h("span", { class: "tm-neg-name" }, `Rows not listed here, ${blockLabel(st.dim, x.key)}`,
+              h("span", { class: "sub" }, "net, in the full data")), h("span", { class: "tm-neg-val neg" }, pct(x.value))))),
+          negs.length > top.length ? h("p", { class: "tm-more" }, `and ${fmtInt(negs.length - top.length)} more, all in the table below`) : null);
+      }
+      if (m.unresolvedNegative) {
+        parts.push(h("p", { class: "tm-side-note" }, h("strong", {}, `${UNRESOLVED} ${pct(m.unresolvedNegative)}. `),
+          "The positions add up to more than the fund's net assets, so the unresolved weight is negative and has no tile."));
+      }
+      const nodes = parts.filter(Boolean);
+      side.replaceChildren(...nodes);
+      side.hidden = !nodes.length;
+    }
+
+    map.addEventListener("pointermove", (ev) => {
+      if (ev.pointerType !== "mouse") return;
+      const g = ev.target.closest && ev.target.closest("[data-tile]");
+      if (!g) return hideTip();
+      const box = map.getBoundingClientRect();
+      showTip(infos[Number(g.dataset.tile)], ev.clientX - box.left, ev.clientY - box.top);
+    });
+    map.addEventListener("pointerleave", hideTip);
+    map.addEventListener("click", (ev) => {
+      const g = ev.target.closest && ev.target.closest("[data-tile]");
+      if (!g || g.closest("[data-block]")) return;
+      const info = infos[Number(g.dataset.tile)];
+      setDetail(info);
+      if (!hoverable) {
+        // A second tap on the same tile closes its tooltip.
+        if (st.pinned === g.dataset.tile && !tip.hidden) {
+          st.pinned = null;
+          return hideTip();
+        }
+        st.pinned = g.dataset.tile;
+        const box = map.getBoundingClientRect();
+        const r = g.getBoundingClientRect();
+        showTip(info, r.left - box.left + Math.min(r.width / 2, 40), r.top - box.top + Math.min(r.height / 2, 30));
+      }
+    });
+    map.addEventListener("focusin", (ev) => {
+      const g = ev.target.closest && ev.target.closest("[data-tile]");
+      if (!g) return hideTip();
+      const info = infos[Number(g.dataset.tile)];
+      const box = map.getBoundingClientRect();
+      const r = g.getBoundingClientRect();
+      showTip(info, r.left - box.left + Math.min(r.width / 2, 40), r.top - box.top + Math.min(r.height / 2, 30));
+    });
+    map.addEventListener("focusout", hideTip);
+    map.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape" && st.zoom != null) {
+        ev.preventDefault();
+        zoomOut();
+      } else if ((ev.key === "Enter" || ev.key === " ") && ev.target.closest && ev.target.closest("[data-tile]")) {
+        ev.preventDefault();
+        setDetail(infos[Number(ev.target.closest("[data-tile]").dataset.tile)]);
+      }
+    });
+
+    const wrap = h("figure", { class: "tm", "aria-labelledby": `${uid}-cap` },
+      h("div", { class: "tm-head" }, h("figcaption", { id: `${uid}-cap`, class: "tm-cap" }, "Holdings as tiles"), radios),
+      crumbs,
+      h("div", { class: "tm-body" }, map, side),
+      detail,
+      h("p", { class: "tm-note" },
+        "Area is percent of net assets. Hatched tiles are rows this file does not list (in the full data of the release) or funds that could not be looked through. ",
+        h("a", { href: "#dist-alt" }, "The same weights as bars and tables"), "."),
+      provenance(f, rows));
+
+    // Draw once the figure is in the page and its width is known; redraw when the width changes.
+    // A timer, not only an animation frame, so a page opened in a background tab draws too.
+    let started = false;
+    const start = () => {
+      if (started || !wrap.isConnected) return;
+      started = true;
+      draw();
+      // A tap anywhere outside the map closes a tooltip opened by tapping a tile.
+      const outside = (ev) => {
+        if (!wrap.isConnected) return document.removeEventListener("pointerdown", outside);
+        if (!map.contains(ev.target)) hideTip();
+      };
+      document.addEventListener("pointerdown", outside);
+      if (typeof ResizeObserver === "function") {
+        let pending = 0;
+        const ro = new ResizeObserver(() => {
+          if (!wrap.isConnected) return ro.disconnect();
+          clearTimeout(pending);
+          pending = setTimeout(() => {
+            if (Math.abs(Math.round(map.clientWidth) - st.width) > 2) draw();
+          }, 80);
+        });
+        ro.observe(map);
+      }
+    };
+    requestAnimationFrame(start);
+    setTimeout(start, 30);
+    return wrap;
   }
 
   function topTenCard(f, rows, t, bd) {

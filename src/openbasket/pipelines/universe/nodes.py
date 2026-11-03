@@ -64,7 +64,8 @@ PART_SCHEMA = pa.schema(
         ("asset_class", _STR), ("country", _STR), ("sector", _STR),
         ("source", _STR), ("source_ref", _STR), ("source_url", _STR), ("as_of", _STR),
         ("issuer_name", _STR), ("issuer_lei", _STR), ("title", _STR), ("ticker", _STR), ("cusip", _STR),
-        ("isin_source", _STR), ("depth", pa.int32()), ("n_paths", pa.int32()), ("via_fund", _STR), ("note", _STR),
+        ("isin_source", _STR), ("match_score", pa.float64()), ("depth", pa.int32()), ("n_paths", pa.int32()),
+        ("via_fund", _STR), ("note", _STR),
     ]
 )
 

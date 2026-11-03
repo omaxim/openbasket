@@ -17,6 +17,10 @@ Each quarterly ZIP holds tab-delimited tables. The ones used here:
 ``IDENTIFIERS``
     Zero or more identifiers per ``HOLDING_ID``, among them ``IDENTIFIER_ISIN``
     and ``IDENTIFIER_TICKER``.
+``DEBT_SECURITY``
+    For a bond: ``MATURITY_DATE`` (``01-JUL-2044``), ``COUPON_TYPE`` and
+    ``ANNUALIZED_RATE`` (the coupon in percent). Used to match bonds that
+    statutory reports name without an ISIN.
 
 A quarter's file holds filings for several report periods, including late
 amendments to old ones, so :func:`latest_filings` keeps one filing per series.
@@ -39,9 +43,12 @@ logger = logging.getLogger(__name__)
 #: SEC N-PORT data sets are US government works in the public domain.
 REDISTRIBUTION = "public"
 
-TABLES = ("SUBMISSION", "FUND_REPORTED_INFO", "FUND_REPORTED_HOLDING", "IDENTIFIERS", "REGISTRANT", "DESC_REF_OTHER")
+TABLES = (
+    "SUBMISSION", "FUND_REPORTED_INFO", "FUND_REPORTED_HOLDING", "IDENTIFIERS", "REGISTRANT", "DESC_REF_OTHER",
+    "DEBT_SECURITY",
+)
 #: Tables a quarter may lack without failing the conversion.
-OPTIONAL_TABLES = ("REGISTRANT", "DESC_REF_OTHER")
+OPTIONAL_TABLES = ("REGISTRANT", "DESC_REF_OTHER", "DEBT_SECURITY")
 
 #: Asset categories that are derivatives; their reference instrument can be looked through.
 DERIVATIVE_CATS = ("DE", "DIR", "DCR", "DCO", "DFE", "DO")

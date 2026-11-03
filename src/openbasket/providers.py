@@ -14,6 +14,10 @@ Matching an input ISIN to a fund, in order:
    the series' own does not count against it);
 4. OpenFIGI: the ISIN's US ticker, looked up in SEC's fund ticker list.
 
+Lines an issuer adapter gives without any identifier (statutory reports name
+holdings only) are matched to ISINs by name when ``name_matching`` is set;
+see :mod:`openbasket.matching`.
+
 Holdings sources are tried in ``source_order``; see
 :func:`openbasket.lookthrough.choose` for how one is picked. Each source's
 outcome for a fund (``ok``, ``empty``, ``top10_only``, ``http_403``,
@@ -47,6 +51,7 @@ from .countries import country_code, country_label
 from .datasets import connection
 from .identifiers import cusip_to_isin, is_placeholder_cusip, is_valid_isin, isin_to_cusip, normalise_ticker
 from .lookthrough import FundRef, Holdings, Line
+from .matching import ISIN_SOURCE as NAME_MATCH, NameMatcher, Named, index_of, peer_candidates
 from .sources import FULL_MODE, PUBLIC_MODE, ishares, nport, publish_mode, redistribution, spdr
 from .sources.issuers import PUBLIC, FetchContext, IssuerAdapter, validate_holdings
 from .sources.openfigi import OpenFIGI
@@ -90,6 +95,7 @@ class DataProviders:
         max_issuer_leis: int = 3,
         mode: str = FULL_MODE,
         run_locally_url: str | None = None,
+        name_matching: dict | None = None,
     ):
         """``stop_at_pct`` stops reading further sources once one resolves that
         much, which spares a universe run the network calls whose answer
@@ -102,7 +108,10 @@ class DataProviders:
         under more than ``max_issuer_leis`` fund series LEIs is not used to match
         a fund. ``mode`` is ``publish.mode``: ``"public"`` never reads a
         ``local_only`` issuer's holdings; ``run_locally_url`` is the page
-        its funds' notes point to."""
+        its funds' notes point to. ``name_matching`` turns on matching adapter lines without
+        identifiers to ISINs by name: ``{"security_terms": path, "firds": path,
+        "figi_cache": path, "peers": {fund ISIN: [peer ISINs]}, "index_peers": bool}``;
+        the matcher is built on first use."""
         unknown = set(source_order) - set(SOURCES)
         if unknown:
             raise ValueError(f"Unknown sources {sorted(unknown)}; choose from {SOURCES}")
@@ -134,6 +143,10 @@ class DataProviders:
         self.run_locally_url = run_locally_url or RUN_LOCALLY_URL
         self._fund_holding_index: tuple[dict, dict, list] | None = None
         self.issuer_cache_dir = issuer_cache_dir
+        self.name_matching = dict(name_matching) if name_matching else None
+        self._matcher: NameMatcher | None = None
+        self._peer_cache: dict[str, list] = {}
+        self._index_peer: dict[str, str] | None = None
         self.cusip_isin = {c: v for c, v in (cusip_isin or {}).items() if not is_placeholder_cusip(c)}
         self.sedol_isin = sedol_isin or {}
         #: fund key -> {source: outcome of the last read}, and fund key -> a plain-language reason.
@@ -589,8 +602,107 @@ class DataProviders:
                     country=country_label(r.get("country")), sector=_text(r.get("sector")),
                 )
             )
+        if self.name_matching is not None:
+            self._match_names(lines, records, p)
         return Holdings(adapter.name, got.as_of, lines, source_ref=f"{adapter.title} holdings {got.url}",
                         source_url=self._product_page(iid) or got.url)
+
+    # -- names to ISINs -------------------------------------------------------
+
+    def name_matcher(self) -> NameMatcher | None:
+        """The name matcher, built on first use; ``None`` when name matching is off or cannot be built."""
+        if self.name_matching is None:
+            return None
+        if self._matcher is None:
+            o = self.name_matching
+            try:
+                self._matcher = NameMatcher.from_paths(
+                    self.security_rel, o.get("security_terms"), o.get("figi_cache"), o.get("firds"))
+            except Exception as exc:  # matching is a bonus: without it the lines stay unresolved
+                logger.warning("Name matching is off: the matcher could not be built: %s: %s", type(exc).__name__, exc)
+                self.name_matching = None
+                return None
+        return self._matcher
+
+    def _match_names(self, lines: list[Line], records: list[dict], product: dict) -> None:
+        """Give lines that carry no identifier at all an ISIN found by their name (see :mod:`openbasket.matching`)."""
+        todo = [
+            i for i, (l, r) in enumerate(zip(lines, records))
+            if not l.isin and not r.get("cusip") and not r.get("sedol") and not r.get("ticker") and l.name
+            and (l.asset_class or "equity") in ("equity", "preferred equity", "debt") and not r.get("residual")
+        ]
+        if not todo:
+            return
+        matcher = self.name_matcher()
+        if matcher is None:
+            return
+        named = [
+            Named(lines[i].name, lines[i].asset_class, country_code(lines[i].country), _text(records[i].get("currency")),
+                  lines[i].weight_pct)
+            for i in todo
+        ]
+        reported = {l.isin for l in lines if l.isin}
+        for i, m in zip(todo, matcher.match_all(named, self._peers(product), reported)):
+            if m is not None:
+                lines[i].isin, lines[i].isin_source, lines[i].match_score = m.isin, NAME_MATCH, m.score
+
+    def _peers(self, product: dict) -> list:
+        """Candidates from peer funds: configured for this fund, or physical funds on the same index.
+
+        A peer is an issuer fund (its own file, with ISINs) or an N-PORT series.
+        A swap-based fund is never a peer: its file lists the substitute basket.
+        """
+        o = self.name_matching or {}
+        isin = str(product.get("isin") or "")
+        ids = list((o.get("peers") or {}).get(isin, []))
+        if not ids and o.get("index_peers", True):
+            idx = index_of(product.get("fund_name"))
+            if idx:
+                ids = self._index_peers(idx, isin)
+        out = []
+        for pid in ids[:2]:
+            if pid not in self._peer_cache:
+                self._peer_cache[pid] = self._peer_lines(pid)
+            out += self._peer_cache[pid]
+        return out
+
+    def _index_peers(self, idx: str, own_isin: str) -> list[str]:
+        """The largest iShares or SPDR fund named after index ``idx`` alone, never a swap-based one."""
+        if self._index_peer is None:
+            best: dict[str, tuple[float, str]] = {}
+            for isin, r in self.issuer_products.iterrows():
+                name = str(r.get("fund_name") or "")
+                if r.get("issuer") not in BUILTIN_ISSUERS or r.get("replication") == "swap" or "swap" in name.lower():
+                    continue
+                key = index_of(name)
+                if key is None:
+                    continue
+                size = pd.to_numeric(r.get("total_net_assets"), errors="coerce")
+                size = 0.0 if pd.isna(size) else float(size)
+                if key not in best or size > best[key][0]:
+                    best[key] = (size, isin)
+            self._index_peer = {k: v[1] for k, v in best.items()}
+        peer = self._index_peer.get(idx)
+        return [peer] if peer and peer != own_isin else []
+
+    def _peer_lines(self, pid: str) -> list:
+        """A peer fund's lines that carry an ISIN, as match candidates; empty when it has none."""
+        ref = self.resolve_ref(pid) or self._issuer_ref(pid)
+        if ref is None and is_valid_isin(pid):
+            series_id = self._series_from_nport(pid)
+            ref = self._ref(series_id, None, "nport_lei") if series_id else None
+        if ref is None:
+            logger.info("Name matching: peer %s not found", pid)
+            return []
+        h = None
+        if ref.issuer_id:
+            h, _, _ = self._read_issuer(ref.issuer_id)
+        if (h is None or not h.lines) and ref.series_id:
+            h = self._from_nport(ref.series_id)
+        if h is None:
+            return []
+        return peer_candidates([(l.isin, l.name or l.issuer_name, l.weight_pct) for l in h.lines
+                                if l.isin and l.isin_source != NAME_MATCH], source=f"peer {h.source} {pid}")
 
     @lru_cache(maxsize=1024)
     def _nport_lines(self, series_id: str) -> tuple[pd.DataFrame, str | None]:

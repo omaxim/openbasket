@@ -16,6 +16,10 @@ lookthrough:
   # "issuer" reads public adapters (CVM, CNMV); local_only issuers answer
   # local_only without a request.
   source_order: [issuer, tickerinside, nport]
+  # Name matching serves the statutory-report adapters, which are local_only,
+  # and its peers are issuer files; the public build does not use it.
+  name_matching: false
+  name_matching_index_peers: false
 
 universe:
   # Every list: N-PORT, the public adapters, and the local_only issuers'

@@ -10,7 +10,10 @@ one test file and one page in this folder. Nothing else needs editing.
    - `holdings(product, ctx)`, returning an `IssuerHoldings` with the as-of
      date read from the issuer's own file, the URL it came from, and a frame
      with `HOLDING_COLUMNS`. Weights are percent of net assets exactly as
-     reported: never rescale them.
+     reported: never rescale them. Give every identifier the file has; a
+     line with none is matched to an ISIN by its name when
+     `lookthrough.name_matching` is on (`openbasket.matching`), so also give
+     its `asset_class`, `country` and `currency` where the file prints them.
    - `credit`, `licence` and `homepage`, which are shown next to every row
      from this source.
    - `redistribution`: `"public"` only when the source's licence allows its

@@ -81,6 +81,8 @@ class Line:
     country: str | None = None
     #: The source's sector label.
     sector: str | None = None
+    #: For an ISIN found by the line's name (``isin_source`` ``name_match``): how sure the match is, 0.9-1.
+    match_score: float | None = None
 
 
 @dataclass
@@ -325,6 +327,7 @@ def look_through(
                 "country": line.country,
                 "sector": line.sector,
                 "isin_source": line.isin_source,
+                "match_score": line.match_score,
                 "source": chosen.source,
                 "source_ref": chosen.source_ref,
                 "source_url": chosen.source_url,
@@ -383,6 +386,11 @@ def look_through(
     for r in res.leaves:
         by_source[r["source"]] = by_source.get(r["source"], 0.0) + r["weight_pct"]
     summary["sources_used"] = "; ".join(f"{k}={v:.2f}%" for k, v in sorted(by_source.items(), key=lambda kv: -kv[1]))
+    named = sum(r["weight_pct"] for r in res.leaves if r.get("isin_source") == "name_match")
+    summary["name_matched_pct"] = round(named, 6)
+    if named:
+        add_note(f"{named:.2f}% of net assets has an ISIN matched by the holding's name (isin_source name_match), "
+                 "not reported by the source")
     status, notes = plausibility(summary, min_resolved_pct)
     summary["status"] = status
     for n in notes:

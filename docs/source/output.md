@@ -17,7 +17,8 @@ row per input.
 | `source` | Where the holdings came from: `ishares`, `spdr`, an issuer adapter's name, `tickerinside`, `nport`, `security_master`. |
 | `as_of` | Holdings date of that source. |
 | `issuer_name`, `issuer_lei` | The issuer. For a bond this is who owes the money. |
-| `isin_source` | `reported` by the fund or issuer; `reported_for_cusip` in another N-PORT filing; for issuer files, `nport_cusip` or `nport_sedol` (looked up in N-PORT); `derived_cusip`; or `ticker_match`. |
+| `isin_source` | `reported` by the fund or issuer; `reported_for_cusip` in another N-PORT filing; for issuer files, `nport_cusip` or `nport_sedol` (looked up in N-PORT); `derived_cusip`; `ticker_match`; or `name_match`, found by the holding's name (statutory reports name holdings only; see [Matching names to ISINs](sources/fund-reports.md#matching-names-to-isins)). |
+| `match_score` | For `name_match` rows, how sure the match is: 0.9 to 1. Empty otherwise. |
 | `figi_name`, `figi_ticker`, `security_type`, `market_sector`, `composite_figi` | From OpenFIGI. An empty `composite_figi` on a derived ISIN is worth checking. |
 | `depth` | 0 for direct holdings, 1 for holdings of a sub-fund, and so on. |
 | `n_paths` | How many routes reach this ISIN (e.g. held directly and via a sub-fund). |

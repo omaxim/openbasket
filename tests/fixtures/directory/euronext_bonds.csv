@@ -1,0 +1,7 @@
+Name;ISIN;Market;Maturity;Currency;"last Price";"last Trade MIC Time";"Time Zone";Volume;Issuer;"Closing Price";"Closing Price DateTime"
+"European Bonds"
+"03 Nov 2026"
+"All datapoints provided as of end of last active trading day."
+"EXAMPLE 3% 2031";FR0000000150;"Euronext Paris";15/06/2031;%;-;-;CET;-;"Example Paris SA";-;-
+"EXAMPLE 3% 2031";FR0000000150;EuroTLX;15/06/2031;%;-;-;CET;-;"Example Paris SA";-;-
+EXNO01;NO0000000161;"Oslo Børs";22/05/2028;%;-;-;CET;-;"Example Bidco Plc";-;-

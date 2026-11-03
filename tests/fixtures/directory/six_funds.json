@@ -1,0 +1,9 @@
+{"protocolVersion":"fqs.json#17x","pageNumber":1,"pageSize":99999,"totalRows":5,"delayMinutes":15,"delayedDateTime":"20261103T15:26:28.882","copyRight":"(c) Copyright by SIX Group Ltd 2026. All rights reserved.",
+"colNames":["ISIN","ValorNumber","ValorSymbol","FundLongName","IssuerNameFull","IssuerNameShort","LegalStructureCountryCode","AssetClassCode","AssetClassDesc","ReplicationMethodDesc","FundUnderlyingDescription","FundCurrency","TradingBaseCurrency","ProductLine","ProductLineDesc","ManagementFee","FirstTradingDate"],
+"rowData":[
+["CH0000000015",1000001,"EXSMI","iShares Example SMI ETF (CH)","BlackRock Asset Management Schweiz AG","BlackRock Asset Management CH","CH","EQUITY_DEVELOPED_MARKETS","Equity Developed Markets","Physical","Example Swiss Index","CHF","CHF","ET","Exchange Traded Funds",0.1,20010315],
+["IE0000000020",1000002,"EXUBS","UBS Core Example UCITS ETF USD acc","UBS (Irl) ETF plc","UBS (Irl) ETF plc","IE","FIXED_INCOME","Fixed Income","physical","Example Bond Index","USD","CHF","ET","Exchange Traded Funds",0.05,20240101],
+["IE0000000020",1000002,"EXUBS","UBS Core Example UCITS ETF USD acc","UBS (Irl) ETF plc","UBS (Irl) ETF plc","IE","FIXED_INCOME","Fixed Income","physical","Example Bond Index","USD","USD","ET","Exchange Traded Funds",0.05,20240101],
+["LU0000000033",1000003,"EXXSW","Xtrackers Example Swap UCITS ETF 1C","Xtrackers","Xtrackers","LU","EQUITY_STRATEGY","Equity Strategy","Synthetic","Example Strategy Index","EUR","EUR","ET","Exchange Traded Funds",0.2,20150601],
+["CH0000000072",1000004,"EXSCF","Swisscanto (CH) Example Fund AA","Swisscanto Fondsleitung AG","Swisscanto Fondsleitung AG","CH","REAL_ESTATE","Real Estate","Unknown","Unknown","CHF","CHF","PF","Sponsored Funds",0,20250306]
+],"elapsed":12}

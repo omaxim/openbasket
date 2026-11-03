@@ -1,0 +1,8 @@
+"Instrument Fullname";"ESG Classification";Name;ISIN;Symbol;Market;Currency;"Open Price";"High Price";"low Price";"last Price";"last Trade MIC Time";"Time Zone";Volume;Turnover;"Closing Price";"Closing Price DateTime"
+"European Trackers"
+"03 Nov 2026"
+"All datapoints provided as of end of last active trading day."
+"Amundi Example UCITS ETF Acc";"ESG ETF art. 8";"AM EXAMPLE";FR0000000085;EXAM;"Euronext Amsterdam, Paris";EUR;1.0;1.0;1.0;1.0;"02/11/2026 17:30";CET;1;1.0;1.0;02/11/2026
+"Amundi Example UCITS ETF Acc";"ESG ETF art. 8";"AM EXAMPLE";FR0000000085;EXAM;"ETF Plus";EUR;1.0;1.0;1.0;1.0;"02/11/2026 17:30";CET;1;1.0;1.0;02/11/2026
+"Leverage Shares Example ETP Securities";-;"EX ETP";XS0000000066;EXLS;"Euronext Amsterdam";USD;-;-;-;-;-;CET;-;-;-;-
+"UBS Core Example UCITS ETF USD acc";-;"UBS EXAMPLE";IE0000000020;EXUB;"Euronext Paris - Multi-currency Trading";USD;-;-;-;-;-;CET;-;-;-;-

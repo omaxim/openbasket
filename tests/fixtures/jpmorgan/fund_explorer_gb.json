@@ -1,0 +1,50 @@
+[
+ {
+  "name": "Example Equity Active UCITS ETF",
+  "displayName": "Example Equity Active UCITS ETF",
+  "shareclassName": "JPM Example Equity Active UCITS ETF - USD (acc)",
+  "identifier": "IE00BMDV7354",
+  "ticker": "JREA",
+  "displayId": "JREA",
+  "assetClass": "Equity",
+  "currencyCode": "USD",
+  "shareclassCurrencyCode": "USD",
+  "domicile": "Ireland",
+  "fundIdentifier": "F1",
+  "fundCmsId": null,
+  "fundTypeCode": "N_ETF",
+  "nav": 10.0
+ },
+ {
+  "name": "Example Equity Active UCITS ETF",
+  "displayName": "Example Equity Active UCITS ETF",
+  "shareclassName": "JPM Example Equity Active UCITS ETF - USD (dist)",
+  "identifier": "IE000P334X90",
+  "ticker": "JREX",
+  "displayId": "JREX",
+  "assetClass": "Equity",
+  "currencyCode": "USD",
+  "shareclassCurrencyCode": "USD",
+  "domicile": "Ireland",
+  "fundIdentifier": "F1",
+  "fundCmsId": null,
+  "fundTypeCode": "N_ETF",
+  "nav": 10.0
+ },
+ {
+  "name": "Bad check digit",
+  "displayName": "Bad check digit",
+  "shareclassName": "Bad",
+  "identifier": "IE00BMDV7355",
+  "ticker": "BAD",
+  "displayId": "BAD",
+  "assetClass": "Equity",
+  "currencyCode": "USD",
+  "shareclassCurrencyCode": "USD",
+  "domicile": "Ireland",
+  "fundIdentifier": "F2",
+  "fundCmsId": null,
+  "fundTypeCode": "N_ETF",
+  "nav": 10.0
+ }
+]

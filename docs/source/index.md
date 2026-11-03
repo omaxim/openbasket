@@ -16,5 +16,6 @@ usage
 output
 sources
 plan
+data-api
 api
 ```

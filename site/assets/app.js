@@ -704,11 +704,13 @@
   /* ---------- distribution charts ---------- */
 
   const NOT_STATED = "Not stated by the source";
+  /* The publish pipeline labels rows without a value "Unknown"; older files may use null. */
+  const unknown = (v) => v == null || v === "" || v === "Unknown";
   const DIMENSIONS = [
-    { key: "asset_class", title: "By asset class", label: (v) => (v ? v.charAt(0).toUpperCase() + v.slice(1) : NOT_STATED) },
-    { key: "country", title: "By country", label: (v) => (v ? countryName(v) : NOT_STATED) },
-    { key: "sector", title: "By sector", label: (v) => v || NOT_STATED },
-    { key: "source", title: "By source", label: (v) => (v ? sourceName(v) : NOT_STATED) },
+    { key: "asset_class", title: "By asset class", label: (v) => (unknown(v) ? NOT_STATED : v.charAt(0).toUpperCase() + v.slice(1)) },
+    { key: "country", title: "By country", label: (v) => (unknown(v) ? NOT_STATED : countryName(v)) },
+    { key: "sector", title: "By sector", label: (v) => (unknown(v) ? NOT_STATED : v) },
+    { key: "source", title: "By source", label: (v) => (unknown(v) ? NOT_STATED : sourceName(v)) },
   ];
 
   /** Entries of one breakdown (core.chartEntries), coloured: wine fading to paper, others stone. */
@@ -778,7 +780,7 @@
   }
 
   function provenance(f, rows) {
-    const ids = ((f.breakdowns && f.breakdowns.source) || []).map((p) => p[0]).filter((x) => x && x !== UNRESOLVED);
+    const ids = ((f.breakdowns && f.breakdowns.source) || []).map((p) => p[0]).filter((x) => x && x !== UNRESOLVED && x !== "Unknown");
     const srcIds = ids.length ? [...new Set(ids)] : [f.source];
     const dates = rows.map((r) => r.as_of).filter(Boolean).sort();
     const lo = dates[0] || f.as_of;
@@ -808,7 +810,7 @@
       const aria = `${d.title}: ${top || "no resolved holdings"}; ${UNRESOLVED} ${fmtPct(un.value)}%.`;
       const bar = strip(shown, aria);
       const resolvedEntries = all.filter((e) => !e.unresolved);
-      const noLabels = resolvedEntries.length > 0 && resolvedEntries.every((e) => e.key == null || e.key === "");
+      const noLabels = resolvedEntries.length > 0 && resolvedEntries.every((e) => unknown(e.key));
       return h("figure", { class: bar ? "dist-card" : "dist-card no-strip", role: bar ? null : "group", "aria-label": bar ? null : aria },
         h("figcaption", {}, h("h4", {}, d.title),
           noLabels ? h("p", { class: "dist-sub" }, `The source gives no ${d.title.replace(/^By /, "")} for these holdings.`) : null),

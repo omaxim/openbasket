@@ -57,6 +57,8 @@ FUND_KEYS = [
     "n_rows", "truncated", "listed_pct", "breakdowns", "fields", "constituents", "unresolved", "full_data_url",
 ]
 UNRESOLVED = "Unresolved"
+#: Breakdown label for rows whose source gives no value, as the publish pipeline writes it.
+UNKNOWN = "Unknown"
 BUILT_AT = "2026-11-03T12:00:00Z"
 PRODUCT_LIST_DATE = "2026-11-03"
 
@@ -306,10 +308,10 @@ def _rows(lines: list[dict], source: str, as_of: str, via: str, depth: int = 0) 
 
 
 def _breakdown(rows: list[list], col: int, unresolved: float) -> list[list]:
-    acc: dict[object, float] = defaultdict(float)
+    acc: dict[str, float] = defaultdict(float)
     for r in rows:
-        acc[r[col]] += r[2]
-    items = sorted(acc.items(), key=lambda kv: (-kv[1], kv[0] is None, str(kv[0])))
+        acc[r[col] or UNKNOWN] += r[2]
+    items = sorted(acc.items(), key=lambda kv: (-kv[1], kv[0]))
     return [[k, _r(v)] for k, v in items] + [[UNRESOLVED, _r(unresolved)]]
 
 

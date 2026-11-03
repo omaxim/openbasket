@@ -252,8 +252,8 @@ def test_fixture_fund_files_follow_contract():
         assert {c[4] for c in rows} <= set(listed)
         assert all(c[8] is None or isinstance(c[8], str) for c in rows)
         assert fund["unresolved"]["weight_pct"] == pytest.approx(100 - fund["resolved_pct"], abs=1e-4)
-        assert fund["unresolved"]["source"] == fund["source"]
-        assert fund["unresolved"]["source_url"] == fund["source_url"]
+        assert fund["unresolved"].get("source", fund["source"]) == fund["source"]
+        assert fund["unresolved"].get("source_url", fund["source_url"]) == fund["source_url"]
         assert fund["truncated"] == (fund["n_rows"] > len(rows))
         assert fund["n_constituents"] <= fund["n_rows"]
         assert fund["listed_pct"] == pytest.approx(sum(c[2] for c in rows), abs=1e-3)
@@ -276,6 +276,8 @@ def test_fixture_breakdowns_cover_the_full_holdings():
             entries = b[key]
             assert entries[-1] == ["Unresolved", pytest.approx(fund["unresolved_pct"], abs=1e-4)], (fund["id"], key)
             assert all(e[0] != "Unresolved" for e in entries[:-1])
+            # Rows without a value are labelled "Unknown", never null.
+            assert all(isinstance(e[0], str) and e[0] for e in entries), (fund["id"], key)
             values = [e[1] for e in entries[:-1]]
             assert values == sorted(values, reverse=True), (fund["id"], key)
             # Over every row of the fund, so resolved + unresolved, never rescaled.
@@ -400,6 +402,16 @@ def test_core_chart_entries_keep_unresolved_last_and_group_the_tail():
     # Unresolved is never dropped: without an entry it comes from the fund's figure, negative included.
     out = _core('core.chartEntries([["US", 101.3]], -1.3, null, 8)')
     assert out["shown"][-1]["value"] == -1.3 and out["shown"][-1]["unresolved"]
+
+
+@needs_node
+def test_core_local_breakdowns_label_missing_values_unknown():
+    rows = [{"isin": "A", "name": "a", "weight": 60.0, "asset": "equity", "country": "US", "sector": "", "source": "x"},
+            {"isin": "B", "name": "b", "weight": 39.0, "asset": "equity", "country": "", "sector": "", "source": "x"}]
+    out = _core(f"core.localBreakdowns({json.dumps(rows)}, 1.0)")
+    assert out["country"] == [["US", 60.0], ["Unknown", 39.0], ["Unresolved", 1.0]]
+    assert out["sector"] == [["Unknown", 99.0], ["Unresolved", 1.0]]
+    assert out["top10_pct"] == 99.0
 
 
 @needs_node

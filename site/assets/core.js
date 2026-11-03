@@ -9,6 +9,8 @@
   "use strict";
 
   const UNRESOLVED = "Unresolved";
+  /** Breakdown label for rows whose source gives no value (data-api.md v1.1). */
+  const UNKNOWN = "Unknown";
   const ISIN_RE = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
   const SERIES_RE = /^S\d{9}$/;
 
@@ -142,8 +144,8 @@
   function localBreakdowns(rows, unresolved) {
     const by = (k) => {
       const m = new Map();
-      for (const r of rows) m.set(r[k] || null, (m.get(r[k] || null) || 0) + r.weight);
-      return [...m.entries()].sort((a, b) => b[1] - a[1]).concat([[UNRESOLVED, unresolved]]);
+      for (const r of rows) m.set(r[k] || UNKNOWN, (m.get(r[k] || UNKNOWN) || 0) + r.weight);
+      return [...m.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).concat([[UNRESOLVED, unresolved]]);
     };
     return { asset_class: by("asset"), country: by("country"), sector: by("sector"), source: by("source"),
       top10_pct: sum(topHoldings(rows).map((x) => x.value)) };
@@ -192,7 +194,7 @@
   }
 
   return {
-    UNRESOLVED, ISIN_RE, SERIES_RE, MATCHED_VIA, compact, sum, isValidIsin, idFromHash, idFromUrl, hashRoute,
+    UNRESOLVED, UNKNOWN, ISIN_RE, SERIES_RE, MATCHED_VIA, compact, sum, isValidIsin, idFromHash, idFromUrl, hashRoute,
     matchedVia, rowsOf, totals, chartEntries, topHoldings, localBreakdowns, closingRows, csvCell, linkParts,
   };
 });

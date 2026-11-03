@@ -35,6 +35,10 @@ docs = [
     "myst-parser>=3",
     "furo",
 ]
+# Static pipeline diagram for the site: `kedro viz build`.
+viz = [
+    "kedro-viz>=12.5,<13",
+]
 
 [project.scripts]
 openbasket = "openbasket.__main__:main"

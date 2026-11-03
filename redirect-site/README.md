@@ -1,9 +1,21 @@
 # openbasket-redirect
 
-Serves `https://openbasket.leith.org.uk` and sends every request to
-`https://openbasket.leithresearch.org`, keeping the path, query and hash, so
-old links such as `https://openbasket.leith.org.uk/api/v1/meta.json` still
-work.
+Serves `https://openbasket.leith.org.uk` and sends **browsers** on to
+`https://openbasket.leithresearch.org`, keeping the path, query and hash.
+
+This is a browser redirect only. GitHub Pages cannot send a server-side
+redirect (301/302): for any path but the root it answers with `404.html` and
+HTTP status 404, and the page then redirects with JavaScript. So:
+
+- A link opened in a browser, such as
+  `https://openbasket.leith.org.uk/docs/usage.html`, lands on the same page
+  of the main site.
+- `curl`, `fetch`, `requests` and any other API client get an HTTP 404 and an
+  HTML page, not JSON. API clients must use
+  `https://openbasket.leithresearch.org/api/v1/...` directly; the page says
+  so.
+
+Files:
 
 - `index.html` handles the root; GitHub Pages serves `404.html` for every
   other path, so both files carry the same redirect.

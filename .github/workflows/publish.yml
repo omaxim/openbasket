@@ -7,15 +7,19 @@ on:
   workflow_dispatch:
     inputs:
       sample:
-        description: "Build only this many funds (empty = the full universe)"
+        description: "Build only this many funds per universe source (empty = the full universe). Sample runs are not released or deployed unless deploy_sample is ticked."
         type: number
         required: false
+      deploy_sample:
+        description: "Release and deploy a sample run anyway. This REPLACES this month's production release files and the live site with the sample."
+        type: boolean
+        default: false
       release:
-        description: "Create or update the GitHub Release for this month"
+        description: "Create or update the GitHub Release for this month (full runs, or sample runs with deploy_sample)"
         type: boolean
         default: true
       min_funds:
-        description: "Fail unless at least this many funds are built (empty = default)"
+        description: "Fail unless at least this many funds are published (empty = default)"
         type: number
         required: false
 
@@ -32,6 +36,10 @@ defaults:
 
 env:
   SITE_URL: https://openbasket.leithresearch.org
+  # No usage data from Kedro or Kedro-Viz; with telemetry on, Kedro-Viz would
+  # also put an analytics script into the published pipeline page.
+  KEDRO_DISABLE_TELEMETRY: "1"
+  DO_NOT_TRACK: "1"
 
 jobs:
   build:
@@ -39,14 +47,16 @@ jobs:
     timeout-minutes: 330
     outputs:
       tag: ${{ steps.settings.outputs.tag }}
+      live: ${{ steps.settings.outputs.live }}
     env:
       SAMPLE: ${{ inputs.sample }}
+      DEPLOY_SAMPLE: ${{ inputs.deploy_sample }}
       # A sample run only has to produce something; a full run must cover the universe.
       MIN_FUNDS: ${{ inputs.min_funds || (inputs.sample && '1') || vars.OPENBASKET_MIN_FUNDS || '10000' }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           python-version: "3.12"
           activate-environment: true
@@ -54,7 +64,7 @@ jobs:
           cache-dependency-glob: pyproject.toml
 
       - name: Install
-        run: uv pip install -e '.[dev,docs]'
+        run: uv pip install -e '.[dev,docs,viz]'
 
       - name: Resolve run settings
         id: settings
@@ -64,22 +74,29 @@ jobs:
             exit 1
           fi
           [[ "$MIN_FUNDS" =~ ^[0-9]+$ ]] || { echo "::error::min_funds must be a whole number, got '$MIN_FUNDS'"; exit 1; }
+          # Only full runs (and sample runs explicitly marked deploy_sample) touch
+          # the production release and site.
+          if [ -z "$SAMPLE" ] || [ "$DEPLOY_SAMPLE" = "true" ]; then live=true; else live=false; fi
+          if [ -n "$SAMPLE" ] && [ "$live" = "true" ]; then
+            echo "::warning::deploy_sample is set: this sample run replaces the production release files and site."
+          fi
           quarters=$(python -c "import yaml; print('-'.join(yaml.safe_load(open('conf/base/parameters.yml'))['nport']['quarters']))")
           {
             echo "tag=$(date -u +%Y-%m)"
             echo "quarters=$quarters"
+            echo "live=$live"
           } >> "$GITHUB_OUTPUT"
 
       - name: Restore N-PORT downloads
         id: nport-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: data/01_raw/nport
           key: nport-${{ steps.settings.outputs.quarters }}
           restore-keys: nport-
 
       - name: Restore OpenFIGI cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: data/03_primary/openfigi_cache.parquet
           key: openfigi-${{ github.run_id }}-${{ github.run_attempt }}
@@ -103,7 +120,7 @@ jobs:
 
       - name: Save N-PORT downloads
         if: steps.nport-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: data/01_raw/nport
           key: ${{ steps.nport-cache.outputs.cache-primary-key }}
@@ -123,12 +140,13 @@ jobs:
       - name: Save OpenFIGI cache
         # Kept even when a later step fails, so a rerun does not repeat the lookups.
         if: always() && hashFiles('data/03_primary/openfigi_cache.parquet') != ''
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: data/03_primary/openfigi_cache.parquet
           key: openfigi-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Publish
+        # Writes build/site/api/v1 and build/release (publish.site_dir, publish.release_dir).
         run: kedro run --pipeline=publish --params=publish.release_tag=${{ steps.settings.outputs.tag }}
 
       - name: Docs
@@ -137,114 +155,29 @@ jobs:
       - name: Assemble site
         run: python scripts/assemble_site.py --docs docs/build/html --api build/site/api --out build/pages
 
-      - name: Quality check
+      - name: Pipeline diagram
+        # kedro viz build writes ./build of the project it runs in; the script
+        # runs it in a temporary copy so build/site, build/release and
+        # build/pages are left alone, then copies the result here.
+        run: python scripts/build_pipeline_viz.py --out build/pages/pipeline
+
+      - name: Check build
+        # Fails, so nothing is released or deployed, on too few funds, a source
+        # without name, link, licence or credit, a row without source or as-of
+        # date, or a site over GitHub Pages' 1 GB limit. Warns on stale N-PORT.
         run: |
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          report = json.loads(Path("build/release/quality-report.json").read_text())
-          meta_path = Path("build/site/api/v1/meta.json")
-          meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
-          n_funds = report.get("n_funds", meta.get("n_funds"))
-          min_funds = int(os.environ["MIN_FUNDS"])
-
-          def scalars(obj, prefix=""):
-              for key, value in obj.items():
-                  if isinstance(value, dict):
-                      yield from scalars(value, f"{prefix}{key}.")
-                  elif not isinstance(value, list):
-                      yield f"{prefix}{key}", value
-
-          lines = [
-              f"## openbasket {meta.get('release_tag', '')}",
-              "",
-              f"Funds built: **{n_funds}** (minimum {min_funds})"
-              + (f", sample of {os.environ['SAMPLE']}" if os.environ.get("SAMPLE") else ""),
-              "",
-              "| Quality report | Value |",
-              "|---|---|",
-              *(f"| `{key}` | {value} |" for key, value in scalars(report)),
-          ]
-          if meta.get("sources"):
-              lines += [
-                  "",
-                  "| Source | Funds | As of | Credit |",
-                  "|---|---|---|---|",
-                  *(
-                      f"| [{s.get('name')}]({s.get('url')}) | {s.get('n_funds', '')} "
-                      f"| {s.get('as_of_min', '')} to {s.get('as_of_max', '')} | {s.get('credit', '')} |"
-                      for s in meta["sources"]
-                  ),
-              ]
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
-              summary.write("\n".join(lines) + "\n")
-
-          if not isinstance(n_funds, int) or n_funds < min_funds:
-              print(f"::error::{n_funds} funds built, fewer than the minimum of {min_funds}; nothing is deployed or released.")
-              raise SystemExit(1)
-          PY
-
-      - name: Release notes
-        env:
-          TAG: ${{ steps.settings.outputs.tag }}
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          meta = json.loads(Path("build/site/api/v1/meta.json").read_text())
-          site = os.environ["SITE_URL"]
-          lines = [
-              f"Monthly build of [openbasket]({site}/), an aggregator that looks through "
-              "funds to the securities they hold, by ISIN.",
-              "",
-              f"Built {meta.get('built_at', '')} from {os.environ['GITHUB_SHA'][:7]}. "
-              f"{meta.get('n_funds', '')} funds, {meta.get('n_isins', '')} constituent ISINs.",
-              "",
-              "## Files",
-              "",
-              "- `openbasket-lookthrough.parquet`: every constituent row of every fund, untruncated.",
-              "- `openbasket-funds.parquet`: one row per fund, with its source and as-of date.",
-              "- `quality-report.json`: coverage figures for this build.",
-              "",
-              f"Columns and the static JSON API are described in the docs at {site}/.",
-              "",
-              "## Sources",
-              "",
-              "openbasket publishes no data of its own. Every row names its source, a link "
-              "to it and its as-of date. This build used:",
-              "",
-              "| Source | Funds | As of | Licence | Credit |",
-              "|---|---|---|---|---|",
-          ]
-          for s in meta.get("sources", []):
-              lines.append(
-                  f"| [{s.get('name')}]({s.get('url')}) | {s.get('n_funds', '')} "
-                  f"| {s.get('as_of_min', '')} to {s.get('as_of_max', '')} "
-                  f"| {s.get('licence', '')} | {s.get('credit', '')} |"
-              )
-          lines += [
-              "",
-              "Where a source's licence requires credit (TickerInside, CC BY 4.0), keep its "
-              "credit line and each row's `source_ref` in anything you publish from these files.",
-              "",
-              "Not investment advice. openbasket is not affiliated with, or endorsed by, any "
-              "fund issuer or data provider named here. Check figures against the source "
-              "before relying on them.",
-          ]
-          Path("build/release-notes.md").write_text("\n".join(lines) + "\n")
-          PY
+          python scripts/check_build.py \
+            --api build/site/api --release build/release --pages build/pages --require-pipeline \
+            --min-funds "$MIN_FUNDS" --live "${{ steps.settings.outputs.live }}" \
+            --summary "$GITHUB_STEP_SUMMARY" --notes build/release-notes.md
 
       - name: Upload site
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: build/pages
 
       - name: Upload release files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release
           path: |
@@ -255,13 +188,13 @@ jobs:
 
   release:
     needs: build
-    if: github.event_name == 'schedule' || inputs.release
+    if: needs.build.outputs.live == 'true' && (github.event_name == 'schedule' || inputs.release)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release
           path: dist
@@ -284,8 +217,11 @@ jobs:
 
   deploy:
     # After the release, so the site never links to files that are not there yet.
+    # Sample runs stop before this unless deploy_sample was ticked.
     needs: [build, release]
-    if: always() && needs.build.result == 'success' && (needs.release.result == 'success' || needs.release.result == 'skipped')
+    if: >-
+      always() && needs.build.result == 'success' && needs.build.outputs.live == 'true'
+      && (needs.release.result == 'success' || needs.release.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -297,4 +233,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

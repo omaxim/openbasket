@@ -1,0 +1,64 @@
+/* Furo restyled to the openbasket landing page and www.leithresearch.org.
+   Colours and fonts are set as furo variables in conf.py; this file covers
+   what the variables do not reach. */
+:root {
+  --ob-paper: #f6f2ec;
+  --ob-paper-2: #ede7de;
+  --ob-ink: #1b1a19;
+  --ob-ink-2: #4a4744;
+  --ob-muted: #7d7873;
+  --ob-line: #d9d2c7;
+  --ob-wine: #9c3848;
+  --ob-wine-2: #7e2c3a;
+  --ob-display: "Sora", "Inter", system-ui, sans-serif;
+  --ob-serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+  color-scheme: light;
+}
+body { -webkit-font-smoothing: antialiased; }
+
+/* light only: no theme switch */
+.theme-toggle-container { display: none !important; }
+
+/* headings as on the landing page */
+article h1, article h2, article h3, article h4 { font-family: var(--ob-display); letter-spacing: -0.02em; line-height: 1.15; font-weight: 700; }
+article h1 { font-size: clamp(2rem, 4vw, 2.6rem); font-weight: 800; margin-top: .4em; }
+article h2 { font-size: 1.6rem; margin-top: 2.2em; }
+article h3 { font-size: 1.2rem; }
+article em { font-family: var(--ob-serif); font-size: 1.08em; }
+.toc-title, .sidebar-tree .caption, .sidebar-tree :not(.caption) > .caption-text { font-family: var(--ob-display); letter-spacing: .02em; }
+
+/* wordmark: open|basket, two-tone like leith|research */
+.wm-open { font: 800 1.6rem/1 var(--ob-display); letter-spacing: -0.045em; color: var(--ob-ink); }
+.wm-basket { font: italic 400 1.85rem/1 var(--ob-serif); color: var(--ob-wine); margin-left: .22em; letter-spacing: -0.01em; }
+.ob-brand { padding: 1.2rem var(--sidebar-item-spacing-horizontal) .4rem; }
+.ob-brand .sidebar-brand { padding: 0; margin: 0 0 .35rem; display: inline-flex; flex-direction: row; align-items: baseline; white-space: nowrap; text-decoration: none; }
+.ob-sub { margin: 0 0 .7rem; font-size: .78rem; color: var(--ob-muted); }
+.ob-sub a { color: var(--ob-muted); text-decoration: none; }
+.ob-sub a:hover, .ob-back:hover { color: var(--ob-wine); }
+.ob-back { display: inline-block; font-size: .86rem; font-weight: 600; color: var(--ob-wine); text-decoration: none; }
+.mobile-header .header-center a { text-decoration: none; }
+.mobile-header .brand { font-size: 0; display: inline-flex; align-items: baseline; }
+.mobile-header .brand::before { content: "open"; font: 800 1.35rem/1 var(--ob-display); letter-spacing: -0.045em; color: var(--ob-ink); }
+.mobile-header .brand::after { content: "basket"; font: italic 400 1.55rem/1 var(--ob-serif); color: var(--ob-wine); margin-left: .22em; }
+
+/* announcement bar */
+.announcement { background: var(--ob-ink); color: var(--ob-paper); }
+.announcement-content { font-size: .82rem; padding: .45rem 1rem; }
+.announcement a { color: var(--ob-paper); text-decoration: underline; text-decoration-color: #f6f2ec66; }
+.announcement a:hover { color: #fff; }
+
+/* links, code, tables and admonitions in the Leith palette */
+a { text-underline-offset: .16em; }
+.highlight, div[class*="highlight-"] pre { border-radius: 8px; }
+div[class*="highlight-"] { border: 1px solid var(--ob-line); border-radius: 8px; }
+code.literal { border: 1px solid var(--ob-line); border-radius: 3px; padding: .05em .3em; }
+table.docutils { border: 1px solid var(--ob-line); border-radius: 8px; border-collapse: separate; border-spacing: 0; overflow: hidden; box-shadow: none; }
+table.docutils th { background: var(--ob-paper-2); font-weight: 600; }
+table.docutils td, table.docutils th { border-color: var(--ob-line); }
+.admonition, .topic { border-radius: 8px; box-shadow: none; border: 1px solid var(--ob-line); border-left: 3px solid var(--ob-wine); }
+
+/* footer disclaimer, as on the landing page */
+.ob-disclaimer { margin-top: 1.5rem; padding-top: 1.2rem; border-top: 1px solid var(--ob-line); color: var(--ob-muted); font-size: .82rem; line-height: 1.5; }
+.ob-disclaimer p { margin: 0 0 .5rem; max-width: 70ch; }
+.ob-disclaimer a { color: var(--ob-ink-2); font-weight: 600; text-decoration: none; }
+.ob-disclaimer a:hover { color: var(--ob-wine); }

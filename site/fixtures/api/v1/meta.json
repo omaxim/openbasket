@@ -1,0 +1,51 @@
+{
+  "api_version": 1,
+  "built_at": "2026-11-03T12:00:00Z",
+  "release_tag": "2026-11",
+  "release_url": "https://github.com/omaxim/openbasket/releases/tag/2026-11",
+  "full_data_url": "https://github.com/omaxim/openbasket/releases/download/2026-11/openbasket-lookthrough.parquet",
+  "n_funds": 28,
+  "n_isins": 25,
+  "sources": [
+    {
+      "id": "ishares",
+      "name": "iShares (BlackRock) fund holdings",
+      "url": "https://www.ishares.com/",
+      "licence": "Public website data; terms not reviewed",
+      "credit": "Holdings data from iShares by BlackRock",
+      "n_funds": 14,
+      "as_of_min": "2026-11-02",
+      "as_of_max": "2026-11-02"
+    },
+    {
+      "id": "spdr",
+      "name": "SPDR (State Street Global Advisors) fund holdings",
+      "url": "https://www.ssga.com/",
+      "licence": "Public website data; terms not reviewed",
+      "credit": "Holdings data from SPDR by State Street Global Advisors",
+      "n_funds": 6,
+      "as_of_min": "2026-11-02",
+      "as_of_max": "2026-11-02"
+    },
+    {
+      "id": "tickerinside",
+      "name": "TickerInside ETF holdings",
+      "url": "https://tickerinside.com/",
+      "licence": "CC BY 4.0",
+      "credit": "Data: TickerInside (CC BY 4.0), linked to the fund's TickerInside page",
+      "n_funds": 1,
+      "as_of_min": "2026-10-26",
+      "as_of_max": "2026-10-26"
+    },
+    {
+      "id": "nport",
+      "name": "SEC Form N-PORT data sets",
+      "url": "https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets",
+      "licence": "US government public data",
+      "credit": "Holdings data from SEC Form N-PORT filings",
+      "n_funds": 7,
+      "as_of_min": "2026-05-31",
+      "as_of_max": "2026-06-30"
+    }
+  ]
+}

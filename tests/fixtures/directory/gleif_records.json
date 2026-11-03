@@ -1,0 +1,7 @@
+{"meta":{"goldenCopy":{"publishDate":"2026-11-03T08:00:00Z"},"pagination":{"currentPage":1,"perPage":100,"from":1,"to":4,"total":4,"lastPage":1}},
+"data":[
+{"type":"lei-records","id":"5493000000000000UM10","attributes":{"lei":"5493000000000000UM10","entity":{"legalName":{"name":"EXAMPLE UMBRELLA PLC","language":"en"},"jurisdiction":"IE","category":"FUND"}}},
+{"type":"lei-records","id":"5493000000000000MG11","attributes":{"lei":"5493000000000000MG11","entity":{"legalName":{"name":"HSBC Example Asset Management (Europe) Limited","language":"en"},"jurisdiction":"IE","category":"GENERAL"}}},
+{"type":"lei-records","id":"5493000000000000MG12","attributes":{"lei":"5493000000000000MG12","entity":{"legalName":{"name":"UBS Example Management S.A.","language":"fr"},"jurisdiction":"LU","category":"GENERAL"}}},
+{"type":"lei-records","id":"5493000000000000BB02","attributes":{"lei":"5493000000000000BB02","entity":{"legalName":{"name":"Example Sub-Fund","language":"en"},"jurisdiction":"IE","category":"FUND"}}}
+]}

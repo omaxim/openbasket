@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FondTrim xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="FondTrim.xsd">
+  <FechaDatos>202606</FechaDatos>
+  <Entidad>
+    <Tipo>FI</Tipo>
+    <NumeroRegistro>101</NumeroRegistro>
+    <CodigoDivisaIIC>EUR</CodigoDivisaIIC>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <ClaseFondo>Fondo que replica o reproduce un índice</ClaseFondo>
+      <VocacionInversora>IIC de Gestión Pasiva</VocacionInversora>
+      <Clase>
+        <NumeroClase>0</NumeroClase>
+        <ISIN>ES0900000011</ISIN>
+        <CodigoDivisa>EUR</CodigoDivisa>
+        <NumeroParticipaciones>10000.00</NumeroParticipaciones>
+        <Patrimonio>1000000.00</Patrimonio>
+        <ValorLiquidativo>100.0000</ValorLiquidativo>
+      </Clase>
+    </Compartimento>
+  </Entidad>
+  <Entidad>
+    <Tipo>FI</Tipo>
+    <NumeroRegistro>102</NumeroRegistro>
+    <CodigoDivisaIIC>EUR</CodigoDivisaIIC>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <ClaseFondo>Otros</ClaseFondo>
+      <VocacionInversora>Renta Fija Euro</VocacionInversora>
+      <Clase>
+        <NumeroClase>1</NumeroClase>
+        <ISIN>ES0900000029</ISIN>
+        <CodigoDivisa>EUR</CodigoDivisa>
+        <Patrimonio>600000.00</Patrimonio>
+      </Clase>
+      <Clase>
+        <NumeroClase>2</NumeroClase>
+        <ISIN>ES0900000037</ISIN>
+        <CodigoDivisa>USD</CodigoDivisa>
+        <Patrimonio>430000.00</Patrimonio>
+      </Clase>
+    </Compartimento>
+  </Entidad>
+  <Entidad>
+    <Tipo>FI</Tipo>
+    <NumeroRegistro>103</NumeroRegistro>
+    <CodigoDivisaIIC>EUR</CodigoDivisaIIC>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <ClaseFondo>Otros</ClaseFondo>
+      <VocacionInversora>Garantizado de Rendimiento Variable</VocacionInversora>
+      <Clase>
+        <NumeroClase>0</NumeroClase>
+        <ISIN>ES0900000045</ISIN>
+        <CodigoDivisa>EUR</CodigoDivisa>
+        <Patrimonio>2000000.00</Patrimonio>
+      </Clase>
+    </Compartimento>
+  </Entidad>
+  <Entidad>
+    <Tipo>FI</Tipo>
+    <NumeroRegistro>104</NumeroRegistro>
+    <Compartimento>
+      <NumeroCompartimento>1</NumeroCompartimento>
+      <ClaseFondo>Fondo que invierte mayoritariamente en otros fondos y/o sociedades</ClaseFondo>
+      <VocacionInversora>Global</VocacionInversora>
+      <Clase>
+        <NumeroClase>0</NumeroClase>
+        <ISIN>ES0900000052</ISIN>
+        <CodigoDivisa>EUR</CodigoDivisa>
+        <Patrimonio>500000.00</Patrimonio>
+      </Clase>
+    </Compartimento>
+  </Entidad>
+</FondTrim>

@@ -1,0 +1,62 @@
+# ingest ---------------------------------------------------------------------
+nport_raw_manifest:
+  type: pandas.CSVDataset
+  filepath: data/01_raw/nport/manifest.csv
+
+nport_parquet_manifest:
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/nport/manifest.csv
+
+sec_fund_tickers:
+  type: pandas.ParquetDataset
+  filepath: data/01_raw/sec/company_tickers_mf.parquet
+
+# security_master ------------------------------------------------------------
+nport_positions:
+  type: fund_lookthrough.datasets.DuckDBParquetDataset
+  filepath: data/02_intermediate/nport_positions.parquet
+
+cusip_isin_map:
+  type: fund_lookthrough.datasets.DuckDBParquetDataset
+  filepath: data/03_primary/cusip_isin_map.parquet
+
+security_master:
+  type: fund_lookthrough.datasets.DuckDBParquetDataset
+  filepath: data/03_primary/security_master.parquet
+  order_by: isin
+
+ticker_isin_map:
+  type: pandas.ParquetDataset
+  filepath: data/03_primary/ticker_isin_map.parquet
+
+# consolidate ----------------------------------------------------------------
+nport_latest_filings:
+  type: pandas.ParquetDataset
+  filepath: data/03_primary/nport_latest_filings.parquet
+
+fund_master:
+  type: pandas.ParquetDataset
+  filepath: data/03_primary/fund_master.parquet
+
+nport_holdings:
+  type: fund_lookthrough.datasets.DuckDBParquetDataset
+  filepath: data/03_primary/nport_holdings.parquet
+  order_by: series_id
+
+# lookthrough ----------------------------------------------------------------
+# Overwritten on every run; each row carries its input_isin.
+lookthrough_positions:
+  type: pandas.ParquetDataset
+  filepath: data/07_model_output/lookthrough_positions.parquet
+
+lookthrough_unidentified:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/lookthrough_unidentified.csv
+
+lookthrough_summary:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/lookthrough_summary.csv
+
+lookthrough:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/lookthrough.csv

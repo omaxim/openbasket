@@ -1,0 +1,28 @@
+# One ISIN, or several separated by semicolons:
+#   kedro run --pipeline=lookthrough --params=isin=IE00B5BMR087
+isin: US4642872000  # iShares Core S&P 500 ETF (IVV)
+
+nport:
+  # Quarterly SEC data sets, newest last. Each is about 450 MB zipped.
+  quarters: [2026q3]
+  raw_dir: data/01_raw/nport
+  parquet_dir: data/02_intermediate/nport
+  overwrite: false
+
+lookthrough:
+  # Holdings sources in priority order. "issuer" and "top_holdings" are
+  # placeholders until their clients exist and are skipped for now.
+  source_order: [issuer, tickerinside, nport, top_holdings]
+  # Take the first source that resolves at least this much weight to ISINs;
+  # if none does, take the one that resolves the most.
+  min_resolved_pct: 90.0
+  max_depth: 4
+  use_openfigi: true
+  enrich_openfigi: true
+  openfigi_cache: data/03_primary/openfigi_cache.parquet
+  # Funds with no free full holdings, mapped to a fund on the same index.
+  # Output rows from a proxy say so in matched_via and note.
+  proxies:
+    IE00B5BMR087:
+      ticker: IVV
+      note: "iShares Core S&P 500 UCITS ETF (CSPX); holdings of IVV, which tracks the same S&P 500 index physically"

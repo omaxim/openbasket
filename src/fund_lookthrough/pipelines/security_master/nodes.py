@@ -1,0 +1,104 @@
+"""Build the ISIN-keyed security master from every N-PORT position.
+
+ISINs come from what funds report. Where a holding has a CUSIP but no ISIN,
+the ISIN another filing reported for that CUSIP is used, and failing that it
+is derived from the CUSIP (US and Canadian numbers only). ``isin_source``
+records which.
+"""
+
+from __future__ import annotations
+
+import duckdb
+import pandas as pd
+
+from ...datasets import connection
+from ...identifiers import cusip_to_isin, is_valid_isin
+from ...sources import nport
+
+
+def nport_positions(nport_parquet_manifest: pd.DataFrame) -> duckdb.DuckDBPyRelation:
+    """Every N-PORT holding across the loaded quarters, with its reported ISIN and ticker."""
+    con = connection()
+    holding = nport.table(con, nport_parquet_manifest, "FUND_REPORTED_HOLDING")
+    identifiers = nport.table(con, nport_parquet_manifest, "IDENTIFIERS")
+    return nport.holdings_with_identifiers(holding, identifiers)
+
+
+def cusip_isin_map(nport_positions: duckdb.DuckDBPyRelation) -> duckdb.DuckDBPyRelation:
+    """One ISIN per CUSIP: the one most often reported, else derived."""
+    con = connection()
+    positions = nport_positions  # noqa: F841 - read by DuckDB below
+    reported = con.sql(
+        """
+        select cusip, reported_isin as isin, 'reported_for_cusip' as isin_source
+        from (select cusip, reported_isin, count(*) n from positions
+              where cusip is not null and reported_isin is not null group by all)
+        qualify row_number() over (partition by cusip order by n desc, reported_isin) = 1
+        """
+    )
+    missing = con.sql(
+        """
+        select cusip, mode(country) as country from positions
+        where cusip is not null and reported_isin is null
+          and cusip not in (select cusip from reported)
+        group by cusip
+        """
+    ).df()
+    missing["isin"] = [
+        cusip_to_isin(c, "CA" if k == "CA" else "US") if not str(c).startswith("000000") else None
+        for c, k in zip(missing["cusip"], missing["country"])
+    ]
+    derived = missing.dropna(subset=["isin"])[["cusip", "isin"]].assign(isin_source="derived_cusip")
+    derived = derived[derived["isin"].map(is_valid_isin)]
+    # Registered by name: the returned relation is evaluated later, when Kedro saves it.
+    con.register("_derived_cusip_isin", derived)
+    return con.sql("select * from reported union all select cusip, isin, isin_source from _derived_cusip_isin")
+
+
+def security_master(
+    nport_positions: duckdb.DuckDBPyRelation, cusip_isin_map: duckdb.DuckDBPyRelation
+) -> duckdb.DuckDBPyRelation:
+    """One row per ISIN with the names, LEI, CUSIP and asset class funds report for it."""
+    con = connection()
+    positions, cmap = nport_positions, cusip_isin_map  # noqa: F841 - read by DuckDB below
+    return con.sql(
+        """
+        with p as (
+            select p.*,
+                   coalesce(p.reported_isin, m.isin) as isin,
+                   case when p.reported_isin is not null then 'reported' else m.isin_source end as isin_source
+            from positions p
+            left join cmap m on p.reported_isin is null and p.cusip = m.cusip
+        )
+        select
+            isin,
+            mode(issuer_name) as issuer_name,
+            mode(issuer_title) as title,
+            mode(issuer_lei) as issuer_lei,
+            mode(cusip) as cusip,
+            mode(reported_ticker) as ticker,
+            mode(asset_cat) as asset_cat,
+            mode(issuer_type) as issuer_type,
+            mode(country) as country,
+            min(isin_source) as isin_source,
+            count(*) as n_positions
+        from p
+        where isin is not null
+        group by isin
+        """
+    )
+
+
+def ticker_isin_map(security_master: duckdb.DuckDBPyRelation) -> pd.DataFrame:
+    """Ticker to ISIN for equities whose filings report a ticker."""
+    con = connection()
+    sm = security_master  # noqa: F841 - read by DuckDB below
+    return con.sql(
+        """
+        select ticker, isin from (
+            select ticker, isin, n_positions from sm
+            where ticker is not null and asset_cat in ('EC', 'EP')
+        )
+        qualify row_number() over (partition by ticker order by n_positions desc) = 1
+        """
+    ).df()

@@ -47,14 +47,16 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from openbasket.identifiers import cusip_to_isin, is_valid_isin  # noqa: E402
+from openbasket.lookthrough import plausibility  # noqa: E402
 from openbasket.sources import ishares, nport  # noqa: E402
 
 API = HERE / "api" / "v1"
 FIELDS = ["isin", "name", "weight_pct", "asset_class", "source", "as_of", "depth", "via", "country", "sector"]
 FUND_KEYS = [
     "id", "isin", "isins", "name", "ticker", "issuer", "source", "source_url", "credit", "as_of", "matched_via",
-    "note", "reported_total_pct", "resolved_pct", "unresolved_pct", "unidentified_lines_pct", "n_constituents",
-    "n_rows", "truncated", "listed_pct", "breakdowns", "fields", "constituents", "unresolved", "full_data_url",
+    "note", "status", "reported_total_pct", "resolved_pct", "unexpanded_fund_pct", "unresolved_pct",
+    "unidentified_lines_pct", "n_constituents", "n_rows", "truncated", "listed_pct", "breakdowns", "fields",
+    "constituents", "unresolved", "full_data_url",
 ]
 UNRESOLVED = "Unresolved"
 #: Breakdown label for rows whose source gives no value, as the publish pipeline writes it.
@@ -341,21 +343,30 @@ def document(meta: dict, rows: list[list], reported: float | None, unidentified:
     unresolved_note = note
     if unresolved_note is None and unidentified:
         unresolved_note = f"{unidentified:.2f}% is in lines with no ISIN (cash, futures, FX, swaps or pools)."
+    status = fixture_status(meta["name"], reported, resolved, bool(rows))
     doc = {
         "id": meta["id"], "isin": meta["isin"], "isins": meta["isins"], "name": meta["name"],
         "ticker": meta["ticker"], "issuer": meta["issuer"], "source": meta["source"],
         "source_url": meta["source_url"], "credit": credit, "as_of": as_of,
         "matched_via": meta["matched_via"], "note": note if note is not None else meta.get("note"),
-        "reported_total_pct": _r(reported), "resolved_pct": _r(resolved), "unresolved_pct": _r(unresolved),
+        "status": status, "reported_total_pct": _r(reported), "resolved_pct": _r(resolved),
+        "unexpanded_fund_pct": 0.0, "unresolved_pct": _r(unresolved),
         "unidentified_lines_pct": _r(unidentified), "n_constituents": len({r[0] for r in rows}),
         "n_rows": len(rows), "truncated": len(rows) > len(listed), "listed_pct": _r(sum(r[2] for r in listed)),
         "breakdowns": breakdowns(rows, unresolved), "fields": FIELDS, "constituents": listed,
         "unresolved": {"weight_pct": _r(unresolved), "note": unresolved_note, "source": meta["source"],
-                       "source_url": meta["source_url"]},
+                       "source_url": meta["source_url"], "as_of": as_of},
         "full_data_url": full_data_url,
     }
     assert list(doc) == FUND_KEYS
     return doc
+
+
+def fixture_status(name: str | None, reported: float | None, resolved: float, has_rows: bool) -> str:
+    """The plausibility status the publish pipeline would give (no sub-fund here is left unexpanded)."""
+    summary = {"matched": True, "source": "fixture" if has_rows else None, "fund_name": name,
+               "reported_total_pct": reported, "resolved_pct": resolved, "unexpanded_fund_pct": 0.0}
+    return plausibility(summary)[0]
 
 
 def _credit(sources: list[str], own: str, extra: str | None = None) -> str:

@@ -669,6 +669,7 @@
 
     const chips = h("div", { class: "chips" },
       chip(`${fmtPct(t.resolved, 2)}%`, "resolved to ISINs"),
+      t.unexpanded ? chip(`${fmtPct(t.unexpanded, 2)}%`, "in funds not looked through") : null,
       chip(`${fmtPct(t.unresolved, 2)}%`, "unresolved", t.unresolved < 0),
       chip(f.reported_total_pct != null ? `${fmtPct(f.reported_total_pct, 2)}%` : "–", "reported total"),
       chip(fmtInt(f.n_constituents), t.truncated ? `distinct ISINs, ${fmtInt(rows.length)} rows listed here` : "distinct ISINs"));
@@ -836,7 +837,7 @@
   function topTenCard(f, rows, t, bd) {
     const tops = topHoldings(rows).map((x) => ({ ...x, color: C.wine }));
     const top10 = bd.top10_pct != null ? Number(bd.top10_pct) : sum(tops.map((x) => x.value));
-    const others = t.resolved - top10;
+    const others = t.inRows - top10;
     const summary = [
       { label: "Ten largest together", value: top10, color: C.wine },
       { label: "All other holdings", value: others, color: C.stone, other: true },
@@ -954,7 +955,7 @@
           safeUrl(f.full_data_url) ? ext(f.full_data_url, "full Parquet file") : "full Parquet file", "."),
           tot.notListed, f.source, f.as_of, "not-listed")
         : null,
-      footRow("Unresolved weight", unWhy, tot.unresolved, un.source || f.source, f.as_of, "unresolved"));
+      footRow("Unresolved weight", unWhy, tot.unresolved, un.source || f.source, un.as_of || f.as_of, "unresolved"));
 
     const captionText = `Constituents of ${f.name}, largest first. Weights are percent of net assets, never rescaled. Source: ${src.name || sourceLabel(f.source)}, as of ${f.as_of || "unknown"}.`;
     const table = h("table", { class: "holdings" }, h("caption", { class: "sr-only" }, captionText), h("thead", {}, h("tr", {}, ths)), tbody, foot);

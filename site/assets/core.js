@@ -105,18 +105,21 @@
   }
 
   /**
-   * The fund's weights: resolved, unresolved, the listed rows and, for a truncated
-   * file, the resolved weight of the rows that were cut (in the full Parquet only).
-   * Uses the v1.1 keys (n_rows, listed_pct) where present, else the listed rows.
+   * The fund's weights: resolved, unexpanded (sub-funds not looked through), unresolved,
+   * the listed rows and, for a truncated file, the weight of the rows that were cut (in
+   * the full Parquet only). Rows cover resolved + unexpanded. Uses the v1.1 keys
+   * (n_rows, listed_pct, unexpanded_fund_pct) where present, else the listed rows.
    */
   function totals(f, rows) {
     const listed = f.listed_pct != null ? Number(f.listed_pct) : sum(rows.map((r) => r.weight));
     const nRows = f.n_rows != null ? Number(f.n_rows) : f.truncated ? null : rows.length;
     const truncated = f.truncated === true || (nRows != null && nRows > rows.length);
     const unresolved = f.unresolved && f.unresolved.weight_pct != null ? Number(f.unresolved.weight_pct) : Number(f.unresolved_pct);
-    const resolved = f.resolved_pct != null ? Number(f.resolved_pct) : 100 - unresolved;
-    const noHoldings = rows.length === 0 && !nRows && !(resolved > 0);
-    return { listed, nRows, truncated, unresolved, resolved, notListed: truncated ? resolved - listed : 0, noHoldings };
+    const unexpanded = f.unexpanded_fund_pct != null ? Number(f.unexpanded_fund_pct) : 0;
+    const resolved = f.resolved_pct != null ? Number(f.resolved_pct) : 100 - unresolved - unexpanded;
+    const inRows = resolved + unexpanded;
+    const noHoldings = rows.length === 0 && !nRows && !(inRows > 0);
+    return { listed, nRows, truncated, unresolved, resolved, unexpanded, inRows, notListed: truncated ? inRows - listed : 0, noHoldings };
   }
 
   /**
@@ -178,7 +181,7 @@
     }
     const un = f.unresolved || {};
     out.push({ isin: null, name: "Unresolved weight", weight: t.unresolved, asset: "", country: "", sector: "",
-      source: un.source || f.source, as_of: f.as_of, depth: 0, via: f.name });
+      source: un.source || f.source, as_of: un.as_of || f.as_of, depth: 0, via: f.name });
     return out;
   }
 

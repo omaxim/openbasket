@@ -7,6 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from openbasket.lookthrough import STATUSES
+from openbasket.pipelines.publish.nodes import FUND_FILE_KEYS
+
 ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "site"
 FIXTURES = SITE / "fixtures" / "api" / "v1"
@@ -202,11 +205,8 @@ def test_docs_templates_find_the_landing_page_from_any_depth():
 
 INDEX_FIELDS = ["id", "isin", "name", "ticker", "issuer", "kind", "source", "as_of", "resolved_pct", "n_constituents"]
 FUND_FIELDS = ["isin", "name", "weight_pct", "asset_class", "source", "as_of", "depth", "via", "country", "sector"]
-FUND_KEYS = [
-    "id", "isin", "isins", "name", "ticker", "issuer", "source", "source_url", "credit", "as_of", "matched_via",
-    "note", "reported_total_pct", "resolved_pct", "unresolved_pct", "unidentified_lines_pct", "n_constituents",
-    "n_rows", "truncated", "listed_pct", "breakdowns", "fields", "constituents", "unresolved", "full_data_url",
-]
+# The same keys, in the same order, as the publish pipeline writes them.
+FUND_KEYS = FUND_FILE_KEYS
 BREAKDOWNS = ["asset_class", "country", "sector", "source"]
 MATCHED_VIA = {"ishares", "spdr", "nport_lei", "openfigi_ticker", "sec_ticker", "series_id", "issuer_id", "proxy",
                "security_master", "directory"}
@@ -243,6 +243,8 @@ def test_fixture_fund_files_follow_contract():
     for fund in _funds():
         fid = fund["id"]
         assert list(fund) == FUND_KEYS, fid
+        assert fund["status"] in STATUSES and fund["unexpanded_fund_pct"] == 0.0, fid
+        assert list(fund["unresolved"]) == ["weight_pct", "note", "source", "source_url", "as_of"], fid
         assert fund["fields"] == FUND_FIELDS
         assert fund["source"] in listed and fund["source_url"].startswith("https://") and fund["credit"]
         assert fund["matched_via"] in MATCHED_VIA | set(listed), fid
@@ -307,7 +309,9 @@ def test_fixture_no_holdings_fund():
     for f in empty:
         assert f["constituents"] == [] and f["resolved_pct"] == 0 and f["unresolved_pct"] == 100
         assert f["as_of"] and f["note"] and "listed" in f["credit"].lower() and "no holdings" in f["credit"].lower()
-        assert f["unresolved"] == {"weight_pct": 100, "note": f["note"], "source": f["source"], "source_url": f["source_url"]}
+        assert f["unresolved"] == {"weight_pct": 100, "note": f["note"], "source": f["source"], "source_url": f["source_url"],
+                                   "as_of": f["as_of"]}
+        assert f["status"] == "no_holdings"
         assert all(f["breakdowns"][k] == [["Unresolved", 100]] for k in BREAKDOWNS)
 
 
@@ -388,6 +392,18 @@ def test_core_totals_for_a_truncated_fund_account_for_the_cut_rows():
     rows = _core(f"(() => {{ const f = {json.dumps(fund)}; const r = core.rowsOf(f); return core.closingRows(f, r, core.totals(f, r)); }})()")
     assert [r["name"].split(":")[0] for r in rows] == ["Not listed in this file", "Unresolved weight"]
     assert rows[0]["weight"] == pytest.approx(fund["resolved_pct"] - fund["listed_pct"], abs=1e-6)
+
+
+@needs_node
+def test_core_totals_count_unexpanded_funds_as_listed_rows():
+    fund = {"resolved_pct": 60.0, "unexpanded_fund_pct": 30.0, "unresolved_pct": 10.0, "n_rows": 3, "listed_pct": 80.0,
+            "truncated": True, "fields": ["isin", "weight_pct"], "constituents": [["US0378331005", 50.0], ["US78462F1030", 30.0]],
+            "unresolved": {"weight_pct": 10.0}}
+    t = _core(f"(() => {{ const f = {json.dumps(fund)}; return core.totals(f, core.rowsOf(f)); }})()")
+    assert t["unexpanded"] == 30 and t["inRows"] == 90 and t["notListed"] == pytest.approx(10)
+    # A 1.0 file without the key: nothing unexpanded.
+    del fund["unexpanded_fund_pct"]
+    assert _core(f"(() => {{ const f = {json.dumps(fund)}; return core.totals(f, core.rowsOf(f)).unexpanded; }})()") == 0
 
 
 @needs_node

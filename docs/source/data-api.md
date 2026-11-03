@@ -9,9 +9,32 @@ set of JSON files rebuilt by the scheduled build and served by GitHub Pages,
 so there is no server to overload. All paths are relative to the site root.
 
 This page is contract **1.1**. The files still live under `api/v1` and
-`meta.json` still says `"api_version": 1`: 1.1 only adds fields, and every
-field of 1.0 keeps its meaning. `meta.json` says which contract the files
-follow in `contract`.
+`meta.json` still says `"api_version": 1`; `meta.json` says which contract
+the files follow in `contract`. 1.1 adds fields, and changes what two 1.0
+fields count (see [Changes from 1.0](#changes-from-10)).
+
+## Changes from 1.0
+
+1. `resolved_pct` no longer counts sub-funds that could not be looked
+   through (no source had their holdings, a cycle, the depth limit). That
+   weight is in the new `unexpanded_fund_pct`, and those rows are listed
+   with `asset_class` `fund`. So `resolved_pct + unexpanded_fund_pct` is the
+   1.0 `resolved_pct`.
+2. `unresolved_pct` is `100 - resolved_pct - unexpanded_fund_pct`. It is the
+   same number as in 1.0, because 1.0 counted the unexpanded weight as
+   resolved; it now sits beside `unexpanded_fund_pct` instead of inside
+   `resolved_pct`. A consumer that compares `resolved_pct` across builds
+   sees it fall for funds of funds whose sub-funds have no holdings.
+3. Fund files gain `status`, `unexpanded_fund_pct`, `n_rows`, `listed_pct`
+   and `breakdowns`; constituent rows gain `country` and `sector`.
+4. Breakdowns sum rows that have no label under `"Unknown"`, and always end
+   with `"Unresolved"`.
+5. `unresolved` gains `source`, `source_url` and `as_of`, so a fund with no
+   holdings still says where its list came from.
+6. `matched_via` takes the values listed below (`series_id`, `issuer_id`
+   and `proxy` are new).
+7. `meta.json` gains `contract` and lists every source that appears
+   anywhere, including `openfigi`.
 
 ## `api/v1/meta.json`
 
@@ -124,10 +147,20 @@ Every fund the build covers, as a table, so the search box can load it once
   "constituents": [
     ["US0378331005", "APPLE", 7.59332, "equity", "ishares", "2026-11-02", 0, "iShares Core S&P 500 UCITS ETF", "US", "Information Technology"]
   ],
-  "unresolved": {"weight_pct": 0.13578, "note": null},
+  "unresolved": {
+    "weight_pct": 0.13578,
+    "note": "0.15% is in lines with no ISIN (cash, futures, FX, swaps or pools).",
+    "source": "ishares",
+    "source_url": "https://www.ishares.com/uk/individual/en/products/253743/...",
+    "as_of": "2026-11-02"
+  },
   "full_data_url": "https://github.com/omaxim/openbasket/releases/download/2026-11/openbasket-lookthrough.parquet"
 }
 ```
+
+Keys
+: The keys are written in the order shown. `fields` names the columns of
+  each row of `constituents`.
 
 Rows
 : One row per **(ISIN, source, as-of date, via)**. An ISIN can therefore
@@ -145,6 +178,13 @@ Rows
 : `sector` is the source's own sector label, or `null`. N-PORT has none.
 : `asset_class` is `fund` for a sub-fund that could not be looked through;
   see `unexpanded_fund_pct`.
+: Options, swaps and futures that name what they reference (N-PORT's
+  `DESC_REF_OTHER`) are looked through to it: one on a single company is a
+  row for that company, one on a fund is that fund's companies, weighted by
+  the derivative's market value as reported (payoffs such as buffers, caps
+  or leverage are not modelled). Their `via` ends in `(via derivatives)`,
+  and the fund's `note` says how much weight is held this way. A derivative
+  on a fund that cannot be looked through is an unexpanded `fund` row.
 
 Counts
 : `n_constituents` is the number of **distinct constituent ISINs**.
@@ -155,14 +195,20 @@ Counts
 : `listed_pct` is the sum of `weight_pct` over the rows listed in this file.
 
 Weight
-: `resolved_pct` is the weight in securities with an ISIN.
+: `resolved_pct` is the weight in securities with an ISIN, including
+  those reached through derivatives (see Rows).
 : `unexpanded_fund_pct` is the weight in funds that could not be looked
   through: no source had their holdings, they sit in a cycle, or they were
   reached at the depth limit. Their rows are listed with `asset_class`
   `fund` and do **not** count as resolved.
 : `unresolved_pct` is `100 - resolved_pct - unexpanded_fund_pct`: lines with
-  no ISIN (cash, derivatives) and whatever the source's lines do not add up
-  to. It is negative when the lines total more than 100%.
+  no ISIN (cash, derivatives whose reference is not identified) and whatever
+  the source's lines do not add up to. It is negative when the lines total
+  more than 100%.
+: `unresolved` repeats `unresolved_pct` as `weight_pct`, with the fund's
+  `source`, `source_url` and `as_of`. Its `note` is the fund's note when
+  there are no rows, otherwise a sentence on the weight in lines without an
+  ISIN, or `null` when there is none.
 : `reported_total_pct` is what the fund's own source's lines add up to;
   `unidentified_lines_pct` the weight of its lines with no ISIN.
 
@@ -204,7 +250,8 @@ Funds with no holdings
   are no rows ("iShares publishes only the ten largest holdings for this
   fund; see the source link"); `credit` says the fund was listed by that
   source but no holdings were available; `constituents` is empty, `n_rows`
-  is 0, and the unresolved weight is 100.
+  is 0, and the unresolved weight is 100. `unresolved` carries the same
+  `source`, `source_url`, `as_of` and `note`.
 
 ## `api/v1/funds/{isin}.json` for other share classes
 

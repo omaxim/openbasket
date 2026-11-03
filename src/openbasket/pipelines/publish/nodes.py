@@ -46,11 +46,15 @@ BREAKDOWNS = ("asset_class", "country", "sector", "source")
 UNRESOLVED_LABEL = "Unresolved"
 UNKNOWN_LABEL = "Unknown"
 INDEX_FIELDS = ["id", "isin", "name", "ticker", "issuer", "kind", "source", "as_of", "resolved_pct", "n_constituents"]
-#: Fund-file keys in contract order.
+#: Fund-file keys taken from the funds table, in contract order.
 FUND_KEYS = [
     "id", "isin", "isins", "name", "ticker", "issuer", "source", "source_url", "credit", "as_of", "matched_via",
     "note", "status", "reported_total_pct", "resolved_pct", "unexpanded_fund_pct", "unresolved_pct",
     "unidentified_lines_pct", "n_constituents",
+]
+#: Every fund-file key, in the order the file is written (docs/source/data-api.md).
+FUND_FILE_KEYS = FUND_KEYS + [
+    "n_rows", "truncated", "listed_pct", "breakdowns", "fields", "constituents", "unresolved", "full_data_url",
 ]
 _PCT_KEYS = ("reported_total_pct", "resolved_pct", "unexpanded_fund_pct", "unresolved_pct", "unidentified_lines_pct")
 _ID_RE = re.compile(r"^[A-Z0-9]{9,12}$")
@@ -101,23 +105,48 @@ def fund_document(fund: dict, rows: list[tuple], n_rows: int, full_data_url: str
     for k in _PCT_KEYS:
         doc[k] = _num(fund.get(k))
     doc["n_constituents"] = int(_clean(fund.get("n_constituents")) or 0)
-    doc["n_rows"] = int(n_rows)
-    doc["truncated"] = n_rows > len(rows)
-    doc["fields"] = CONSTITUENT_FIELDS
-    doc["constituents"] = [
+    constituents = [
         [isin, name, _num(w), ac, src, as_of, int(depth) if depth is not None else None, via, country, sector]
         for isin, name, w, ac, src, as_of, depth, via, country, sector in rows
     ]
-    doc["listed_pct"] = _num(sum(r[2] or 0.0 for r in doc["constituents"]))
     if breakdowns is None:
         breakdowns = fund_breakdowns(
-            [(r[2], {"asset_class": r[3], "country": r[8], "sector": r[9], "source": r[4]}, r[0]) for r in doc["constituents"]],
+            [(r[2], {"asset_class": r[3], "country": r[8], "sector": r[9], "source": r[4]}, r[0]) for r in constituents],
             doc["unresolved_pct"],
         )
+    doc["n_rows"] = int(n_rows)
+    doc["truncated"] = n_rows > len(rows)
+    doc["listed_pct"] = _num(sum(r[2] or 0.0 for r in constituents))
     doc["breakdowns"] = breakdowns
-    doc["unresolved"] = {"weight_pct": doc["unresolved_pct"], "note": doc["note"]}
+    doc["fields"] = CONSTITUENT_FIELDS
+    doc["constituents"] = constituents
+    doc["unresolved"] = unresolved_entry(doc, n_rows)
     doc["full_data_url"] = full_data_url
     return doc
+
+
+def unresolved_entry(doc: dict, n_rows: int) -> dict:
+    """The fund file's ``unresolved`` entry: the weight, why, and where it was read.
+
+    It carries the fund's own source, link and as-of date, so even a fund
+    with no holdings says where its (empty) list came from. ``note`` is the
+    fund's note when there are no rows, otherwise a sentence on the lines
+    the source gave without an ISIN, or ``None``.
+    """
+    unidentified = doc.get("unidentified_lines_pct")
+    if n_rows == 0:
+        note = doc.get("note")
+    elif unidentified is not None and abs(unidentified) >= 0.005:
+        note = f"{unidentified:.2f}% is in lines with no ISIN (cash, futures, FX, swaps or pools)."
+    else:
+        note = None
+    return {
+        "weight_pct": doc.get("unresolved_pct"),
+        "note": note,
+        "source": doc.get("source"),
+        "source_url": doc.get("source_url"),
+        "as_of": doc.get("as_of"),
+    }
 
 
 def fund_breakdowns(rows: list[tuple[float, dict, str | None]], unresolved_pct: float | None) -> dict:

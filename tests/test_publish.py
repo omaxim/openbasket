@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from openbasket.datasets import DuckDBParquetDataset
-from openbasket.pipelines.publish.nodes import publish, resolution_bucket
+from openbasket.pipelines.publish.nodes import FUND_FILE_KEYS, publish, resolution_bucket
 
 from .test_universe import SOURCES, _run, build_universe, FUND_MASTER, PRODUCTS, security_master
 
@@ -78,18 +78,27 @@ def test_index_and_aliases(built):
 def test_fund_file_matches_contract(built):
     _, api, _ = built()
     doc = _json(api / "funds" / "US0000000AA2.json")
-    assert set(doc) == FUND_KEYS
+    assert list(doc) == FUND_FILE_KEYS and set(doc) == FUND_KEYS
     assert doc["fields"] == FIELDS_V11
     assert doc["source"] == "nport" and doc["source_url"] and doc["credit"] and doc["as_of"] == "2026-07-31"
     weights = [abs(r[2]) for r in doc["constituents"]]
     assert weights == sorted(weights, reverse=True)
     assert all(r[4] and r[5] for r in doc["constituents"])  # every row has its own source and as-of
     assert {r[4] for r in doc["constituents"]} == {"nport", "ishares"}
-    assert doc["unresolved"] == {"weight_pct": doc["unresolved_pct"], "note": doc["note"]}
+    un = doc["unresolved"]
+    assert list(un) == ["weight_pct", "note", "source", "source_url", "as_of"]
+    assert un["weight_pct"] == doc["unresolved_pct"]
+    assert (un["source"], un["source_url"], un["as_of"]) == (doc["source"], doc["source_url"], doc["as_of"])
     assert doc["truncated"] is False and doc["isins"] == ["US0000000AA2", "US0000000AB1"]
     feeder = _json(api / "funds" / "S000000003.json")
+    assert list(feeder) == FUND_FILE_KEYS
     assert feeder["isin"] is None and feeder["constituents"] == [] and feeder["source"] == "nport"
     assert feeder["unresolved_pct"] == 100
+    # No holdings: the unresolved entry says why and where the fund was listed.
+    fun = feeder["unresolved"]
+    assert fun["note"] == feeder["note"] and fun["note"]
+    # (This fund master has no report dates, so the as-of date is unknown here.)
+    assert fun["source"] == "nport" and fun["source_url"] and fun["as_of"] == feeder["as_of"]
 
 
 def test_cap_and_budget_are_reported(built):

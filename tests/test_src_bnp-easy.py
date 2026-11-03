@@ -14,6 +14,7 @@ import pytest
 
 from openbasket.sources.issuers import (
     HOLDING_COLUMNS,
+    SUBSTITUTE_BASKET,
     FetchContext,
     discover,
     validate_holdings,
@@ -123,12 +124,65 @@ def test_parse_share_search():
         "https://www.bnpparibas-am.com/en-ch/fundsheet/equity/"
         "bnp-paribas-easy-example-world-ucits-etf-ucits-etf-eur-c-ie00b4l5y983"
     )
-    assert first["holdings_url"] == "https://api.bnpparibas-am.com/push/fundsheet/IP_CH-FSE/ENG/CHE/IE00B4L5Y983"
+    assert first["holdings_url"] == "https://api.bnpparibas-am.com/push/fundsheet/IP_CH-IND/ENG/CHE/IE00B4L5Y983"
     by = dict(zip(df["isin"], df["replication"]))
     assert by["FR0011550185"] == "swap"  # PEA fund on a US index
     assert by["LU3307218399"] == "swap"  # asset class Other
     assert by["IE00B4L5Y983"] is None
     assert dict(zip(df["isin"], df["_check"]))["LU1377381717"]  # PEA on a pan-European index
+    assert dict(zip(df["isin"], df["_check"]))["IE00B4L5Y983"]  # unknown replication is checked too
+
+
+def test_only_private_investor_profiles_are_read():
+    for site, (profile, _, _) in bnp_easy.SITES.items():
+        assert not bnp_easy.PROFESSIONAL_PROFILES.search(profile), site
+    assert bnp_easy.SITES["en-gb"][0] == "IP_UK-IND"
+    assert bnp_easy.PROFESSIONAL_PROFILES.search("IP_UK-FSE")
+
+
+def test_professional_profile_is_refused(monkeypatch):
+    monkeypatch.setitem(bnp_easy.SITES, "en-gb", ("IP_UK-FSE", "ENG", "GBR"))
+    with pytest.raises(ValueError, match="professional"):
+        bnp_easy.fundsheet_url("en-gb", "IE00B4L5Y983")
+
+
+def test_replication_from_policy():
+    assert bnp_easy.replication_from_policy(
+        "The Product seeks to replicate the MSCI World Index by investing in a substitute basket, composed of "
+        "shares of companies (synthetic replication). When employing synthetic replication, the sub-fund will "
+        "achieve exposure to the Index by entering into total return swaps (TRS). When investing in a sample "
+        "of shares, the tracking error may be higher."
+    ) == "swap"
+    assert bnp_easy.replication_from_policy("The sub-fund uses a full replication of the index.") == "physical"
+    assert bnp_easy.replication_from_policy(None) is None
+
+
+def _etf_inventory(nav_date="2026-11-02"):
+    """An Easy II ETF inventory laid out like BNP Paribas AM's (header in row 1, weights in percent)."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws.append(["ISIN", "Security Name", "Asset Type", "Currency", "Weight in %", "Nav Date"])
+    ws.append([None, "DEFERRED INT REC - FIXED INCOME", "ASSET", "EUR", -0.01, nav_date])
+    ws.append([None, "US DOLLAR", "CASH", "USD", 0.6, nav_date])
+    ws.append(["US0378331005", "EXAMPLE TREASURY 0.25% 2025", "FIXED INCOME", "USD", "60.41", nav_date])
+    ws.append(["XS0000000000", "EXAMPLE CORP 5% 2030", "FIXED INCOME", "EUR", 39.0, nav_date])
+    ws.append([None, "SOLD USD/BOUGHT EUR", "FOREIGN EXCHANGE", "USD", "0.05", nav_date])
+    ws.append([None, "TOTAL EXPENSE RATIO", "LIABILITIES", "USD", -0.05, nav_date])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_parse_etf_inventory():
+    as_of, info, df = bnp_easy.parse_etf_inventory(_etf_inventory())
+    assert as_of == "2026-11-02" and info["layout"] == "etf"
+    assert list(df.columns) == HOLDING_COLUMNS
+    assert validate_holdings(df) == []
+    assert df["weight_pct"].sum() == pytest.approx(100.0)  # percent, kept as is
+    assert df["isin"].tolist()[2] == "US0378331005" and pd.isna(df["isin"].iloc[3])  # bad check digit
+    assert df["asset_class"].tolist() == ["other", "cash", "debt", "debt", "derivative (foreign exchange)", "other"]
+    assert df["currency"].tolist()[1] == "USD"
 
 
 class FakeResponse:
@@ -184,8 +238,39 @@ def test_products_merges_sites_and_checks_pea_funds(fake_http):
     assert len(df) == 5 and set(df["site"]) == {"en-gb"}  # first site wins
     by = dict(zip(df["isin"], df["replication"]))
     assert by["LU1377381717"] == "swap"  # read from its inventory
-    assert by["IE00B4L5Y983"] is None
+    assert by["IE00B4L5Y983"] == "physical"  # "Full" in its inventory
     assert sum("/sharesearchv2/" in c for c in fake_http) == 2
+    assert all("/IP_UK-IND/" in c or "/IP_CH-IND/" in c for c in fake_http if "bnpparibas-am.com/push" in c)
+
+
+def test_non_pea_synthetic_fund_is_swap(monkeypatch):
+    """A fund with no PEA flag whose inventory or fund page says synthetic ends up as ``swap``."""
+    search = {"shares": [
+        {"compartment_id": 1, "compart_name": "BNP PARIBAS EASY EXAMPLE WORLD II", "eng_asset_class": "Equity",
+         "region": "Global", "flags": ["etf_flag"], "isin_code": "IE00B4L5Y983", "val_currency": "EUR",
+         "legal_name": "BNP PARIBAS EASY EXAMPLE WORLD II [UCITS ETF EUR, C]"},
+        {"compartment_id": 2, "compart_name": "BNP PARIBAS EASY EXAMPLE ACWI II", "eng_asset_class": "Equity",
+         "region": "Global", "flags": ["etf_flag"], "isin_code": "IE00B5BMR087", "val_currency": "EUR",
+         "legal_name": "BNP PARIBAS EASY EXAMPLE ACWI II [UCITS ETF EUR, C]"},
+    ]}
+    inv = {"category": "DOC_ACCOUNTING_INVENTORY", "format": "xlsx", "language": "ENG",
+           "url": "https://docfinder.example.invalid/api/files/synthetic/1"}
+    policy = {"overview": {"disclaimers": {"investment_policy": "... a substitute basket (synthetic replication) ..."}}}
+
+    def get(url, **kw):
+        if "/sharesearchv2/" in url:
+            return FakeResponse(payload=search)
+        if url.endswith("/IE00B4L5Y983"):
+            return FakeResponse(payload={"publications": {"ENG": {"documents": [inv]}}})
+        if url.endswith("/IE00B5BMR087"):
+            return FakeResponse(payload=dict(policy, publications={}))
+        if "synthetic" in url:
+            return FakeResponse(content=_inventory(replication="Synthetic"))
+        raise AssertionError(url)
+
+    monkeypatch.setattr(bnp_easy.http, "get", get)
+    df = bnp_easy.products(sites=("en-gb",))
+    assert dict(zip(df["isin"], df["replication"])) == {"IE00B4L5Y983": "swap", "IE00B5BMR087": "swap"}
 
 
 def test_holdings_reads_english_inventory_and_caches(fake_http, tmp_path):
@@ -218,12 +303,35 @@ def test_holdings_without_inventory_is_empty_and_says_so(fake_http, tmp_path):
 def test_swap_holdings_are_flagged(fake_http):
     got = bnp_easy.holdings({"isin": "LU1377381717", "site": "en-gb"}, None)
     assert any("substitute basket" in n for n in got.notes)
+    assert set(got.holdings["asset_class"]) == {SUBSTITUTE_BASKET}
+
+
+def test_holdings_reads_etf_inventory_and_flags_old_files(monkeypatch, tmp_path):
+    doc = {"category": "DOC_FUND_INVENTORY_ETF", "format": "xlsx", "language": "ENG", "reference_date": "2026-05-18",
+           "url": "https://docfinder.example.invalid/api/files/etf/1024"}
+    fundsheet = {"publications": {"ENG": {"documents": [doc]}}}
+
+    def get(url, **kw):
+        if "/fundsheet/" in url:
+            return FakeResponse(payload=fundsheet)
+        return FakeResponse(content=_etf_inventory(nav_date="2026-05-14"))
+
+    monkeypatch.setattr(bnp_easy.http, "get", get)
+    ctx = FetchContext(cache_dir=str(tmp_path))
+    got = bnp_easy.holdings({"isin": "IE000EOB5120", "site": "en-ch"}, ctx)
+    assert got.as_of == "2026-05-14" and got.url == doc["url"]
+    assert got.holdings["weight_pct"].sum() == pytest.approx(100.0)
+    assert any("including cash" in n for n in got.notes)
+    assert any("days old" in n for n in got.notes)
+    again = bnp_easy.holdings({"isin": "IE000EOB5120", "site": "en-ch"}, ctx)
+    assert again.as_of == got.as_of and len(again.holdings) == len(got.holdings)
 
 
 def test_registered():
-    ad = discover()["bnp-easy"]
-    assert ad.frequency == "weekly" and "BNP Paribas Asset Management" in ad.credit
+    ad = discover()["bnp_easy"]
+    assert ad.frequency == "irregular" and "BNP Paribas Asset Management" in ad.credit
     assert "written authorisation" in ad.licence
+    assert ad.redistribution == "local_only"
 
 
 @pytest.mark.network

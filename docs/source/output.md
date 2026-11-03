@@ -12,7 +12,7 @@ row per input.
 | `name` | Security name: the issuer for a stock, the issue title for a bond. |
 | `weight_pct` | Percent of the input's net assets, multiplied through sub-funds. |
 | `asset_class` | From N-PORT's asset category, e.g. `equity`, `debt`, `asset-backed (mortgage)`. |
-| `source` | Where the holdings came from: `tickerinside`, `nport`, `security_master`. |
+| `source` | Where the holdings came from: `ishares`, `tickerinside`, `nport`, `security_master`. |
 | `as_of` | Holdings date of that source. |
 | `issuer_name`, `issuer_lei` | The issuer. For a bond this is who owes the money. |
 | `isin_source` | `reported` by the fund, `reported_for_cusip` in another filing, `derived_cusip`, or `ticker_match`. |
@@ -20,7 +20,7 @@ row per input.
 | `depth` | 0 for direct holdings, 1 for holdings of a sub-fund, and so on. |
 | `n_paths` | How many routes reach this ISIN (e.g. held directly and via a sub-fund). |
 | `via_fund` | The fund whose holdings list the row came from. |
-| `source_ref` | Filing accession number, or TickerInside's citation. |
+| `source_ref` | Filing accession number, the iShares request URL, or TickerInside's citation. |
 
 ### Unresolved weight
 
@@ -36,7 +36,8 @@ One row per input: the fund matched and how (`matched_via`), the top-level
 `source` and `as_of`, `sources_used` with the weight each contributed,
 `reported_total_pct`, `resolved_pct`, `unresolved_pct`,
 `unidentified_lines_pct` (lines with no ISIN, e.g. cash and swaps) and
-`n_constituents`.
+`n_constituents`. `note` says when a proxy was used, and flags inputs where
+one ISIN-less line holds 50% or more, as in swap-based ETFs.
 
 ## `data/08_reporting/lookthrough_unidentified.csv`
 

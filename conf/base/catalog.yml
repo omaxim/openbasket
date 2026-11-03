@@ -11,6 +11,10 @@ sec_fund_tickers:
   type: pandas.ParquetDataset
   filepath: data/01_raw/sec/company_tickers_mf.parquet
 
+issuer_products:
+  type: pandas.ParquetDataset
+  filepath: data/01_raw/issuers/ishares_products.parquet
+
 # security_master ------------------------------------------------------------
 nport_positions:
   type: fund_lookthrough.datasets.DuckDBParquetDataset

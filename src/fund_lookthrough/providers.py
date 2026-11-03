@@ -2,10 +2,11 @@
 
 Matching an input ISIN to a fund, in order:
 
-1. a configured proxy (for UCITS or swap-based funds with no free holdings);
-2. N-PORT: a holding with this ISIN, or with the CUSIP inside it, whose
+1. an issuer's own fund list (iShares UK covers UCITS ETFs by ISIN);
+2. a configured proxy (for funds with no free holdings, e.g. swap-based);
+3. N-PORT: a holding with this ISIN, or with the CUSIP inside it, whose
    issuer LEI is a fund series' LEI;
-3. OpenFIGI: the ISIN's US ticker, looked up in SEC's fund ticker list.
+4. OpenFIGI: the ISIN's US ticker, looked up in SEC's fund ticker list.
 
 Holdings sources are tried in ``source_order``; see
 :func:`fund_lookthrough.lookthrough.choose` for how one is picked.
@@ -14,6 +15,7 @@ Holdings sources are tried in ``source_order``; see
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from functools import lru_cache
 
 import duckdb
@@ -21,7 +23,7 @@ import pandas as pd
 
 from .identifiers import is_valid_isin, isin_to_cusip, normalise_ticker
 from .lookthrough import FundRef, Holdings, Line
-from .sources import nport
+from .sources import ishares, nport
 from .sources.openfigi import OpenFIGI
 from .sources.tickerinside_source import fetch_fund
 
@@ -40,6 +42,8 @@ class DataProviders:
         figi: OpenFIGI | None,
         source_order: list[str],
         proxies: dict | None = None,
+        issuer_products: pd.DataFrame | None = None,
+        issuer_cache_dir: str | None = None,
     ):
         unknown = set(source_order) - set(SOURCES)
         if unknown:
@@ -49,6 +53,9 @@ class DataProviders:
         self.figi = figi
         self.source_order = list(source_order)
         self.proxies = {k.upper(): v for k, v in (proxies or {}).items()}
+        ip = issuer_products if issuer_products is not None else pd.DataFrame(columns=["isin"])
+        self.issuer_products = ip.drop_duplicates("isin").set_index("isin")
+        self.issuer_cache_dir = issuer_cache_dir
 
         fm = fund_master.copy()
         self.series = fm.drop_duplicates("series_id").set_index("series_id")
@@ -74,8 +81,20 @@ class DataProviders:
         series_id = self.series_by_ticker.get(normalise_ticker(ticker))
         return self._ref(series_id, ticker.upper(), via, note)
 
+    def _issuer_ref(self, isin: str, via: str = "ishares") -> FundRef | None:
+        if isin not in self.issuer_products.index:
+            return None
+        p = self.issuer_products.loc[isin]
+        return FundRef(
+            series_id=None, ticker=p["ticker"], name=p["fund_name"], via=via,
+            issuer_id=f"ishares-{p['site']}:{p['portfolio_id']}",
+        )
+
     def resolve(self, isin: str) -> FundRef | None:
         isin = isin.strip().upper()
+        ref = self._issuer_ref(isin)
+        if ref is not None:
+            return ref
         if isin in self.proxies:
             p = self.proxies[isin]
             note = f"proxy: {p.get('note', '')}".strip()
@@ -83,7 +102,7 @@ class DataProviders:
                 return self._ref_from_ticker(p["ticker"], "proxy", note)
             if p.get("isin"):
                 inner = self.resolve(p["isin"])
-                return FundRef(inner.series_id, inner.ticker, inner.name, "proxy", note) if inner else None
+                return replace(inner, via="proxy", note=note) if inner else None
         if not is_valid_isin(isin):
             logger.warning("%s is not a valid ISIN", isin)
             return None
@@ -113,10 +132,18 @@ class DataProviders:
         return None
 
     def resolve_line(self, line: Line) -> FundRef | None:
+        if line.isin:
+            ref = self._issuer_ref(line.isin)
+            if ref is not None:
+                return ref
         if line.issuer_lei and line.issuer_lei in self.series_by_lei:
             return self._ref(self.series_by_lei[line.issuer_lei], None, "nport_lei")
-        if line.ticker and normalise_ticker(line.ticker) in self.series_by_ticker:
+        if line.us_ticker and line.ticker and normalise_ticker(line.ticker) in self.series_by_ticker:
             return self._ref_from_ticker(line.ticker, "sec_ticker")
+        if line.fund_hint and line.isin and not line.issuer_lei:
+            series_id = self._series_from_nport(line.isin)
+            if series_id:
+                return self._ref(series_id, None, "nport_lei")
         return None
 
     def security(self, isin: str) -> Holdings | None:
@@ -143,14 +170,41 @@ class DataProviders:
         out = []
         for source in self.source_order:
             h = None
-            if source == "tickerinside":
+            if source == "issuer" and ref.issuer_id:
+                h = self._from_issuer(ref.issuer_id)
+            elif source == "tickerinside":
                 h = self._from_tickerinside(ref)
             elif source == "nport" and ref.series_id:
                 h = self._from_nport(ref.series_id)
-            # "issuer" and "top_holdings" have no client yet; they are skipped.
+            # "top_holdings" has no client yet and is skipped.
             if h is not None and h.lines:
                 out.append(h)
         return out
+
+    @lru_cache(maxsize=None)
+    def _from_issuer(self, issuer_id: str) -> Holdings | None:
+        site, portfolio_id = issuer_id.removeprefix("ishares-").split(":")
+        try:
+            got = ishares.holdings(portfolio_id, site, cache_dir=self.issuer_cache_dir)
+        except Exception as exc:  # a broken issuer file must not stop the run
+            logger.warning("iShares %s: %s", issuer_id, exc)
+            return None
+        if len(got.holdings) >= 20000:
+            logger.warning("iShares %s returned %d lines, possibly capped by the site", issuer_id, len(got.holdings))
+        df = got.holdings.astype(object).where(got.holdings.notna(), None)
+        lines = [
+            Line(
+                weight_pct=float(r.get("holdingPercent") or 0.0),
+                isin=r.get("isin"),
+                name=r.get("issueName"),
+                ticker=r.get("ticker"),
+                asset_class=ishares.ASSET_CLASS.get(r.get("assetClass"), (r.get("assetClass") or "").lower() or None),
+                isin_source="reported" if r.get("isin") else None,
+                fund_hint=r.get("assetClass") == "Money Market" or " ETF" in (r.get("issueName") or "").upper(),
+            )
+            for r in df.to_dict("records")
+        ]
+        return Holdings("ishares", got.as_of, lines, source_ref=f"iShares holdings {got.url}")
 
     @lru_cache(maxsize=None)
     def _nport_lines(self, series_id: str) -> tuple[pd.DataFrame, str | None]:
@@ -201,7 +255,7 @@ class DataProviders:
             for tk, w in f.holdings.items():
                 isin = mapping.get(normalise_ticker(tk)) or self.global_ticker_isin.get(normalise_ticker(tk))
                 lines.append(Line(weight_pct=w, isin=isin, name=None, ticker=tk, asset_class="equity",
-                                  isin_source="ticker_match" if isin else None))
+                                  isin_source="ticker_match" if isin else None, us_ticker=True))
             names = self._names_for(ref.series_id)
             for l in lines:
                 if l.isin:

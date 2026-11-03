@@ -1,6 +1,6 @@
 from kedro.pipeline import Node, Pipeline
 
-from .nodes import download_fund_tickers, download_nport, nport_to_parquet
+from .nodes import download_fund_tickers, download_issuer_products, download_nport, nport_to_parquet
 
 
 def create_pipeline(**kwargs) -> Pipeline:
@@ -19,5 +19,11 @@ def create_pipeline(**kwargs) -> Pipeline:
                 name="nport_to_parquet",
             ),
             Node(download_fund_tickers, inputs=None, outputs="sec_fund_tickers", name="download_fund_tickers"),
+            Node(
+                download_issuer_products,
+                inputs="params:issuers.ishares_sites",
+                outputs="issuer_products",
+                name="download_issuer_products",
+            ),
         ]
     )

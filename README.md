@@ -1,7 +1,8 @@
 # fund-lookthrough
 
 Look through an ETF, fund or bond by ISIN to the securities behind it, using
-free sources: SEC Form N-PORT, TickerInside and OpenFIGI. Built with Kedro.
+free sources: iShares issuer files, SEC Form N-PORT, TickerInside and
+OpenFIGI. Built with Kedro.
 
 ```bash
 uv venv --python 3.12 .venv && uv pip install --python .venv -e '.[dev,docs]'

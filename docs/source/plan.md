@@ -40,23 +40,26 @@ ingest ──► security_master ──► consolidate ──► lookthrough
 
 ## Matching an input ISIN
 
-1. A configured proxy.
-2. N-PORT: a holding with this ISIN (or its CUSIP) whose issuer LEI is a fund
+1. An issuer's fund list (iShares UK).
+2. A configured proxy.
+3. N-PORT: a holding with this ISIN (or its CUSIP) whose issuer LEI is a fund
    series' LEI.
-3. OpenFIGI: the ISIN's US ticker, found in SEC's fund ticker list.
-4. Not a fund: if the ISIN is in the security master it is its own
+4. OpenFIGI: the ISIN's US ticker, found in SEC's fund ticker list.
+5. Not a fund: if the ISIN is in the security master it is its own
    constituent at 100% (a single stock or bond, shown with its issuer).
-5. Otherwise 100% unresolved.
+6. Otherwise 100% unresolved.
 
 ## Expanding a fund
 
 For each source in `source_order` that has holdings for the fund, count how
 much weight resolves to ISINs. Use the first source that reaches
 `min_resolved_pct` (90 by default), otherwise the one resolving the most.
-TickerInside therefore wins for US equity ETFs, because it is fresher, and
-N-PORT for bond funds, which TickerInside does not list security by security.
+The issuer's own file wins where there is one. Otherwise TickerInside wins
+for US equity ETFs, because it is fresher, and N-PORT for bond funds, which
+TickerInside does not list security by security.
 
-A holding is a fund if its issuer LEI is a series LEI, or its ticker is in
+A holding is a fund if its ISIN is in an issuer's fund list, its issuer LEI
+is a series LEI, or (for US listings from TickerInside only) its ticker is in
 SEC's fund ticker list. It is expanded in turn, with its weights multiplied
 by its weight in the parent, up to `max_depth` and never around a cycle.
 Stocks and bonds are end points.
@@ -70,15 +73,21 @@ Done (2026-11-03):
 - TickerInside issuer holdings with ticker to ISIN matching.
 - OpenFIGI matching and enrichment with an on-disk cache.
 - Recursive fund-of-funds expansion; direct stocks and bonds.
+- iShares UK issuer holdings with ISINs, replacing the CSPX proxy.
 
-Sample results, from 2026 Q3 N-PORT and TickerInside as of 2026-10-27:
+Sample results, from 2026 Q3 N-PORT, TickerInside as of 2026-10-27 and
+iShares as of 2026-11-02:
 
 | ISIN | Fund | Source | Resolved | Unresolved |
 |---|---|---|---|---|
 | US4642872000 | iShares Core S&P 500 ETF (IVV) | TickerInside | 99.81% | 0.19% |
 | US4642872265 | iShares Core U.S. Aggregate Bond ETF (AGG) | N-PORT | 101.88% | −1.88% |
 | US4642898674 | iShares Core 60/40 Balanced Allocation ETF (AOR) | N-PORT, 7 sub-funds | 103.58% | −3.58% |
-| IE00B5BMR087 | iShares Core S&P 500 UCITS ETF (CSPX), via IVV proxy | TickerInside | 99.81% | 0.19% |
+| IE00B5BMR087 | iShares Core S&P 500 UCITS ETF (CSPX) | iShares | 99.86% | 0.14% |
+| IE00B4L5Y983 | iShares Core MSCI World UCITS ETF (SWDA) | iShares | 99.65% | 0.35% |
+| IE00B1FZSB30 | iShares Core UK Gilts UCITS ETF (IGLT) | iShares | 100.02% | −0.02% |
+| IE00B3F81409 | iShares Core Global Aggregate Bond UCITS ETF (AGGG) | iShares | 92.22% | 7.78% |
+| IE000OY7BDY9 | iShares MSCI North America Swap UCITS ETF | iShares, flagged as swap-based | 0% | 100% |
 | US037833EE62 | Apple Inc bond | Security master | 100% | 0% |
 
 The negative figures are what the filings say: AGG's lines, and those of
@@ -87,14 +96,16 @@ example, purchases not yet settled) is not yet broken down.
 
 ## Next
 
-1. **Issuer files.** Find the iShares endpoints that replaced the `.ajax`
-   CSVs (UK first, to drop the CSPX proxy), then SPDR's daily Excel files,
-   whose header row starts with `Name`.
-2. **More N-PORT quarters.** Load 2026 Q2 alongside Q3 for funds whose
+1. **SPDR daily Excel files**, whose header row starts with `Name`, then
+   other UCITS issuers (Vanguard, Xtrackers, Amundi).
+2. **Other iShares regions.** Find the product-data service names for the
+   Swiss, German and US sites; the US one would give ISIN-level daily holdings
+   for US iShares ETFs too.
+3. **Mortgage pools.** Match iShares pool numbers to CUSIPs through N-PORT
+   so bond funds' agency MBS resolve.
+4. **More N-PORT quarters.** Load 2026 Q2 alongside Q3 for funds whose
    latest filing fell earlier; add 2026 Q4 when the SEC publishes it.
-3. **Top-holdings fallbacks** (justETF, FT) for UCITS funds with no issuer
+5. **Top-holdings fallbacks** (justETF, FT) for UCITS funds with no issuer
    file, clearly marked as partial.
-4. **Swap-based ETFs.** Add proxies for the common ones and flag funds whose
-   N-PORT is mostly swaps.
-5. **Ticker matching.** Resolve TickerInside tickers that are newer than the
-   fund's last N-PORT filing through the global security master.
+6. **Swap-based ETFs.** Add proxies for the common ones; the summary already
+   flags them.

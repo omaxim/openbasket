@@ -24,7 +24,7 @@ The pipelines run in order; each saves its outputs under `data/`, so later
 ones can be rerun on their own.
 
 ```bash
-kedro run --pipeline=ingest           # download N-PORT and SEC fund tickers (~450 MB a quarter)
+kedro run --pipeline=ingest           # N-PORT (~450 MB a quarter), SEC fund tickers, iShares fund list
 kedro run --pipeline=security_master  # ISIN-keyed securities from every N-PORT position
 kedro run --pipeline=consolidate      # latest filing per fund, holdings with ISINs
 kedro run --pipeline=lookthrough --params=isin=US4642872000
@@ -34,7 +34,7 @@ kedro run --pipeline=lookthrough --params=isin=US4642872000
 once, separate them with semicolons (Kedro splits `--params` on commas):
 
 ```bash
-kedro run --pipeline=lookthrough --params='isin=US4642872000;US4642898674;US037833EE62'
+kedro run --pipeline=lookthrough --params='isin=US4642872000;IE00B4L5Y983;US037833EE62'
 ```
 
 Each N-PORT quarter takes about 10 seconds to convert and 20 to process on a
@@ -51,8 +51,13 @@ mapping its ISINs through OpenFIGI; results are cached in
   than one fills gaps for funds whose latest filing fell in an earlier
   quarter; each fund still uses only its latest filing.
 
+`issuers.ishares_sites`
+: iShares regional sites whose fund lists are loaded. Only `uk` is
+  supported so far.
+
 `lookthrough.source_order`
-: Holdings sources in priority order.
+: Holdings sources in priority order: `issuer` (iShares), `tickerinside`,
+  `nport`, and `top_holdings` (not built yet, skipped).
 
 `lookthrough.min_resolved_pct`
 : A source is used if at least this much weight resolves to ISINs;
@@ -63,7 +68,10 @@ mapping its ISINs through OpenFIGI; results are cached in
 
 `lookthrough.proxies`
 : Funds with no free holdings mapped to a fund on the same index. Rows from
-  a proxy are marked in `matched_via` and `note`.
+  a proxy are marked in `matched_via` and `note`. Empty by default.
+
+`lookthrough.issuer_cache_dir`
+: Where issuer responses are cached, one file per fund per day.
 
 ## Tests and docs
 

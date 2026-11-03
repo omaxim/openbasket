@@ -26,10 +26,12 @@ class FundRef:
     name: str | None
     via: str
     note: str | None = None
+    #: Issuer fund ID such as ``ishares-uk:253743``, when an issuer file covers it.
+    issuer_id: str | None = None
 
     @property
     def key(self) -> str:
-        return self.series_id or f"ticker:{self.ticker}"
+        return self.series_id or self.issuer_id or f"ticker:{self.ticker}"
 
 
 @dataclass
@@ -46,7 +48,12 @@ class Line:
     ticker: str | None = None
     asset_class: str | None = None
     isin_source: str | None = None
+    #: The source suggests the line is a fund (N-PORT issuer type, money market).
     fund_hint: bool = False
+    #: True when ``ticker`` is a US listing, so it may be looked up in SEC's
+    #: fund ticker list. Issuer files use local tickers and cash codes such as
+    #: ``USD``, which collide with US fund tickers.
+    us_ticker: bool = False
 
 
 @dataclass
@@ -175,6 +182,12 @@ def look_through(
         summary["note"] = "no fund or security matched this ISIN"
     elif expand(ref, 100.0, 0, (ref.key,)) is None:
         summary["note"] = "; ".join(x for x in (ref.note, "no holdings found from any source") if x)
+
+    top_unresolved = [r for r in res.unresolved if r["depth"] == 0]
+    biggest = max(top_unresolved, key=lambda r: r["weight_pct"], default=None)
+    if biggest is not None and biggest["weight_pct"] >= 50:
+        flag = f"{biggest['weight_pct']:.2f}% sits in one line with no ISIN ({biggest['name']}); likely swap-based or a feeder"
+        summary["note"] = "; ".join(x for x in (summary["note"], flag) if x)
 
     resolved = sum(r["weight_pct"] for r in res.leaves)
     summary["resolved_pct"] = round(resolved, 6)

@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from ...datasets import connection
-from ...sources import nport, sec
+from ...sources import ishares, nport, sec
 
 
 def download_nport(quarters: list[str], raw_dir: str, overwrite: bool = False) -> pd.DataFrame:
@@ -32,3 +32,8 @@ def nport_to_parquet(raw_manifest: pd.DataFrame, parquet_dir: str) -> pd.DataFra
 def download_fund_tickers() -> pd.DataFrame:
     """SEC's fund and ETF share-class tickers with their series IDs."""
     return sec.fund_tickers()
+
+
+def download_issuer_products(sites: list[str]) -> pd.DataFrame:
+    """Every iShares fund on the given regional sites, keyed by share-class ISIN."""
+    return pd.concat([ishares.products(s) for s in sites], ignore_index=True).drop_duplicates("isin")

@@ -9,7 +9,7 @@ def create_pipeline(**kwargs) -> Pipeline:
             Node(parse_isins, "params:isin", "requested_isins", name="parse_isins"),
             Node(
                 run_lookthrough,
-                ["requested_isins", "nport_holdings", "security_master", "fund_master", "ticker_isin_map", "params:lookthrough"],
+                ["requested_isins", "nport_holdings", "security_master", "fund_master", "ticker_isin_map", "issuer_products", "params:lookthrough"],
                 ["lookthrough_positions", "lookthrough_unidentified", "lookthrough_summary"],
                 name="run_lookthrough",
             ),

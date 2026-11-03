@@ -9,9 +9,13 @@ nport:
   parquet_dir: data/02_intermediate/nport
   overwrite: false
 
+issuers:
+  # iShares regional sites whose fund lists are downloaded by `ingest`.
+  ishares_sites: [uk]
+
 lookthrough:
-  # Holdings sources in priority order. "issuer" and "top_holdings" are
-  # placeholders until their clients exist and are skipped for now.
+  # Holdings sources in priority order. "issuer" is iShares for now;
+  # "top_holdings" is a placeholder and is skipped.
   source_order: [issuer, tickerinside, nport, top_holdings]
   # Take the first source that resolves at least this much weight to ISINs;
   # if none does, take the one that resolves the most.
@@ -20,9 +24,11 @@ lookthrough:
   use_openfigi: true
   enrich_openfigi: true
   openfigi_cache: data/03_primary/openfigi_cache.parquet
+  # Issuer responses, one file per fund per day.
+  issuer_cache_dir: data/01_raw/issuers/holdings
   # Funds with no free full holdings, mapped to a fund on the same index.
-  # Output rows from a proxy say so in matched_via and note.
-  proxies:
-    IE00B5BMR087:
-      ticker: IVV
-      note: "iShares Core S&P 500 UCITS ETF (CSPX); holdings of IVV, which tracks the same S&P 500 index physically"
+  # Output rows from a proxy say so in matched_via and note. Example:
+  #   IE000OY7BDY9:   # iShares MSCI North America Swap UCITS ETF
+  #     ticker: IVV
+  #     note: "swap-based; physical S&P 500 ETF as a stand-in"
+  proxies: {}

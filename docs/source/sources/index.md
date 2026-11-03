@@ -1,5 +1,16 @@
 # Sources
 
+Every holding openbasket shows comes from one of the sources below, and is
+shown with that source's name, link, credit line and as-of date. Each source
+has its own page with its endpoints, coverage, terms and known gaps.
+
+```{toctree}
+:maxdepth: 1
+:glob:
+
+*
+```
+
 Status as tested on 2026-11-03.
 
 | Source | Status | Used for |

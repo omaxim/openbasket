@@ -14,7 +14,7 @@ kedro run --pipeline=lookthrough --params=isin=IE00B5BMR087
 
 usage
 output
-sources
+sources/index
 plan
 data-api
 api

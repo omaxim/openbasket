@@ -14,7 +14,7 @@ websites included, for your own use, and shows you everything.
 
 ## Quick start
 
-You need git, [uv](https://docs.astral.sh/uv/) and about 3 GB of disk.
+You need git, [uv](https://docs.astral.sh/uv/) and about 4 GB of free disk.
 
 ```bash
 git clone https://github.com/omaxim/openbasket && cd openbasket
@@ -22,8 +22,11 @@ uv venv --python 3.12 .venv && source .venv/bin/activate && uv pip install -e '.
 kedro run --pipeline=full && python scripts/serve.py
 ```
 
-Then open <http://localhost:8000>. Before the first run, put your own name
-and email address in `SEC_USER_AGENT` in `.env` (see below).
+Then open the address it prints, <http://localhost:8000> (or the next free
+port if something else has 8000). Before the first run, put your own name
+and email address in `SEC_USER_AGENT` in `.env` (see below). Kedro sends
+anonymous usage data unless told not to: `export DO_NOT_TRACK=1` first if
+you would rather it did not.
 
 `full` downloads everything, looks through every fund it finds and writes
 the static JSON API to `build/site/api`; `serve.py` puts it together with the

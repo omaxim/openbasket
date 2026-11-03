@@ -70,6 +70,21 @@ def test_missing_file_gets_site_404_page_and_folders_are_not_listed(server):
     assert status == 404 and b"IE00B5BMR087" not in body
 
 
+def test_takes_the_next_free_port_unless_one_is_given(tmp_path):
+    busy = serve.make_server(tmp_path, "127.0.0.1", 0)
+    taken = busy.server_address[1]
+    try:
+        srv = serve.listen(tmp_path, "127.0.0.1", None, ports=[taken, 0])
+        assert srv.server_address[1] not in (0, taken)
+        srv.server_close()
+        with pytest.raises(OSError, match="choose another --port"):
+            serve.listen(tmp_path, "127.0.0.1", taken)
+        with pytest.raises(OSError, match="all taken"):
+            serve.listen(tmp_path, "127.0.0.1", None, ports=[taken])
+    finally:
+        busy.server_close()
+
+
 def test_refuses_to_start_without_an_api(tmp_path, capsys):
     assert serve.main(["--api", str(tmp_path / "none"), "--out", str(tmp_path / "out")]) == 1
     assert "kedro run --pipeline=full" in capsys.readouterr().err

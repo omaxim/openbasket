@@ -20,7 +20,8 @@ Usage::
     python scripts/serve.py [--port 8000] [--host 127.0.0.1] [--rebuild-docs] [--no-assemble]
 
 The server only listens on this machine (127.0.0.1) unless ``--host`` says
-otherwise. Every response says ``Cache-Control: no-store``, so a rebuilt
+otherwise. Without ``--port`` it takes 8000, or the next free port up to
+8019 when another program has 8000; it prints the address it took. Every response says ``Cache-Control: no-store``, so a rebuilt
 API shows up on the next reload. Stop it with Ctrl+C.
 """
 
@@ -36,6 +37,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+#: Ports tried in turn when --port is not given.
+PORTS = range(8000, 8020)
 DOCS_SRC = ROOT / "docs" / "source"
 DOCS = ROOT / "docs" / "build" / "html"
 API = ROOT / "build" / "site" / "api"
@@ -106,9 +109,22 @@ def make_server(directory: Path, host: str = "127.0.0.1", port: int = 8000) -> T
     return ThreadingHTTPServer((host, port), handler)
 
 
+def listen(directory: Path, host: str = "127.0.0.1", port: int | None = None, ports=PORTS) -> ThreadingHTTPServer:
+    """A server on ``port``, or on the first free one of ``ports`` when ``port`` is None."""
+    error = None
+    for p in [port] if port is not None else ports:
+        try:
+            return make_server(directory, host, p)
+        except OSError as exc:
+            error = f"cannot listen on {host}:{p} ({exc.strerror})"
+    hint = "choose another --port" if port is not None else f"ports {ports[0]}-{ports[-1]} are all taken; pass --port"
+    raise OSError(f"{error}; {hint}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--port", type=int, default=8000, help="port to listen on (default: 8000)")
+    parser.add_argument("--port", type=int, default=None,
+                        help="port to listen on (default: 8000, or the next free one up to 8019)")
     parser.add_argument("--host", default="127.0.0.1", help="address to listen on (default: 127.0.0.1, this machine only)")
     parser.add_argument("--api", type=Path, default=API, help="folder holding v1/ (default: build/site/api)")
     parser.add_argument("--docs", type=Path, default=DOCS, help="Sphinx HTML (default: docs/build/html, built if missing)")
@@ -129,15 +145,15 @@ def main(argv: list[str] | None = None) -> int:
         except (FileNotFoundError, ValueError, subprocess.CalledProcessError) as exc:
             print(f"serve: {exc}", file=sys.stderr)
             return 1
-        print(f"Assembled the site in {out}")
+        print(f"Assembled the site in {out}", flush=True)
     elif not (args.out / "index.html").is_file():
         print(f"serve: nothing to serve in {args.out}; run without --no-assemble first", file=sys.stderr)
         return 1
 
     try:
-        server = make_server(args.out, args.host, args.port)
+        server = listen(args.out, args.host, args.port)
     except OSError as exc:
-        print(f"serve: cannot listen on {args.host}:{args.port} ({exc.strerror}); try --port 8001", file=sys.stderr)
+        print(f"serve: {exc}", file=sys.stderr)
         return 1
     host = "localhost" if args.host in ("127.0.0.1", "localhost", "::1") else args.host
     url = f"http://{host}:{server.server_address[1]}/"

@@ -16,7 +16,9 @@ kedro run --pipeline=full && python scripts/serve.py
 ```
 
 Before the first run, open `.env` and put your own name and email address in
-`SEC_USER_AGENT` (see [](#env)). When the run is done, `serve.py` prints
+`SEC_USER_AGENT` (see [](#env)). Kedro itself sends anonymous usage data
+unless told not to; `export DO_NOT_TRACK=1` before running stops it. When
+the run is done, `serve.py` prints
 
 ```text
 Serving openbasket at http://localhost:8000/  (API: http://localhost:8000/api/v1/meta.json; Ctrl+C to stop)
@@ -47,7 +49,10 @@ and later runs, sampled or full, reuse them.
 1. `ingest`: SEC N-PORT (about 450 MB a quarter), SEC fund tickers, the
    iShares and SPDR fund lists and every enabled adapter's fund list.
 2. `reg_brazil` and `reg_spain`: CVM's monthly portfolio files and CNMV's
-   quarterly ones (they also refresh themselves when an adapter needs them).
+   quarterly ones. These and `ingest` need nothing from each other, so Kedro
+   may run them in either order; the CVM and CNMV adapters fetch the files
+   themselves when `ingest` asks for their fund lists first, and the
+   pipelines then find them up to date.
 3. `security_master`: ISIN-keyed securities from every N-PORT position.
 4. `consolidate`: each fund's latest N-PORT filing and its holdings.
 5. `universe`: looks through every fund in every list, one at a time.
@@ -78,7 +83,9 @@ curl -s http://localhost:8000/api/v1/index.json
 curl -s http://localhost:8000/api/v1/funds/IE00B5BMR087.json
 ```
 
-Options: `--port 8001` for another port, `--rebuild-docs` after changing
+If another program already uses port 8000, `serve.py` takes the next free
+one (8001, 8002, ...) and prints it; use that address in the commands
+above. Options: `--port 8080` for a fixed port, `--rebuild-docs` after changing
 the docs, `--no-assemble` to serve `build/pages-local` as it is,
 `--api` to serve another API folder.
 
@@ -171,19 +178,27 @@ written to the output.
 (time-and-disk)=
 ## Time and disk
 
-Measured on a laptop with a fresh clone, 3 November 2026:
+Measured on 3 November 2026 on a laptop (Apple silicon, home broadband),
+from a fresh clone, with `universe.sample=3`:
 
 | Step | Time | Disk |
 |---|---|---|
-| Install | about a minute | 0.5 GB (`.venv`) |
-| Downloads (`ingest`, `reg_brazil`, `reg_spain`) | a few minutes plus the 450 MB N-PORT download | 0.6 GB in `data/01_raw` |
-| `security_master`, `consolidate` | a few minutes | 0.8 GB in `data/02_intermediate`, `data/03_primary` |
-| `universe` with `universe.sample=3` | a few minutes | small |
-| `universe`, every fund | several hours | about 1 GB in `data/07_model_output` |
-| `publish` | seconds (sample) to minutes (full) | `build/site/api`, up to about 0.8 GB |
+| Install | seconds with uv's cache warm, a minute or two cold | 0.33 GB (`.venv`) |
+| Downloads: SEC fund tickers, iShares and SPDR lists, CNMV (one quarter), CVM (three months) | about 2 minutes | 0.15 GB in `data/01_raw` |
+| N-PORT download | depends on your line: 450 MB | 0.45 GB zip, 1.2 GB unpacked in `data/01_raw/nport` |
+| `security_master`, `consolidate` | about 20 seconds | 0.76 GB in `data/02_intermediate` and `data/03_primary` |
+| `universe`, 15 funds (3 from each of 5 lists) | 2 minutes, 1.5 of them OpenFIGI | 1.3 MB |
+| `publish` | under a second | 1.4 MB API in `build/site/api` |
+| `serve.py`, first time | 10 seconds (it builds the docs) | 2 MB in `build/pages-local` |
 
-Plan for about 3 GB of free disk for a full build. A full universe run is
-mostly waiting: each issuer website is asked at most once a second, and
-the first run looks up a few hundred thousand ISINs on OpenFIGI. Later runs
-on the same day reuse the cached issuer files; the OpenFIGI cache is kept
-between runs. [](publishing.md) has the measured per-fund timings.
+That run took 4.5 minutes in all (the N-PORT zip was already on disk) and
+about 2.8 GB of disk, most of it N-PORT. Plan for about 4 GB free for a
+full build.
+
+A full universe run (about 42,000 funds) takes several hours: it is mostly
+waiting, since each issuer website is asked at most once a second, and the
+first run looks up a few hundred thousand ISINs on OpenFIGI (faster with
+`OPENFIGI_API_KEY`). The API it writes is kept under
+`publish.site_budget_mb` (800 MB). Later runs on the same day reuse the
+cached issuer files, and the OpenFIGI cache is kept between runs.
+[](publishing.md) has per-fund timings.

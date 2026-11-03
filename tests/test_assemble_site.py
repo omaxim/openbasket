@@ -356,6 +356,28 @@ def test_core_query_wins_over_hash():
 
 
 @needs_node
+def test_core_moves_a_hash_fund_to_the_query_so_in_page_links_keep_it():
+    assert _core('core.fundFromHash("", "#IE00B5BMR087")') is True
+    assert _core('core.fundFromHash("?isin=US4642898674", "#IE00B5BMR087")') is False
+    assert _core('core.fundFromHash("", "#api")') is False
+    # Fresh load of /#CSPX: the address becomes ?isin=CSPX; a click on #api then keeps CSPX.
+    steps = _core(
+        """(() => {
+            const shown = core.idFromUrl("", "#IE00B5BMR087");
+            const href = new URL(core.fundHref("https://openbasket.example/#IE00B5BMR087", shown));
+            href.hash = "api";
+            return [shown, href.href, core.idFromUrl(href.search, href.hash)];
+        })()"""
+    )
+    assert steps == ["IE00B5BMR087", "https://openbasket.example/?isin=IE00B5BMR087#api", "IE00B5BMR087"]
+    # ?isin=AOR with #CSPX typed after it: CSPX replaces AOR in the query, so #api keeps CSPX.
+    assert _core(
+        'core.fundHref("https://openbasket.example/docs/?isin=US4642898674#IE00B5BMR087", '
+        'core.hashRoute("#IE00B5BMR087", "US4642898674"))'
+    ) == "https://openbasket.example/docs/?isin=IE00B5BMR087"
+
+
+@needs_node
 def test_core_totals_for_a_truncated_fund_account_for_the_cut_rows():
     fund = _load("funds/US4642898674.json")
     t = _core(f"(() => {{ const f = {json.dumps(fund)}; return core.totals(f, core.rowsOf(f)); }})()")

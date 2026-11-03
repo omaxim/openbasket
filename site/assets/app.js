@@ -500,12 +500,12 @@
 
   const idFromLocation = () => core.idFromUrl(location.search, location.hash);
 
-  function pushId(id) {
-    const url = new URL(location.href);
-    url.search = "";
-    url.searchParams.set("isin", id);
-    url.hash = "";
-    if (url.href !== location.href) history.pushState({ id }, "", url.href);
+  /** Put the fund in the address: a new history entry, or with ``replace`` the current one rewritten. */
+  function pushId(id, { replace = false } = {}) {
+    const href = core.fundHref(location.href, id);
+    if (href === location.href) return;
+    if (replace) history.replaceState({ id }, "", href);
+    else history.pushState({ id }, "", href);
   }
 
   /* ---------- fund view ---------- */
@@ -537,7 +537,10 @@
   async function openFund(raw, opts = {}) {
     const requested = compact(raw);
     if (!requested) return;
-    if (opts.push !== false) pushId(requested);
+    // A fund opened from a #ISIN hash moves to ?isin= in place; otherwise in-page links
+    // (#api, #top) would replace the hash and lose it.
+    if (opts.replace) pushId(requested, { replace: true });
+    else if (opts.push !== false) pushId(requested);
     const token = ++state.token;
     state.shownId = requested;
     state.redrawTable = null;
@@ -1027,7 +1030,8 @@
     const metaReady = loadMeta();
     const route = (opts) => {
       const id = idFromLocation();
-      if (id) metaReady.finally(() => openFund(id, { push: false, ...opts }));
+      const replace = core.fundFromHash(location.search, location.hash);
+      if (id) metaReady.finally(() => openFund(id, { push: false, replace, ...opts }));
       else {
         state.shownId = null;
         state.token++;
@@ -1043,7 +1047,7 @@
     // #ISIN deep links typed into the address bar. Other hashes are left to the browser.
     window.addEventListener("hashchange", () => {
       const id = core.hashRoute(location.hash, state.shownId);
-      if (id) metaReady.finally(() => openFund(id, { push: false, scroll: true }));
+      if (id) metaReady.finally(() => openFund(id, { push: false, replace: true, scroll: true }));
     });
     route({ scroll: true });
   }

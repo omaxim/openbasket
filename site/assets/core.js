@@ -63,6 +63,24 @@
     return compact(p.get("isin") || p.get("id") || "") || idFromHash(hash);
   }
 
+  /** Whether the fund in a URL comes from a #ISIN hash alone (no ?isin= or ?id= names one). */
+  function fundFromHash(search, hash) {
+    const p = new URLSearchParams(search || "");
+    return !compact(p.get("isin") || p.get("id") || "") && idFromHash(hash) !== null;
+  }
+
+  /**
+   * The canonical address of a fund: ?isin=<id> and no hash. A fund opened from a #ISIN
+   * hash is moved here, so a later in-page link (#api, #top) keeps the fund in the query.
+   */
+  function fundHref(href, id) {
+    const url = new URL(href);
+    url.search = "";
+    url.searchParams.set("isin", id);
+    url.hash = "";
+    return url.href;
+  }
+
   /** Whether a hashchange should open a fund: only for an ISIN or series hash not already shown. */
   function hashRoute(hash, shownId) {
     const id = idFromHash(hash);
@@ -195,6 +213,7 @@
 
   return {
     UNRESOLVED, UNKNOWN, ISIN_RE, SERIES_RE, MATCHED_VIA, compact, sum, isValidIsin, idFromHash, idFromUrl, hashRoute,
+    fundFromHash, fundHref,
     matchedVia, rowsOf, totals, chartEntries, topHoldings, localBreakdowns, closingRows, csvCell, linkParts,
   };
 });

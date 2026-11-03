@@ -209,17 +209,9 @@ class DataProviders:
             return None
         df = got.holdings.astype(object).where(got.holdings.notna(), None)
         records = df.to_dict("records")
-        found = [self._isin_for(r.get("isin"), r.get("cusip"), r.get("sedol")) for r in records]
-        # SSGA uses CUSIP-shaped internal codes for some foreign shares, so an
-        # ISIN derived from a CUSIP is kept only if OpenFIGI knows it.
-        derived = [i for i, how in found if how == "derived_cusip"]
-        known = set()
-        if derived and self.figi is not None:
-            known = {i for i, rows in self.figi.map("ID_ISIN", derived).items() if rows}
+        found = self._issuer_isins([(r.get("isin"), r.get("cusip"), r.get("sedol")) for r in records])
         lines = []
         for r, (isin, how) in zip(records, found):
-            if how == "derived_cusip" and isin not in known:
-                isin, how = None, None
             name = r.get("name") or ""
             cash = bool(re.search(r"cash|^(u\.s\. dollar|euro|british pounds?|[a-z]+ (peso|pound|yen|franc|krona|krone|dollar|rupee|won|real|rand))$", name, re.I))
             lines.append(
@@ -232,6 +224,20 @@ class DataProviders:
                 )
             )
         return Holdings("spdr", got.as_of, lines, source_ref=f"SPDR holdings {got.url}")
+
+    def _issuer_isins(self, ids: list[tuple[str | None, str | None, str | None]]) -> list[tuple[str | None, str | None]]:
+        """ISIN and how it was found for each ``(isin, cusip, sedol)`` of an issuer file.
+
+        Issuers use CUSIP-shaped internal codes for some securities (SPDR does
+        for foreign shares), so an ISIN derived from a CUSIP is kept only if
+        OpenFIGI knows it.
+        """
+        found = [self._isin_for(*x) for x in ids]
+        derived = [i for i, how in found if how == "derived_cusip"]
+        known = set()
+        if derived and self.figi is not None:
+            known = {i for i, rows in self.figi.map("ID_ISIN", derived).items() if rows}
+        return [(None, None) if how == "derived_cusip" and isin not in known else (isin, how) for isin, how in found]
 
     def _isin_for(self, isin: str | None, cusip: str | None, sedol: str | None) -> tuple[str | None, str | None]:
         """Best ISIN for an issuer line, and how it was found."""
@@ -257,17 +263,20 @@ class DataProviders:
         if len(got.holdings) >= 20000:
             logger.warning("iShares %s returned %d lines, possibly capped by the site", issuer_id, len(got.holdings))
         df = got.holdings.astype(object).where(got.holdings.notna(), None)
+        records = df.to_dict("records")
+        found = self._issuer_isins([(r.get("isin"), r.get("cusip"), r.get("sedol")) for r in records])
         lines = [
             Line(
                 weight_pct=float(r.get("holdingPercent") or 0.0),
-                isin=r.get("isin"),
+                isin=isin,
                 name=r.get("issueName"),
                 ticker=r.get("ticker"),
+                cusip=r.get("cusip"),
                 asset_class=ishares.ASSET_CLASS.get(r.get("assetClass"), (r.get("assetClass") or "").lower() or None),
-                isin_source="reported" if r.get("isin") else None,
+                isin_source=how,
                 fund_hint=r.get("assetClass") == "Money Market" or " ETF" in (r.get("issueName") or "").upper(),
             )
-            for r in df.to_dict("records")
+            for r, (isin, how) in zip(records, found)
         ]
         return Holdings("ishares", got.as_of, lines, source_ref=f"iShares holdings {got.url}")
 

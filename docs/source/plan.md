@@ -40,7 +40,7 @@ ingest ──► security_master ──► consolidate ──► lookthrough
 
 ## Matching an input ISIN
 
-1. An issuer's fund list (iShares UK, SPDR US and UCITS).
+1. An issuer's fund list (iShares UK and US; SPDR US and UCITS).
 2. A configured proxy.
 3. N-PORT: a holding with this ISIN (or its CUSIP) whose issuer LEI is a fund
    series' LEI.
@@ -74,6 +74,8 @@ Done (2026-11-03):
 - OpenFIGI matching and enrichment with an on-disk cache.
 - Recursive fund-of-funds expansion; direct stocks and bonds.
 - iShares UK issuer holdings with ISINs, replacing the CSPX proxy.
+- iShares US issuer holdings with ISINs: IVV, AGG and AOR (and AOR's
+  sub-funds) now come from the issuer instead of TickerInside or N-PORT.
 - SPDR US and UCITS daily holdings, covering SPY and DIA, with CUSIP and
   SEDOL lookups through N-PORT.
 
@@ -82,9 +84,9 @@ iShares and SPDR as of 2026-11-02:
 
 | ISIN | Fund | Source | Resolved | Unresolved |
 |---|---|---|---|---|
-| US4642872000 | iShares Core S&P 500 ETF (IVV) | TickerInside | 99.81% | 0.19% |
-| US4642872265 | iShares Core U.S. Aggregate Bond ETF (AGG) | N-PORT | 101.88% | −1.88% |
-| US4642898674 | iShares Core 60/40 Balanced Allocation ETF (AOR) | N-PORT, 7 sub-funds | 103.58% | −3.58% |
+| US4642872000 | iShares Core S&P 500 ETF (IVV) | iShares | 99.99% | 0.01% |
+| US4642872265 | iShares Core U.S. Aggregate Bond ETF (AGG) | iShares | 102.97% | −2.97% |
+| US4642898674 | iShares Core 60/40 Balanced Allocation ETF (AOR) | iShares, 7 sub-funds | 101.31% | −1.31% |
 | IE00B5BMR087 | iShares Core S&P 500 UCITS ETF (CSPX) | iShares | 99.86% | 0.14% |
 | IE00B4L5Y983 | iShares Core MSCI World UCITS ETF (SWDA) | iShares | 99.65% | 0.35% |
 | IE00B1FZSB30 | iShares Core UK Gilts UCITS ETF (IGLT) | iShares | 100.02% | −0.02% |
@@ -95,16 +97,16 @@ iShares and SPDR as of 2026-11-02:
 | IE00B6YX5C33 | SPDR S&P 500 UCITS ETF | SPDR | 100.00% | 0.00% |
 | US037833EE62 | Apple Inc bond | Security master | 100% | 0% |
 
-The negative figures are what the filings say: AGG's lines, and those of
-AOR's bond sub-funds, add up to more than 100% of net assets. Why (for
-example, purchases not yet settled) is not yet broken down.
+The negative figures are what the issuer files say: AGG's lines, and those
+of AOR's bond sub-funds, add up to more than 100% of net assets, offset by a
+negative USD cash line (−2.92% in AGG), most likely purchases not yet
+settled. IVV's US equity weights are given to two decimals only.
 
 ## Next
 
 1. **Other UCITS issuers**: Vanguard, Xtrackers, Amundi, Invesco.
-2. **Other iShares regions.** Find the product-data service names for the
-   Swiss, German and US sites; the US one would give ISIN-level daily holdings
-   for US iShares ETFs too.
+2. **Other iShares regions.** Find the fund-list endpoint and product-data
+   service names for the Swiss and German sites, as was done for the US.
 3. **Mortgage pools.** Match iShares pool numbers to CUSIPs through N-PORT
    so bond funds' agency MBS resolve.
 4. **More N-PORT quarters.** Load 2026 Q2 alongside Q3 for funds whose

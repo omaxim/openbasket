@@ -11,7 +11,7 @@ nport:
 
 issuers:
   # iShares regional sites whose fund lists are downloaded by `ingest`.
-  ishares_sites: [uk]
+  ishares_sites: [uk, us]
   # SPDR fund finders: "us" (US ETFs, including SPY and DIA) and "emea" (UCITS).
   spdr_regions: [us, emea]
 

@@ -8,7 +8,11 @@ The site at `https://openbasket.leithresearch.org/` is static. The "API" is a
 set of JSON files rebuilt by the scheduled build and served by GitHub Pages,
 so there is no server to overload. All paths are relative to the site root.
 
-This page is contract **1.1**. The files still live under `api/v1` and
+This page is contract **1.1**. The public site and release are built with
+`publish.mode: public`: they carry only sources whose licence allows
+republication. A run on your own machine (`publish.mode: full`, see
+[](running-locally.md)) writes the same files with every source it read,
+for your own use. The files still live under `api/v1` and
 `meta.json` still says `"api_version": 1`; `meta.json` says which contract
 the files follow in `contract`. 1.1 adds fields, and changes what two 1.0
 fields count (see [Changes from 1.0](#changes-from-10)).
@@ -33,8 +37,14 @@ fields count (see [Changes from 1.0](#changes-from-10)).
    holdings still says where its list came from.
 6. `matched_via` takes the values listed below (`series_id`, `issuer_id`
    and `proxy` are new).
-7. `meta.json` gains `contract` and lists every source that appears
-   anywhere, including `openfigi`.
+7. `meta.json` gains `contract` and `mode`, and lists every source that
+   appears anywhere, including `openfigi`, each with its `redistribution`
+   class.
+8. `status` gains `local_only`: in the public build, a fund whose holdings
+   only a source that may not be republished has (an issuer's website). Such
+   a fund is listed by name and ISIN with no rows; its `source` is where that
+   identity came from (`issuer_list`, `fund_directory`, `fund_registry`,
+   `firds`).
 
 ## `api/v1/meta.json`
 
@@ -42,6 +52,7 @@ fields count (see [Changes from 1.0](#changes-from-10)).
 {
   "api_version": 1,
   "contract": "1.1",
+  "mode": "public",
   "built_at": "2026-11-03T12:00:00Z",
   "release_tag": "2026-11",
   "release_url": "https://github.com/omaxim/openbasket/releases/tag/2026-11",
@@ -50,14 +61,15 @@ fields count (see [Changes from 1.0](#changes-from-10)).
   "n_isins": 31877,
   "sources": [
     {
-      "id": "ishares",
-      "name": "iShares (BlackRock) fund holdings",
-      "url": "https://www.ishares.com/",
-      "licence": "Public website data; terms not reviewed",
-      "credit": "Holdings data from iShares by BlackRock",
-      "n_funds": 1015,
-      "as_of_min": "2026-10-30",
-      "as_of_max": "2026-11-03"
+      "id": "nport",
+      "name": "SEC Form N-PORT",
+      "url": "https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets",
+      "licence": "Public US government data",
+      "credit": "Holdings from SEC Form N-PORT filings, U.S. Securities and Exchange Commission",
+      "redistribution": "public",
+      "n_funds": 12559,
+      "as_of_min": "2026-04-30",
+      "as_of_max": "2026-07-31"
     }
   ]
 }
@@ -67,8 +79,9 @@ fields count (see [Changes from 1.0](#changes-from-10)).
 
 | id | What it supplies |
 |---|---|
-| `ishares`, `spdr` | The issuer's own holdings files. |
-| any issuer adapter's name (`xtrackers`, `amundi`, `vanguard`, ...) | That issuer's holdings files, read by its adapter in `openbasket.sources.issuers`. |
+| `ishares`, `spdr` | The issuer's own holdings files. `local_only`: in local (full) builds only. |
+| any issuer adapter's name (`cvm_brazil`, `cnmv_spain`, `amundi`, ...) | That source's holdings, read by its adapter in `openbasket.sources.issuers`; in the public build only if the adapter is `public` (CVM, CNMV). |
+| `issuer_list`, `fund_directory`, `fund_registry`, `firds` | A fund's name and ISIN only, for a `local_only` fund in the public build: from the issuer's public fund list, or from an open registry. |
 | `nport` | SEC Form N-PORT filings. |
 | `tickerinside` | TickerInside's issuer-layer holdings of US ETFs. |
 | `security_master` | A single stock or bond, described from N-PORT. |
@@ -76,7 +89,9 @@ fields count (see [Changes from 1.0](#changes-from-10)).
 
 Every id that appears anywhere in the files (a row's `source`, a fund's
 `source`, a name taken from OpenFIGI) is listed, with `name`, `url`,
-`licence` and `credit`. `as_of_min` and `as_of_max` are null for `openfigi`,
+`licence`, `credit` and `redistribution` (`public`, or `local_only` for a
+source whose terms restrict republication; the public build lists none of
+those). `mode` is `public` for the public build and `full` for a local run. `as_of_min` and `as_of_max` are null for `openfigi`,
 which has no holdings dates. TickerInside's credit says what openbasket
 changed: tickers mapped to ISINs and names taken from N-PORT, under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
@@ -111,6 +126,10 @@ Every fund the build covers, as a table, so the search box can load it once
   not listed (they are their own constituent).
 
 ## `api/v1/funds/{id}.json`
+
+This example is an iShares fund as a local (full) build writes it. The
+public build never carries iShares rows: there the same fund is a
+`local_only` fund (see Funds with no holdings, below).
 
 ```json
 {
@@ -234,7 +253,8 @@ Source and matching
   SEC's fund list); `sec_ticker` (a US ticker in SEC's fund list);
   `proxy` (a configured stand-in, said in `note`); `security_master` (not a
   fund: a single security, or a fund ISIN no source has holdings for);
-  `directory` (a fund directory source, where one is configured).
+  `issuer_list`, `fund_directory`, `fund_registry` or `firds` (a
+  `local_only` fund in the public build, named from that list or registry).
 
 Status
 : `status` is a plausibility flag: `ok`; `partial` (the source's lines are
@@ -242,7 +262,9 @@ Status
   `over_100` (the lines, or the looked-through constituents, are more than 5
   points above 100); `leveraged` (the name says 2x, Ultra, Inverse, Bear and
   the like, or the lines are more than 50 points from 100: weights are market
-  values, not exposure); `no_holdings`. `note` says why in words.
+  values, not exposure); `no_holdings`; `local_only` (public build only:
+  the only source of the fund's holdings may not be republished, see
+  below). `note` says why in words.
 
 Funds with no holdings
 : `as_of` is the date the source's fund list was read (for an N-PORT
@@ -252,6 +274,26 @@ Funds with no holdings
   source but no holdings were available; `constituents` is empty, `n_rows`
   is 0, and the unresolved weight is 100. `unresolved` carries the same
   `source`, `source_url`, `as_of` and `note`.
+: A `local_only` fund is one of these, in the public build, whose holdings
+  only an issuer's own site publishes. Its `source` is where its name and
+  ISIN came from, `source_url` the issuer's home page (or the registry's
+  record), and `note` points to running openbasket yourself:
+
+```json
+{
+  "id": "IE0001JK8FV4", "name": "iShares Broad Global Govt Bond UCITS ETF", "issuer": "iShares",
+  "source": "issuer_list", "source_url": "https://www.ishares.com/",
+  "credit": "Fund listed by the issuer's public fund list; its holdings are available from iShares when you run openbasket yourself",
+  "as_of": "2026-11-03", "matched_via": "issuer_list", "status": "local_only",
+  "note": "Holdings for this fund are available from iShares when you run openbasket yourself (see https://openbasket.leithresearch.org/docs/running-locally.html)",
+  "resolved_pct": 0.0, "unresolved_pct": 100.0, "n_constituents": 0, "n_rows": 0, "constituents": [],
+  "unresolved": {"weight_pct": 100.0, "note": "Holdings for this fund are available from iShares ...",
+                 "source": "issuer_list", "source_url": "https://www.ishares.com/", "as_of": "2026-11-03"}
+}
+```
+
+  (Keys abridged.) A fund in the public build that holds a `local_only`
+  fund keeps it as an unexpanded `fund` row with the same note.
 
 ## `api/v1/funds/{isin}.json` for other share classes
 

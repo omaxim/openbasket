@@ -10,8 +10,8 @@ from openbasket.pipelines.publish.nodes import FUND_FILE_KEYS, publish, resoluti
 
 from .test_universe import SOURCES, _run, build_universe, FUND_MASTER, PRODUCTS, security_master
 
-META_KEYS = {"api_version", "contract", "built_at", "release_tag", "release_url", "full_data_url", "n_funds", "n_isins", "sources"}
-SOURCE_KEYS = {"id", "name", "url", "licence", "credit", "n_funds", "as_of_min", "as_of_max"}
+META_KEYS = {"api_version", "contract", "mode", "built_at", "release_tag", "release_url", "full_data_url", "n_funds", "n_isins", "sources"}
+SOURCE_KEYS = {"id", "name", "url", "licence", "credit", "redistribution", "n_funds", "as_of_min", "as_of_max"}
 FUND_KEYS = {
     "id", "isin", "isins", "name", "ticker", "issuer", "source", "source_url", "credit", "as_of", "matched_via", "note",
     "status", "reported_total_pct", "resolved_pct", "unexpanded_fund_pct", "unresolved_pct", "unidentified_lines_pct",

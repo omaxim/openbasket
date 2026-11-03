@@ -16,8 +16,11 @@ one test file and one page in this folder. Nothing else needs editing.
    - `redistribution`: `"public"` only when the source's licence allows its
      holdings to be republished (a regulator's open data, CC BY, public
      domain); otherwise leave the default, `"local_only"`. The public build
-     never fetches or publishes a `local_only` source; people who run
-     openbasket themselves still get its holdings locally.
+     (`publish.mode: public`) never calls a `local_only` adapter's
+     `products()` or `holdings()` and refuses to write its rows; its funds
+     are listed there by name and ISIN only, with status `local_only`.
+     People who run openbasket themselves still get its holdings locally
+     (see [](../running-locally.md)).
    - `enabled_by_default=False` when the site's terms forbid automated
      access even for private use. The adapter then runs only when the user
      names it in `issuers.enabled` (for example in `conf/local`). A site

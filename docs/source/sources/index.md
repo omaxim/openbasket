@@ -165,9 +165,11 @@ Issuer tickers are local codes, and cash lines use currency codes such as
 `USD`, which is also a US ETF's ticker. So iShares lines are matched to funds
 by ISIN only, never by ticker.
 
-**Terms.** This is public data from the issuer's website. BlackRock's site
-terms have not been reviewed for automated or bulk use; the client keeps to
-one request per fund per day and pauses between requests.
+**Terms.** BlackRock's site terms restrict republication, so iShares is
+`local_only`: openbasket reads it only when you run it yourself, and the
+public build lists iShares funds by name and ISIN without their holdings
+(see {doc}`../running-locally`). The client keeps to one request per fund
+per day and pauses between requests.
 
 ## SPDR
 
@@ -219,8 +221,9 @@ What stays unresolved: State Street's own money-market fund in US bond funds
 (3.1% of SPAB, internal code only), and new or 144A bonds that UCITS bond
 files list with no ISIN (5.4% of the high-yield fund).
 
-**Terms.** Public data from State Street's website, not reviewed for
-automated or bulk use; files are fetched once per fund per day.
+**Terms.** State Street's site terms restrict republication, so SPDR is
+`local_only`, read only when you run openbasket yourself; files are fetched
+once per fund per day.
 
 ## Top-holdings fallbacks
 

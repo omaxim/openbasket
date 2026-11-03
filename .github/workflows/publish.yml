@@ -164,7 +164,10 @@ jobs:
       - name: Check build
         # Fails, so nothing is released or deployed, on too few funds, a source
         # without name, link, licence or credit, a row without source or as-of
-        # date, or a site over GitHub Pages' 1 GB limit. Warns on stale N-PORT.
+        # date, a fund without a source link, any local_only source (one whose
+        # terms do not allow republication) in meta, a fund, a row or a release
+        # file, or a site over GitHub Pages' 1 GB limit. Warns when
+        # nport.quarters lacks a quarter SEC should have out.
         run: |
           python scripts/check_build.py \
             --api build/site/api --release build/release --pages build/pages --require-pipeline \

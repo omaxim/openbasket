@@ -1,0 +1,5 @@
+# The public build keeps its own fund list, so it never overwrites (or reads
+# more than names and ISINs from) the full list a local run downloaded.
+issuer_products:
+  type: pandas.ParquetDataset
+  filepath: data/01_raw/issuers/issuer_products_public.parquet

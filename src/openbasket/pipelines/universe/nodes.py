@@ -12,6 +12,12 @@ ISIN from one source through one fund, so every row's source is exact. A
 fund that raises is recorded with its error and the batch moves on.
 Constituent rows go to Parquet parts on disk as they are made, so memory
 stays flat however many funds there are.
+
+In the public build (``publish.mode: public``) a fund of a ``local_only``
+issuer keeps only its identity. If it is also an N-PORT series it becomes
+that series (name and issuer from SEC), so its public holdings are used;
+otherwise it is listed with status ``local_only``, no rows, and a note
+saying where its holdings are.
 """
 
 from __future__ import annotations
@@ -35,6 +41,7 @@ from ...datasets import connection
 from ...identifiers import normalise_ticker
 from ...lookthrough import FundRef, look_through
 from ...providers import BUILTIN_ISSUERS, edgar_url, is_us_product, issuer_id
+from ...sources import FULL_MODE, PUBLIC, fund_identity, publish_mode, redistribution
 from ...sources.openfigi import OpenFIGI, best_listing
 from ...sources.tickerinside_source import issuer_tickers
 from ..lookthrough.nodes import aggregate, issuer_adapters, make_providers
@@ -46,7 +53,7 @@ UNIVERSE_SOURCES = ("ishares", "spdr", "nport")
 
 UNIVERSE_COLUMNS = [
     "id", "isin", "isins", "series_id", "issuer_id", "share_class_ids", "name", "ticker", "issuer",
-    "universe_source", "series_match", "product_page_url", "cik", "listed_on",
+    "universe_source", "series_match", "product_page_url", "cik", "listed_on", "list_source", "list_url",
 ]
 
 _STR = pa.string()
@@ -97,6 +104,10 @@ def _share_class_group(row: pd.Series) -> tuple:
     CSPX), keeps the funds apart. SPDR names end in "(Acc)" or "(Dist)", so
     SPDR classes stay one fund each.
     """
+    if row.get("identity_only") in (True,):
+        # Only a name and an ISIN are known: an iShares or SPDR name still groups share classes.
+        key = fund_name_key(row["fund_name"])
+        return (row["issuer"], key) if key and row["issuer"] in BUILTIN_ISSUERS else (row["issuer"], row["issuer_id"])
     if row["issuer"] in BUILTIN_ISSUERS:
         return (row["issuer"], str(row["site"]).lower(), fund_name_key(row["fund_name"]),
                 str(row.get("domicile") or ""), str(row.get("asset_class") or ""))
@@ -129,7 +140,8 @@ def _issuer_funds(issuer_products: pd.DataFrame, issuer_names: dict) -> list[dic
     if "issuer" not in ip:
         ip["issuer"] = "ishares"
     ip["issuer"] = ip["issuer"].fillna("ishares").astype(str).str.lower()
-    for col in ("total_net_assets", "product_page_url", "ticker", "domicile", "asset_class", "listed_on"):
+    for col in ("total_net_assets", "product_page_url", "ticker", "domicile", "asset_class", "listed_on",
+                "identity_source", "identity_url", "identity_only"):
         if col not in ip:
             ip[col] = None
     ip["total_net_assets"] = pd.to_numeric(ip["total_net_assets"], errors="coerce")
@@ -151,7 +163,11 @@ def _issuer_funds(issuer_products: pd.DataFrame, issuer_names: dict) -> list[dic
                 "issuer": issuer_names.get(first["issuer"], first["issuer"]), "universe_source": first["issuer"],
                 "series_match": None, "product_page_url": _str(first["product_page_url"]), "cik": None,
                 "listed_on": _str(first["listed_on"]),
-                "_us": is_us_product(first.to_dict()), "_name_key": fund_name_key(first["fund_name"]),
+                "list_source": _str(first["identity_source"]) or first["issuer"],
+                "list_url": _str(first["identity_url"]) or _str(first["product_page_url"]),
+                # An identity-only row has no site or domicile; a US ISIN says the fund is American.
+                "_us": is_us_product(first.to_dict()) or (first["identity_only"] in (True,) and str(first["isin"]).startswith("US")),
+                "_name_key": fund_name_key(first["fund_name"]),
             }
         )
     return funds
@@ -198,6 +214,7 @@ def _series_funds(fund_master: pd.DataFrame, security_master: duckdb.DuckDBPyRel
                 "issuer": _str(first.get("registrant_name")), "universe_source": "nport", "series_match": None,
                 "product_page_url": None, "cik": _str(first.get("cik")),
                 "listed_on": pd.Timestamp(report).date().isoformat() if pd.notna(report) else None,
+                "list_source": "nport", "list_url": None,
                 "_tickers": tickers, "_name_key": fund_name_key(first.get("series_name")),
             }
         )
@@ -209,6 +226,7 @@ def build_universe(
     fund_master: pd.DataFrame,
     security_master: duckdb.DuckDBPyRelation,
     params: dict,
+    publish_params: dict | None = None,
 ) -> pd.DataFrame:
     """Every known fund, one row each, with every ISIN that names it in ``isins``.
 
@@ -217,6 +235,10 @@ def build_universe(
     the issuer fund's ticker, or, failing both, when its name is the issuer
     fund's name and no other fund on either side has that name. An ISIN
     belongs to one fund only: issuer funds claim theirs first.
+
+    In the public build a ``local_only`` issuer fund matched to a series is
+    that series, named from SEC; one that is not keeps its ISINs, name and
+    issuer only.
     """
     names = {**BUILTIN_ISSUERS, **{n: a.title for n, a in issuer_adapters(params.get("adapters")).items()},
              **(params.get("issuers") or {})}
@@ -244,6 +266,7 @@ def build_universe(
             continue
         target.update(series_id=s["series_id"], series_match=how, cik=s["cik"])
         target["_series_isins"] = s["isins"]
+        target["_series"] = s
 
     # Names, last: a US issuer fund still unmatched whose name only one
     # remaining series has (and no other unmatched issuer fund shares).
@@ -262,11 +285,17 @@ def build_universe(
             f, s = fs[0], ss[0]
             f.update(series_id=s["series_id"], series_match="name", cik=s["cik"])
             f["_series_isins"] = s["isins"]
+            f["_series"] = s
             matched_by_name.add(s["series_id"])
     rest = [s for s in rest if s["series_id"] not in matched_by_name]
 
+    if publish_mode(publish_params) != FULL_MODE:
+        for f in issuer:
+            _public_identity(f)
+
     claimed = set(by_isin)
     for f in issuer:
+        f.pop("_series", None)
         extra = [i for i in f.pop("_series_isins", []) if i not in claimed]
         claimed.update(extra)
         f["isins"] = f["isins"] + extra
@@ -290,6 +319,22 @@ def build_universe(
         out["series_match"].value_counts().to_dict(),
     )
     return out.reset_index(drop=True)
+
+
+def _public_identity(f: dict) -> None:
+    """A ``local_only`` issuer fund in the public build: the N-PORT series it is, or its identity only."""
+    if redistribution(f["universe_source"]) == PUBLIC:
+        return
+    s = f.get("_series")
+    if s is not None:
+        # The fund files N-PORT: use the series and SEC's name for it, not the issuer's list.
+        f.update(name=s["name"], ticker=s["ticker"], issuer=s["issuer"], universe_source="nport", issuer_id=None,
+                 share_class_ids=[], product_page_url=None, listed_on=s["listed_on"], list_source="nport", list_url=None)
+        return
+    if f.get("list_source") == f["universe_source"]:
+        # Read from the issuer's full product list (a full-mode file): keep the facts, drop the rest.
+        f.update(list_source=fund_identity.ISSUER_LIST, list_url=None)
+    f.update(ticker=None, product_page_url=None)
 
 
 def select_universe(universe: pd.DataFrame, params: dict) -> pd.DataFrame:
@@ -330,13 +375,14 @@ class _Warnings(logging.Handler):
 def fund_ref(fund: dict) -> FundRef:
     """The engine's ref for a universe row; issuer funds keep their series for the N-PORT fallback.
 
-    ``via`` is how the fund was matched: the issuer list it is keyed by, or
+    ``via`` is how the fund was matched: the list it is keyed by (an issuer's
+    list, or in the public build the registry its identity came from), or
     ``series_id`` for an N-PORT series.
     """
     src = fund["universe_source"]
     return FundRef(
         series_id=_str(fund.get("series_id")), ticker=_str(fund.get("ticker")), name=_str(fund.get("name")),
-        via="series_id" if src == "nport" else src, issuer_id=_str(fund.get("issuer_id")),
+        via="series_id" if src == "nport" else (_str(fund.get("list_source")) or src), issuer_id=_str(fund.get("issuer_id")),
     )
 
 
@@ -390,7 +436,7 @@ ROW_KEY = ("input_isin", "constituent_isin", "source", "as_of", "via_fund")
 
 
 def _fallback_url(fund: dict) -> str | None:
-    return _str(fund.get("product_page_url")) or (
+    return _str(fund.get("product_page_url")) or _str(fund.get("list_url")) or (
         edgar_url(fund["series_id"], None, _str(fund.get("cik"))) if _str(fund.get("series_id")) else None
     )
 
@@ -408,7 +454,7 @@ def _fund_rows(fund: dict, leaves: list[dict], summary: dict) -> pd.DataFrame:
     unresolved = {
         "fund_id": fid, "constituent_isin": None, "name": "Unresolved weight", "weight_pct": summary["unresolved_pct"],
         "asset_class": "unresolved",
-        "source": summary["source"] or fund["universe_source"],
+        "source": summary["source"] or _list_source(fund),
         "source_ref": summary.get("source_ref"),
         "source_url": summary.get("source_url") or _fallback_url(fund),
         "as_of": summary["as_of"] or (_str(fund.get("listed_on")) if no_holdings else None),
@@ -417,6 +463,11 @@ def _fund_rows(fund: dict, leaves: list[dict], summary: dict) -> pd.DataFrame:
     out = pd.concat([agg, pd.DataFrame([unresolved])], ignore_index=True)
     out["fund_id"] = fid
     return out
+
+
+def _list_source(fund: dict) -> str:
+    """The source that listed the fund: its issuer's list, a registry, or N-PORT."""
+    return _str(fund.get("list_source")) or fund["universe_source"]
 
 
 def _summary_row(fund: dict, s: dict, error: str | None, tb: str | None, warnings: list[str], seconds: float) -> dict:
@@ -429,7 +480,7 @@ def _summary_row(fund: dict, s: dict, error: str | None, tb: str | None, warning
         "name": _str(fund.get("name")) or s.get("fund_name"),
         # A fund with no holdings is credited to the list it came from, dated
         # the day that list was read.
-        "source": src or fund["universe_source"],
+        "source": src or _list_source(fund),
         "source_url": s.get("source_url") or _fallback_url(fund),
         "source_ref": s.get("source_ref"),
         "credit": None,
@@ -526,8 +577,13 @@ def run_universe(
     params: dict,
     sources: dict,
     issuers_params: dict | None = None,
+    publish_params: dict | None = None,
 ) -> tuple[pd.DataFrame, duckdb.DuckDBPyRelation, dict]:
-    """Expand every selected fund. Returns the fund table, the constituent rows and a run record."""
+    """Expand every selected fund. Returns the fund table, the constituent rows and a run record.
+
+    ``publish_params`` gives ``publish.mode``: in the public build no
+    ``local_only`` issuer's holdings are read.
+    """
     started = time.perf_counter()
     started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     http = params.get("http") or {}
@@ -542,7 +598,7 @@ def run_universe(
                 issuer_series[iid] = f["series_id"]
     providers = make_providers(
         nport_holdings, security_master, fund_master, ticker_isin_map, issuer_products, cusip_isin_map,
-        sedol_isin_map, lookthrough_params, figi, issuers_params=issuers_params,
+        sedol_isin_map, lookthrough_params, figi, issuers_params=issuers_params, publish_params=publish_params,
         stop_at_pct=lookthrough_params["min_resolved_pct"] if params.get("stop_early", True) else None,
         tickerinside_tickers=ti, issuer_series=issuer_series,
     )
@@ -587,6 +643,8 @@ def run_universe(
         "n_ok": int(ok.sum()),
         "n_failed": int((~ok).sum()),
         "n_no_holdings": int((funds_df["status"] == "no_holdings").sum()),
+        "n_local_only": int((funds_df["status"] == "local_only").sum()),
+        "mode": providers.mode,
         "status": {k: int(v) for k, v in funds_df["status"].value_counts().items()},
         "n_constituent_rows": writer.n_rows,
         "http_requests": throttle.THROTTLE.requests,
@@ -658,7 +716,8 @@ def _with_credit(funds: pd.DataFrame, constituents: duckdb.DuckDBPyRelation, sou
     """Credit every source a fund's rows came from, its own source first, then by weight.
 
     OpenFIGI is credited where it supplied a name. A fund with no holdings is
-    credited as listed by its source, with no holdings available.
+    credited as listed by its source, with no holdings available; a
+    ``local_only`` one also says who has them.
     """
     rel = constituents  # noqa: F841 - read by DuckDB below
     used = connection().sql(
@@ -673,11 +732,15 @@ def _with_credit(funds: pd.DataFrame, constituents: duckdb.DuckDBPyRelation, sou
         fid: g.sort_values("w", ascending=False)["src"].tolist() for fid, g in used.groupby("fund_id", sort=False)
     }
     credits = []
-    for fid, top, status in zip(funds["id"], funds["source"], funds["status"]):
-        if status == "no_holdings" and not by_fund.get(fid):
+    for fid, top, status, issuer in zip(funds["id"], funds["source"], funds["status"], funds["issuer"]):
+        if status in ("no_holdings", "local_only") and not by_fund.get(fid):
             cfg = sources.get(top) or {}
             name = cfg.get("listed_by") or cfg.get("name") or top
-            credits.append(f"Fund listed by {name}; no holdings were available from any source")
+            if status == "local_only":
+                credits.append(f"Fund listed by {name}; its holdings are available from {issuer or 'its issuer'} "
+                               "when you run openbasket yourself")
+            else:
+                credits.append(f"Fund listed by {name}; no holdings were available from any source")
             continue
         ids = list(dict.fromkeys([top, *by_fund.get(fid, [])]))
         credits.append("; ".join((sources.get(s) or {}).get("credit") or s for s in ids if s))

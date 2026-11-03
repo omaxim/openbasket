@@ -15,6 +15,13 @@ The result is `data/08_reporting/lookthrough.csv`: one row per constituent
 ISIN with its weight in percent of the fund's net assets, its source and
 date, and one row of unresolved weight. Weights are never rescaled to 100%.
 
+openbasket is a tool, not a database. Run on your own machine it reads
+every enabled source, issuer websites included, for your own use. The
+public site and releases (`kedro run --env public`) carry only sources
+whose licence allows republication; funds whose holdings only an issuer's
+site publishes are listed there by name and ISIN, with status `local_only`.
+See `docs/source/running-locally.md`.
+
 Full documentation: `make -C docs html`, then open
 `docs/build/html/index.html`. It covers usage, the output columns, each
 source's coverage and gaps, and the plan.

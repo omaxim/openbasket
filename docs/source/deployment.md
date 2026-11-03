@@ -22,8 +22,11 @@ ingest ─► security_master ─► consolidate ─► universe ─► publish
                                           build/release ─► check ─► GitHub Release
 ```
 
-1. `kedro run --pipeline=ingest`, `security_master` and `consolidate`, as
-   for a local run (see {doc}`plan`).
+1. `kedro run --env public --pipeline=ingest`, `security_master` and
+   `consolidate`, as for a local run (see {doc}`plan`). Every step runs with
+   `--env public`, whose `publish.mode: public` keeps every `local_only`
+   source (issuer websites) out of the build: it is never asked for
+   anything and none of its rows can be written (see {doc}`publishing`).
 2. `kedro run --pipeline=universe`, with `--params=universe.sample=N` on a
    sample run.
 3. `kedro run --pipeline=publish --params=publish.release_tag=YYYY-MM`, the
@@ -46,14 +49,22 @@ ingest ─► security_master ─► consolidate ─► universe ─► publish
    - a fund, a constituent row or an `unresolved` entry names a source that
      `meta.sources` does not list, or a fund or row has no source or no
      as-of date;
+   - a fund file has no `source_url`, or a fund with no rows has an
+     `unresolved` entry with a source but no `source_url`;
+   - `meta.json` says the build is not a public one (`mode`), or a source in
+     `meta.sources`, on a fund, a row or an `unresolved` entry, or in either
+     release Parquet file is `local_only` (by
+     `openbasket.sources.redistribution`, or by what `meta.sources` declares:
+     a source is public only if both say so);
    - TickerInside is credited without a link to the CC BY 4.0 licence;
    - a fund in `index.json` has no fund file;
    - `build/pages` is over GitHub Pages' 1 GB limit, or a page carries an
      analytics script.
 
    It warns, without failing, when the site is over 900 MB, when a dated
-   source has no as-of range, and when N-PORT looks stale (see
-   [Quarterly maintenance](#quarterly-maintenance)). The job summary lists
+   source has no as-of range, and when `nport.quarters` lacks a quarter SEC
+   should have out (see [Quarterly maintenance](#quarterly-maintenance)).
+   The job summary also counts fund files by `status`. The job summary lists
    the errors and warnings, the site size, every source with its link, fund
    count, as-of range, licence and credit line, and every figure in
    `build/release/quality-report.json`. The same step writes the release
@@ -200,11 +211,14 @@ some weeks after the quarter ends. Once a quarter is up:
 3. Optionally run the workflow with a small `sample` (not deployed) to check
    that the new quarter reads cleanly before the scheduled full build.
 
-The check step warns in the job summary when this is due: when the newest
-N-PORT holdings in `meta.json` are more than 150 days old, or when
+The check step warns in the job summary when this is due: when
 `nport.quarters` lacks the latest quarter that ended more than 60 days
-before the run. The warning does not fail the run; a build on last
-quarter's N-PORT is still worth publishing.
+before the run, giving the age of the newest N-PORT holdings in `meta.json`
+too. Age alone is not a warning: holdings are already about 95 days old when
+their quarter's data set comes out and about 185 days old just before the
+next one, with nothing to add. Only when the quarter list cannot be read
+does the check fall back to age, warning past 200 days. The warning does not
+fail the run; a build on last quarter's N-PORT is still worth publishing.
 
 ## The pipeline diagram
 
@@ -223,7 +237,10 @@ KEDRO_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 python scripts/build_pipeline_viz.py --
 where it would mix with `build/site`, `build/release` and `build/pages`. The
 script runs it in a temporary copy of the project (`pyproject.toml`, `src`
 and `conf/base`, so no local config is read) and copies the result to
-`--out`, without its development-only files. The build is about 10 MB and
+`--out`, without its development-only files. Kedro-Viz gives each dataset's
+`filepath` as an absolute path inside that copy; the script rewrites them to
+project paths (`data/03_primary/universe.parquet`) and fails if the copy's
+folder is still named anywhere in the output. The build is about 10 MB and
 takes under half a minute. `kedro viz` (without `build`) serves the same
 diagram locally.
 
@@ -267,7 +284,11 @@ and the last release keep serving the previous build.
    `OPENBASKET_MIN_FUNDS` variable.
 5. **A source is not stated** (a source without a credit line, or a row
    whose source is not in `meta.sources`): add or fix its entry under
-   `publish.sources` in `conf/base/parameters.yml`. Every source id a row can
+   `publish.sources` in `conf/base/parameters.yml`.
+   **A `local_only` source is in the build**: a step ran without
+   `--env public`, or a new source is unclassified. Never relabel a source
+   `public` to pass the check; only a licence that allows republication
+   makes it public (see {doc}`sources/adding-a-source`). Every source id a row can
    carry, issuer adapters included, needs one. Do not work around the check;
    it is there so that nothing is published without its source and credit.
 6. **The site is over 1 GB**: lower `publish.site_budget_mb` or

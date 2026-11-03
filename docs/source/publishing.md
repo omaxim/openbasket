@@ -17,6 +17,56 @@ kedro run --pipeline=publish --params=publish.release_tag=2026-11
 [](data-api.md) and the release files. Neither runs as part of a plain
 `kedro run`.
 
+## Public and full builds
+
+openbasket is a tool, not a database. Every source has a redistribution
+class (`openbasket.sources.redistribution`): `public` when its licence lets
+anyone republish its holdings (SEC N-PORT, TickerInside, CVM, CNMV, the
+open registries, OpenFIGI names), `local_only` when its terms restrict that
+(issuer websites such as iShares and SPDR, and any source nobody has
+classified). `publish.mode` says which build is running:
+
+`full` (`conf/base`, a run on your own machine)
+: Every enabled source is read and every row is written. The local API and
+  site show everything. Nothing here is published.
+
+`public` (`conf/public`, the GitHub Action: `kedro run --env public`)
+: No `local_only` source is asked for anything, and none of its rows can
+  be written:
+: `ingest` does not read the iShares or SPDR lists or call a `local_only`
+  adapter's `products()`. Their funds are added as identity rows (ISIN,
+  name, issuer) from the open registries when they are built
+  (`publish.identity.registries`: the fund directory, the GLEIF and ESMA
+  fund registry, FIRDS) or, failing that, from the fund list an earlier full
+  run cached (`publish.identity.issuer_lists`), of which only those three
+  columns are read. A US fund's ticker comes from OpenFIGI, not the issuer
+  (`publish.identity.openfigi_cache`). The public fund list is its own file,
+  `data/01_raw/issuers/issuer_products_public.parquet`, so a public run
+  never overwrites a local one.
+: The providers never call a `local_only` issuer's `holdings()` or the
+  iShares and SPDR fetchers: that source answers `local_only` without a
+  request (`sources_status` `issuer=local_only`), and TickerInside and
+  N-PORT are still read.
+: The universe turns a `local_only` issuer fund that is also an N-PORT
+  series into that series, named from SEC, so its public holdings are used.
+  A fund only `local_only` sources cover is listed with status
+  `local_only`, no rows, `source` set to where its identity came from
+  (`issuer_list`, `fund_directory`, ...), and the note "Holdings for this
+  fund are available from *issuer* when you run openbasket yourself (see
+  <publish.run_locally_url>)". A public fund that holds such a fund keeps it
+  as an unexpanded `fund` row with the same note.
+: `publish` checks every row and fund before writing anything and stops
+  with `LocalOnlyInPublicBuild` if one comes from a `local_only` source (a
+  full run's universe outputs, for example); each fund file is checked again
+  as it is written, and `meta.sources` lists public sources only.
+  `scripts/check_build.py` checks the written files once more (see
+  {doc}`deployment`).
+
+A source whose robots.txt disallows the pages it would need has no adapter.
+One whose terms forbid automated access even for private use has an
+adapter with `enabled_by_default = False`, which runs only when named in
+`issuers.enabled` in `conf/local` (see {doc}`running-locally`).
+
 ## The universe
 
 Every fund in the issuer lists (`issuer_products`: iShares UK and US, SPDR US
@@ -152,8 +202,9 @@ kedro run --pipeline=universe --params=universe.sample=10   # 30 funds
 `universe` (`data/03_primary/universe.parquet`)
 : The whole universe before selection: `id`, `isin`, `isins`, `series_id`,
   `issuer_id`, `share_class_ids`, `name`, `ticker`, `issuer`,
-  `universe_source`, `series_match`, `product_page_url`, `cik` and
-  `listed_on`.
+  `universe_source`, `series_match`, `product_page_url`, `cik`,
+  `listed_on`, `list_source` (the list or registry that named the fund) and
+  `list_url`.
 
 `universe_funds` (`data/07_model_output/universe_funds.parquet`)
 : One row per fund run: the columns above plus `source`, `source_url`,
@@ -178,8 +229,8 @@ kedro run --pipeline=universe --params=universe.sample=10   # 30 funds
   `source`, `as_of` and `via_fund`.
 
 `universe_run` (`data/08_reporting/universe_run.json`)
-: Start and end, seconds, funds attempted, succeeded, failed and without
-  holdings, funds by `status`, rows written, HTTP requests and time spent
+: Start and end, seconds, `mode`, funds attempted, succeeded, failed,
+  without holdings and `local_only`, funds by `status`, rows written, HTTP requests and time spent
   waiting, the issuer adapters used, and OpenFIGI's requests, failures and
   whether it gave up.
 
@@ -218,7 +269,10 @@ Size
 
 `quality-report.json`
 : Funds listed, attempted, succeeded, failed, without holdings and published
-  per list, and by `status`; funds by holdings source, by how they were
+  per list, and by `status` (all funds run, and `published_by_status`);
+  under `publishing`, the build `mode`, the sources published, the
+  `local_only` sources withheld, rows per source and the `local_only` funds
+  per issuer; funds by holdings source, by how they were
   matched and by how their series was found; the resolved-weight
   distribution; funds with unexpanded sub-funds; seconds per fund by list;
   the most common errors and warnings, with example funds; every fund whose
@@ -229,6 +283,30 @@ Size
   saved as `data/08_reporting/quality_report.json`.
 
 ## Sample run
+
+### Public and full, side by side
+
+Run on 3 November 2026 with `universe.sample=5`, `universe.seed=0`: 5 funds
+from each list, on 2026 Q3 N-PORT, that day's iShares and SPDR lists (read
+by the full run only) and the CVM and CNMV stores.
+
+| | Full (`kedro run`) | Public (`--env public`) |
+|---|---|---|
+| Universe | 42,148 funds | 42,148 funds |
+| US issuer ETFs tied to their N-PORT series | 641 (as iShares or SPDR funds) | 641, published as N-PORT series (268 by ISIN, 337 by OpenFIGI ticker, 36 by name) |
+| iShares and SPDR funds listed by identity only | none | 736 (547 iShares, 189 SPDR) |
+| Sample funds by status | 18 `ok`, 5 `partial`, 2 `leveraged` | 10 `local_only`, 8 `ok`, 6 `partial`, 1 `leveraged` |
+| Release rows by source | spdr 10,617, cvm_brazil 6,289, ishares 5,071, nport 1,700, cnmv_spain 564 | cvm_brazil 6,289, nport 1,700, tickerinside 1,409, cnmv_spain 582, issuer_list 10 (the unresolved rows of `local_only` funds) |
+| Requests to issuer sites | 32 HTTP requests, iShares and SPDR included | none (6 requests in all: TickerInside and OpenFIGI) |
+| `meta.sources` | ishares, spdr, nport, cnmv_spain, cvm_brazil | tickerinside, nport, issuer_list, openfigi, cnmv_spain, cvm_brazil |
+| `scripts/check_build.py` | fails: 7 errors, all `local_only` sources and a `full` build | passes, 0 warnings |
+
+The public sample picks different funds from the iShares and SPDR lists:
+there the lists hold only the funds no public source covers. Spanish funds
+of funds resolve less in the public build, because the iShares and SPDR
+UCITS ETFs they hold are kept as unexpanded `fund` rows.
+
+### Full build in detail
 
 Run on 3 November 2026 with `universe.sample=10`, `universe.seed=3` (30
 funds, 10 per list), 2026 Q3 N-PORT rebuilt without placeholder CUSIPs, and

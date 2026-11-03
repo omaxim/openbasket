@@ -17,8 +17,16 @@ Holdings
     Holdings"). Header ``AS_OF_DATE,SEDOL,NAME,NET_ASSETS,TICKER,
     MARKET_PRICE,SHARES_HELD,MARKET_VALUE,ISIN,COUNTRY``; ``NET_ASSETS`` is
     the weight in percent of net assets (three decimals), ``AS_OF_DATE`` is on
-    every row. The file ends with a quoted disclaimer line. Synthetic funds
-    and the crypto ETPs return only that disclaimer.
+    every row. The file ends with a quoted disclaimer line. Some synthetic
+    funds and the crypto ETPs return only that disclaimer.
+
+Synthetic (swap) funds that do list lines list their substitute basket: the
+securities held as collateral for the total return swap, not the index the
+fund tracks (the Euro Stoxx 50 covered-call fund holds US large caps). Those
+lines are labelled :data:`SUBSTITUTE_BASKET` and the result carries a note.
+
+Currency-forward legs (``CURRENCY CONTRACT - JPY/USD``) have a blank
+``NET_ASSETS`` in the file; they are kept with no weight.
 """
 
 from __future__ import annotations
@@ -37,10 +45,13 @@ from ... import http
 from ...identifiers import is_valid_isin
 from . import (
     HOLDING_COLUMNS,
+    LOCAL_ONLY,
     PRODUCT_COLUMNS,
+    SUBSTITUTE_BASKET,
     FetchContext,
     IssuerAdapter,
     IssuerHoldings,
+    mark_substitute_basket,
     register,
 )
 
@@ -289,12 +300,21 @@ def holdings(product: dict, ctx: FetchContext | None = None) -> IssuerHoldings:
         cache.parent.mkdir(parents=True, exist_ok=True)
         cache.write_bytes(content)
     notes = []
+    swap = product.get("replication") == "swap"
+    has_trs = bool((df["asset_class"] == "derivative (swap)").any())
     if df.empty:
         notes.append(
             "Global X publishes no constituent list for this product"
-            + (" (synthetic: the fund holds a total return swap)" if product.get("replication") == "swap" else "")
+            + (" (synthetic: the fund holds a total return swap)" if swap else "")
         )
-    if (df["asset_class"] == "derivative (swap)").any():
+    elif swap or has_trs:
+        df = mark_substitute_basket(df)
+        notes.append(
+            "synthetic fund: the lines with ISINs are the substitute basket held as collateral for the "
+            f"total return swap (asset_class {SUBSTITUTE_BASKET!r}), not the index the fund tracks; "
+            "the index exposure comes through the swap"
+        )
+    if has_trs:
         notes.append("includes a total return swap line without an ISIN")
     return IssuerHoldings(as_of, df, url, notes)
 
@@ -309,11 +329,12 @@ ADAPTER = register(
             "Public files on globalxetfs.eu, no login. Not openly licensed: every holdings CSV ends with "
             f"\"{FOOTER_NOTICE}\" and the site terms of use allow downloading extracts for personal "
             "reference only and forbid commercial use without a licence from Global X. Republication "
-            "needs Global X's permission."
+            "needs Global X's permission, so the holdings are read locally only and never republished."
         ),
         regions=("IE", "JE", "EU", "UK", "CH"),
         products=products,
         holdings=holdings,
         frequency="daily",
+        redistribution=LOCAL_ONLY,
     )
 )

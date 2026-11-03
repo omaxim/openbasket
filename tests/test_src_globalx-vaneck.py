@@ -15,6 +15,7 @@ import pytest
 from openbasket.sources.issuers import (
     HOLDING_COLUMNS,
     PRODUCT_COLUMNS,
+    SUBSTITUTE_BASKET,
     FetchContext,
     discover,
     globalx,
@@ -89,6 +90,7 @@ def test_both_adapters_registered():
         a = reg[name]
         assert a.credit and a.licence and a.homepage.startswith("https://")
         assert a.frequency == "daily"
+        assert a.redistribution == "local_only"
     assert globalx.FOOTER_NOTICE in reg["globalx"].licence
 
 
@@ -181,6 +183,20 @@ def test_globalx_holdings_uses_cache(tmp_path, monkeypatch):
     assert "total return swap" in " ".join(first.notes)
 
 
+def test_globalx_swap_fund_lines_are_the_substitute_basket(monkeypatch):
+    products = _globalx_products()
+    product = products[products["replication"] == "swap"].iloc[0].to_dict()
+    monkeypatch.setattr(globalx, "_get", lambda url: (FIX / "globalx_holdings.csv").read_bytes())
+    got = globalx.holdings(product)
+    classes = dict(zip(got.holdings["name"], got.holdings["asset_class"]))
+    assert classes["EXAMPLE APPLE INC"] == SUBSTITUTE_BASKET
+    assert classes["TRS CITI 000001"] == "derivative (swap)"
+    assert classes["CASH"] == "cash"
+    assert classes["CURRENCY CONTRACT - BRL"] == "derivative (foreign exchange)"
+    assert any("substitute basket" in n and "not the index" in n for n in got.notes)
+    assert validate_holdings(got.holdings) == []
+
+
 def test_globalx_bad_file_is_not_cached(tmp_path, monkeypatch):
     product = _globalx_products().iloc[0].to_dict()
     monkeypatch.setattr(globalx, "_get", lambda url: b"<html>error</html>")
@@ -221,6 +237,59 @@ def test_vaneck_products_contract():
     assert by_isin.loc["IE00BYXQSD13", "currency"] == "EUR"  # "UCITS-EUR Hedged"
     assert by_isin.loc["DE000A28M8D0", "domicile"] == "DE"
     assert df["replication"].isna().all()  # not published in any list this adapter reads
+
+
+def test_vaneck_swap_named_fund_is_swap():
+    panel = {"Rows": [{"Values": ["IE00BMC38736", "A2QC8G", "VanEck Example Swap UCITS ETF", "0.35%", "$ 1m"],
+                       "Keywords": ["EXSW"], "Url": "/DE/en/investments/example-swap-etf/"}]}
+    df = vaneck.product_rows(panel)
+    assert df["replication"].tolist() == ["swap"]
+
+
+def test_vaneck_swap_line_marks_substitute_basket(monkeypatch):
+    content = _xlsx("EXSW_asof_20261102", [
+        ["All Holdings  11/02/2026"], [""],
+        ["Number", "Holding Name", "Ticker", "ISIN", "Shares", "Market Value", "% of Net Assets"],
+        [1, "Example Holding A", "EXA US", "US8740391003", "1", "$ 1.00", "99.00%"],
+        [2, "Total Return Swap Example", " -- ", " -- ", " -- ", "$ 1.00", "0.95%"],
+        [3, "Other/Cash", " -- ", " -- ", " -- ", "$ 1.00", "0.05%"],
+    ])
+
+    class Resp:
+        pass
+
+    Resp.content = content
+    monkeypatch.setattr(vaneck, "_request", lambda method, url, **kw: Resp())
+    got = vaneck.holdings({"portfolio_id": "x", "asset_class": "Equity", "holdings_url": "https://www.vaneck.com/x/"})
+    assert got.holdings["asset_class"].tolist() == [SUBSTITUTE_BASKET, "derivative (swap)", "cash"]
+    assert any("substitute basket" in n for n in got.notes)
+
+
+def test_vaneck_follows_redirects_one_hop_at_a_time(monkeypatch):
+    calls = []
+
+    class R:
+        def __init__(self, status, location=None):
+            self.status_code = status
+            self.headers = {"location": location} if location else {}
+            self.cookies = {}
+            self.text = "ok"
+
+        def raise_for_status(self):
+            pass
+
+    replies = [R(302, "/de/en/?cken=true"), R(302, "https://www.vaneck.com/de/en/"), R(200)]
+
+    def fake_request(method, url, **kw):
+        calls.append((method, url, kw.get("allow_redirects"), kw.get("params")))
+        return replies.pop(0)
+
+    monkeypatch.setattr(vaneck.http, "request", fake_request)
+    r = vaneck._request("GET", vaneck.HOME_URL, params={"a": "b"})
+    assert r.status_code == 200
+    assert [c[1] for c in calls] == [vaneck.HOME_URL, "https://www.vaneck.com/de/en/?cken=true", vaneck.HOME_URL]
+    assert all(c[2] is False for c in calls)  # requests never follows a hop on its own
+    assert calls[0][3] == {"a": "b"} and calls[1][3] is None
 
 
 def test_vaneck_equity_holdings():

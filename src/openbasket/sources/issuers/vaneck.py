@@ -23,7 +23,13 @@ Holdings
 The first request to the site redirects to ``?cken=true`` (a check that the
 client keeps cookies) and back; a cookie jar passes it, nothing is accepted.
 robots.txt asks for ``Crawl-delay: 25``, so this module waits 25 seconds
-between requests to www.vaneck.com.
+between requests to www.vaneck.com, redirect hops included: redirects are
+followed one hop at a time through :mod:`openbasket.http`.
+
+Replication is not in any list this module reads. A fund whose name says it
+is swap-based is marked ``swap``; any other row stays ``None``. A holdings
+line that is a swap is labelled ``derivative (swap)``, and the securities
+next to it :data:`SUBSTITUTE_BASKET`, with a note.
 """
 
 from __future__ import annotations
@@ -44,10 +50,13 @@ from ... import http
 from ...identifiers import is_valid_isin
 from . import (
     HOLDING_COLUMNS,
+    LOCAL_ONLY,
     PRODUCT_COLUMNS,
+    SUBSTITUTE_BASKET,
     FetchContext,
     IssuerAdapter,
     IssuerHoldings,
+    mark_substitute_basket,
     register,
 )
 
@@ -66,6 +75,10 @@ http.set_min_interval("www.vaneck.com", CRAWL_DELAY)
 
 _JAR = requests.cookies.RequestsCookieJar()
 
+MAX_REDIRECTS = 5
+_REDIRECT_CODES = (301, 302, 303, 307, 308)
+_SWAP_NAME_RE = re.compile(r"\b(swaps?|synthetic|TRS)\b", re.I)
+
 _PANEL_RE = re.compile(r'<form[^>]*id="ucitsSearchForm"[^>]*data-blockid="(\d+)"')
 _PAGE_ID_RE = re.compile(r"currentPageId\s*=\s*(\d+)")
 _CHECKBOX_RE = re.compile(r'<input[^>]*type="checkbox"[^>]*value="([a-z]+)"')
@@ -79,12 +92,24 @@ _CLASS_CCY_RE = re.compile(r"UCITS-(EUR|USD|GBP|CHF)\b")
 
 
 def _request(method: str, url: str, **kw) -> requests.Response:
-    """Polite request through :mod:`openbasket.http` with a shared cookie jar."""
-    r = http.request(method, url, cookies=_JAR, **kw)
-    for resp in [*r.history, r]:
-        _JAR.update(resp.cookies)
-    r.raise_for_status()
-    return r
+    """Polite request through :mod:`openbasket.http` with a shared cookie jar.
+
+    Redirects are followed by hand, one :func:`openbasket.http.request` per
+    hop, so every hop waits for the host's crawl delay.
+    """
+    for _ in range(MAX_REDIRECTS + 1):
+        r = http.request(method, url, cookies=_JAR, allow_redirects=False, **kw)
+        _JAR.update(r.cookies)
+        location = r.headers.get("location") or r.headers.get("Location")
+        if r.status_code not in _REDIRECT_CODES or not location:
+            r.raise_for_status()
+            return r
+        url = urljoin(url, location)
+        kw.pop("params", None)  # the Location carries its own query
+        if r.status_code in (301, 302, 303):
+            method = "GET" if method != "HEAD" else method
+            kw.pop("data", None)
+    raise requests.TooManyRedirects(f"VanEck redirected more than {MAX_REDIRECTS} times for {url}")
 
 
 # ---------------------------------------------------------------- parsing
@@ -159,7 +184,7 @@ def product_rows(panel: dict, fund_data: dict[str, dict] | None = None) -> pd.Da
                 "domicile": isin[:2],
                 "currency": _currency(values[4] if len(values) > 4 else None, name),
                 "asset_class": extra.get("asset_class"),
-                "replication": None,
+                "replication": "swap" if _SWAP_NAME_RE.search(name) else None,
                 "product_page_url": page,
                 # Mutual-fund share classes have no holdings download (404).
                 "holdings_url": urljoin(page, "downloads/holdings/") if page and group != "MF" else None,
@@ -235,6 +260,8 @@ def parse_holdings(content: bytes, fund_asset_class: str | None = None) -> tuple
             line_class = "debt"
         elif name.lower().startswith("other/cash") or name.lower() == "cash":
             line_class = "cash"
+        elif _SWAP_NAME_RE.search(name):
+            line_class = "derivative (swap)"
         elif crypto_fund:
             line_class = "other"  # the coin itself
         elif isin or ticker:
@@ -308,6 +335,12 @@ def holdings(product: dict, ctx: FetchContext | None = None) -> IssuerHoldings:
     notes = []
     if df["isin"].isna().all() and not df.empty:
         notes.append("no line carries an ISIN (for example a crypto ETN backed by the coin itself)")
+    if product.get("replication") == "swap" or (df["asset_class"] == "derivative (swap)").any():
+        df = mark_substitute_basket(df)
+        notes.append(
+            "swap-based: the securities listed are the substitute basket held as collateral for the swap "
+            f"(asset_class {SUBSTITUTE_BASKET!r}), not the index the fund tracks"
+        )
     return IssuerHoldings(as_of, df, url, notes)
 
 
@@ -321,11 +354,13 @@ ADAPTER = register(
             "Public files on vaneck.com, no login. Not openly licensed: the site terms say no information "
             "on the site may be reproduced, transmitted, displayed, distributed, published or otherwise "
             "used for commercial purposes without VanEck's prior consent; personal use is allowed. "
-            "Fetched at most once per fund per day, 25 seconds apart as robots.txt asks."
+            "Fetched at most once per fund per day, 25 seconds apart as robots.txt asks. Read locally only: "
+            "the holdings are never republished."
         ),
         regions=("IE", "NL", "DE", "EU", "CH", "UK"),
         products=products,
         holdings=holdings,
         frequency="daily",
+        redistribution=LOCAL_ONLY,
     )
 )

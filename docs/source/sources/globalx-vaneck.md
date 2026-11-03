@@ -7,6 +7,17 @@ full holdings of each fund every business day, with constituent ISINs, on
 their own public websites. Neither needs a login, and neither file is
 openly licensed (see **Terms** below).
 
+**Redistribution: local only.** Both issuers' terms forbid republication
+(Global X: "may not be reproduced, redistributed or used to create any
+derivative works"; VanEck: no commercial reproduction without consent). So
+both adapters are registered with `redistribution="local_only"`: openbasket
+reads their holdings only for the person running it. Under the publishing
+policy the public build does not fetch these sources, and none of their rows
+go to the openbasket site, API or releases. A fund that only these sources
+cover is listed there without constituents, with a note that its holdings
+are available when you run openbasket yourself. See
+[Adding a source](adding-a-source.md).
+
 ## Global X ETFs Europe
 
 Fund list
@@ -37,12 +48,29 @@ classes of a fund point at the same file.
 Replication comes from `mgmtStyle`: "Physical - Full Replication" →
 `physical`, "Physical - Sampled" → `sampled`, "Synthetic" → `swap`.
 
+**Synthetic funds list their substitute basket.** For a fund marked `swap`,
+or any file with a `TRS ...` line, the lines with ISINs are the securities
+the fund holds as collateral for its total return swap, not the index it
+tracks. They are labelled `asset_class` `collateral (substitute basket)`
+(`SUBSTITUTE_BASKET` in `openbasket.sources.issuers`), and the result
+carries a note saying so. The swap line keeps `derivative (swap)` and cash
+lines keep `cash`. The products row's `replication` `swap` also makes the
+look-through note on the fund say its holdings are a substitute basket.
+
 Lines without an ISIN keep their weight and are labelled from the name:
 `CURRENCY CONTRACT - XXX` → `derivative (foreign exchange)`, `TRS ...` →
 `derivative (swap)`, currency balances, `CASH` and `OTHER PAYABLE &
 RECEIVABLES` → `cash`. Lines with an ISIN get the fund's asset class, since
 the file has no per-line class. `SEDOL` is kept when its check digit is
-valid.
+valid. Currency-forward legs (`CURRENCY CONTRACT - JPY/USD`) often have a
+blank `NET_ASSETS` in the file (six of them in the copper miners fund); they
+are kept with no weight (`NaN`), which the look-through counts as 0.
+
+**Tickers.** Each share class takes the first ticker its own listings give.
+Both classes of SuperDividend (`IE000YICM5P9` Acc and `IE00077FRP95` Dist)
+carry `SDIV LN`, because Global X's own fund page lists both London
+listings under that ticker (with different SEDOLs, BMFQCT9 and BMFQCS8;
+checked 3 November 2026).
 
 ## VanEck (Europe)
 
@@ -87,9 +115,20 @@ works; nothing is accepted. The search panel returns no rows to a client
 without the session cookies from that first page.
 
 `robots.txt` on www.vaneck.com sets `Crawl-delay: 25`, so the adapter sets
-`http.set_min_interval("www.vaneck.com", 25)`: `products()` (four requests)
-takes about 80 seconds and each holdings file about 25 seconds. A daily run
-over all 56 files takes about 25 minutes.
+`http.set_min_interval("www.vaneck.com", 25)`. Redirects are followed by
+hand, one request per hop through `openbasket.http`, so each hop of the
+`?cken=true` round trip also waits its 25 seconds. `products()` (four
+requests plus the first contact's two redirect hops) takes about two
+minutes and each holdings file about 25 seconds. A daily run over all 56
+files takes about 25 minutes.
+
+Replication: no list the adapter reads has it, and the fund page HTML does
+not either (the GDX page fetched on 3 November 2026 has no replication
+text; the fund details are filled in by scripts). A fund whose name says
+`swap`, `synthetic` or `TRS` is marked `swap`; every other row is `None`.
+In a holdings file, a line whose name says swap is labelled
+`derivative (swap)` and the securities next to it
+`collateral (substitute basket)`, with a note.
 
 ## What the data shows (3 November 2026, positions of 2 November)
 
@@ -130,6 +169,10 @@ not in the European search panel; it is left out.
 | Morningstar Developed Markets Dividend Leaders UCITS ETF (NL0011683594) | 101 | 100.03% | 99.47% | 2026-11-02 | 23.7 |
 | Bitcoin ETN (DE000A28M8D0) | 1 | 100.00% | 0% | 2026-11-02 | 24.8 |
 
+After the redirect change (3 November 2026, same day): `products()` 64
+share classes, then VanEck Gold Miners UCITS ETF (IE00BQQP9F84): 60 lines,
+100.03%, 99.99% with an ISIN, as of 2026-11-02, 24.4 s.
+
 The seconds are almost all the 25-second crawl delay; the download itself
 takes under a second. The multi-asset fund holds bonds and shares directly, not
 other ETFs; its bond lines repeat the ISIN in the `Ticker` column, which is
@@ -143,15 +186,20 @@ read as "not a ticker". The EM local-currency file has one line named
   SPAB, SPAH, SPQB and SPQH) hold a basket of shares plus a total return
   swap with Citi. Their files list the basket the fund actually holds,
   which is not the index, plus a `TRS CITI ...` line with no ISIN (between
-  −2.5% and +1.3% of net assets in the files checked). The QYLD file was
-  empty (only the disclaimer), so `holdings()` returns an empty frame with a
-  note and the whole weight stays unresolved. SYLD was not checked.
+  −2.5% and +1.3% of net assets in the files checked). Those lines are
+  labelled `collateral (substitute basket)` (see above). Example, SYLD
+  (Euro Stoxx 50 Covered Call, IE000SAXJ1M1) on 3 November 2026: 48 lines
+  summing to 100.002%, 99.0% with an ISIN, all US large caps (Amgen 7.919%,
+  JPMorgan 7.38%, Goldman Sachs 6.792%): 45 substitute-basket lines, 2 cash
+  lines and the swap. The QYLD file was empty (only the disclaimer), so
+  `holdings()` returns an empty frame with a note and the whole weight stays
+  unresolved.
 - **Crypto ETPs and ETNs**: Global X's ETP files are empty; VanEck's ETN
   files have one line, the coin, at 100% with no ISIN. Both stay unresolved.
-- **VanEck replication** is not in any list the adapter reads (the fund
-  details on the product pages are filled in by scripts from endpoints that
-  were not found), so `replication` is empty for every VanEck row. No
-  VanEck holdings file seen showed a swap line.
+- **VanEck replication** is not in any list the adapter reads (see above),
+  so `replication` is empty for every VanEck row unless the name says swap.
+  On 3 November 2026 no name did, and no VanEck holdings file seen showed a
+  swap line.
 - **VanEck UCITS funds** (8 share classes of "VanEck – Emerging Markets Bond
   UCITS" and "VanEck – Global Resources UCITS") have no holdings download
   (HTTP 404); their `holdings_url` is empty and `holdings()` raises
@@ -180,16 +228,17 @@ works." The site's terms of use say the content is copyright Global X ETFs
 ICAV, allow printing one copy and downloading extracts "for your personal
 reference", and forbid using any part "for commercial purposes without
 obtaining a licence". robots.txt allows everything. The adapter's licence
-text says this; **publishing Global X rows on the public site needs Global
-X's permission**. Credit: "Holdings data: Global X ETFs Europe (Global X
-ETFs ICAV), globalxetfs.eu".
+text says this, and the adapter is `local_only`: Global X rows are never
+published on the public site. Credit: "Holdings data: Global X ETFs Europe
+(Global X ETFs ICAV), globalxetfs.eu".
 
 **VanEck.** The site terms say no information on the site "may be
 reproduced, transmitted, displayed, distributed, published or otherwise used
 for commercial purposes without the prior consent of VanEck"; personal use
-is allowed. robots.txt asks for a 25-second crawl delay, which the adapter
-keeps, and none of the paths used is disallowed. Credit: "Holdings data:
-VanEck, vaneck.com".
+is allowed, and the adapter is `local_only`. robots.txt asks for a
+25-second crawl delay, which the adapter keeps on every request and
+redirect hop, and none of the paths used is disallowed. Credit: "Holdings
+data: VanEck, vaneck.com".
 
 ## Example
 

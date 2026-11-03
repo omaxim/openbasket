@@ -24,7 +24,7 @@ The pipelines run in order; each saves its outputs under `data/`, so later
 ones can be rerun on their own.
 
 ```bash
-kedro run --pipeline=ingest           # N-PORT (~450 MB a quarter), SEC fund tickers, iShares fund list
+kedro run --pipeline=ingest           # N-PORT (~450 MB a quarter), SEC fund tickers, iShares and SPDR fund lists
 kedro run --pipeline=security_master  # ISIN-keyed securities from every N-PORT position
 kedro run --pipeline=consolidate      # latest filing per fund, holdings with ISINs
 kedro run --pipeline=lookthrough --params=isin=US4642872000
@@ -55,8 +55,12 @@ mapping its ISINs through OpenFIGI; results are cached in
 : iShares regional sites whose fund lists are loaded. Only `uk` is
   supported so far.
 
+`issuers.spdr_regions`
+: SPDR fund finders: `us` (US ETFs, including SPY and DIA) and `emea`
+  (UCITS ETFs).
+
 `lookthrough.source_order`
-: Holdings sources in priority order: `issuer` (iShares), `tickerinside`,
+: Holdings sources in priority order: `issuer` (iShares and SPDR), `tickerinside`,
   `nport`, and `top_holdings` (not built yet, skipped).
 
 `lookthrough.min_resolved_pct`

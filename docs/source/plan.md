@@ -40,7 +40,7 @@ ingest ──► security_master ──► consolidate ──► lookthrough
 
 ## Matching an input ISIN
 
-1. An issuer's fund list (iShares UK).
+1. An issuer's fund list (iShares UK, SPDR US and UCITS).
 2. A configured proxy.
 3. N-PORT: a holding with this ISIN (or its CUSIP) whose issuer LEI is a fund
    series' LEI.
@@ -74,9 +74,11 @@ Done (2026-11-03):
 - OpenFIGI matching and enrichment with an on-disk cache.
 - Recursive fund-of-funds expansion; direct stocks and bonds.
 - iShares UK issuer holdings with ISINs, replacing the CSPX proxy.
+- SPDR US and UCITS daily holdings, covering SPY and DIA, with CUSIP and
+  SEDOL lookups through N-PORT.
 
 Sample results, from 2026 Q3 N-PORT, TickerInside as of 2026-10-27 and
-iShares as of 2026-11-02:
+iShares and SPDR as of 2026-11-02:
 
 | ISIN | Fund | Source | Resolved | Unresolved |
 |---|---|---|---|---|
@@ -88,6 +90,9 @@ iShares as of 2026-11-02:
 | IE00B1FZSB30 | iShares Core UK Gilts UCITS ETF (IGLT) | iShares | 100.02% | −0.02% |
 | IE00B3F81409 | iShares Core Global Aggregate Bond UCITS ETF (AGGG) | iShares | 92.22% | 7.78% |
 | IE000OY7BDY9 | iShares MSCI North America Swap UCITS ETF | iShares, flagged as swap-based | 0% | 100% |
+| US78462F1030 | SPDR S&P 500 ETF Trust (SPY) | SPDR | 99.90% | 0.10% |
+| US78463X8891 | SPDR Portfolio Developed World ex-US (SPDW) | SPDR | 99.21% | 0.79% |
+| IE00B6YX5C33 | SPDR S&P 500 UCITS ETF | SPDR | 100.00% | 0.00% |
 | US037833EE62 | Apple Inc bond | Security master | 100% | 0% |
 
 The negative figures are what the filings say: AGG's lines, and those of
@@ -96,8 +101,7 @@ example, purchases not yet settled) is not yet broken down.
 
 ## Next
 
-1. **SPDR daily Excel files**, whose header row starts with `Name`, then
-   other UCITS issuers (Vanguard, Xtrackers, Amundi).
+1. **Other UCITS issuers**: Vanguard, Xtrackers, Amundi, Invesco.
 2. **Other iShares regions.** Find the product-data service names for the
    Swiss, German and US sites; the US one would give ISIN-level daily holdings
    for US iShares ETFs too.

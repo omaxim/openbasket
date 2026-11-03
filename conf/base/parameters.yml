@@ -12,9 +12,11 @@ nport:
 issuers:
   # iShares regional sites whose fund lists are downloaded by `ingest`.
   ishares_sites: [uk]
+  # SPDR fund finders: "us" (US ETFs, including SPY and DIA) and "emea" (UCITS).
+  spdr_regions: [us, emea]
 
 lookthrough:
-  # Holdings sources in priority order. "issuer" is iShares for now;
+  # Holdings sources in priority order. "issuer" is iShares and SPDR;
   # "top_holdings" is a placeholder and is skipped.
   source_order: [issuer, tickerinside, nport, top_holdings]
   # Take the first source that resolves at least this much weight to ISINs;

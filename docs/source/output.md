@@ -12,15 +12,15 @@ row per input.
 | `name` | Security name: the issuer for a stock, the issue title for a bond. |
 | `weight_pct` | Percent of the input's net assets, multiplied through sub-funds. |
 | `asset_class` | From N-PORT's asset category, e.g. `equity`, `debt`, `asset-backed (mortgage)`. |
-| `source` | Where the holdings came from: `ishares`, `tickerinside`, `nport`, `security_master`. |
+| `source` | Where the holdings came from: `ishares`, `spdr`, `tickerinside`, `nport`, `security_master`. |
 | `as_of` | Holdings date of that source. |
 | `issuer_name`, `issuer_lei` | The issuer. For a bond this is who owes the money. |
-| `isin_source` | `reported` by the fund, `reported_for_cusip` in another filing, `derived_cusip`, or `ticker_match`. |
+| `isin_source` | `reported` by the fund or issuer; `reported_for_cusip` in another N-PORT filing; for issuer files, `nport_cusip` or `nport_sedol` (looked up in N-PORT); `derived_cusip`; or `ticker_match`. |
 | `figi_name`, `figi_ticker`, `security_type`, `market_sector`, `composite_figi` | From OpenFIGI. An empty `composite_figi` on a derived ISIN is worth checking. |
 | `depth` | 0 for direct holdings, 1 for holdings of a sub-fund, and so on. |
 | `n_paths` | How many routes reach this ISIN (e.g. held directly and via a sub-fund). |
 | `via_fund` | The fund whose holdings list the row came from. |
-| `source_ref` | Filing accession number, the iShares request URL, or TickerInside's citation. |
+| `source_ref` | Filing accession number, the iShares or SPDR file URL, or TickerInside's citation. |
 
 ### Unresolved weight
 

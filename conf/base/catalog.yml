@@ -13,7 +13,7 @@ sec_fund_tickers:
 
 issuer_products:
   type: pandas.ParquetDataset
-  filepath: data/01_raw/issuers/ishares_products.parquet
+  filepath: data/01_raw/issuers/issuer_products.parquet
 
 # security_master ------------------------------------------------------------
 nport_positions:
@@ -32,6 +32,10 @@ security_master:
 ticker_isin_map:
   type: pandas.ParquetDataset
   filepath: data/03_primary/ticker_isin_map.parquet
+
+sedol_isin_map:
+  type: pandas.ParquetDataset
+  filepath: data/03_primary/sedol_isin_map.parquet
 
 # consolidate ----------------------------------------------------------------
 nport_latest_filings:

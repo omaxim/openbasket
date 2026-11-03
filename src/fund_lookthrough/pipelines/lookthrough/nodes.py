@@ -38,6 +38,8 @@ def run_lookthrough(
     fund_master: pd.DataFrame,
     ticker_isin_map: pd.DataFrame,
     issuer_products: pd.DataFrame,
+    cusip_isin_map: duckdb.DuckDBPyRelation,
+    sedol_isin_map: pd.DataFrame,
     params: dict,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Expand each ISIN. Returns position-level constituents, unidentified lines and a summary."""
@@ -46,6 +48,8 @@ def run_lookthrough(
         nport_holdings, security_master, fund_master, ticker_isin_map, figi,
         source_order=params["source_order"], proxies=params.get("proxies"),
         issuer_products=issuer_products, issuer_cache_dir=params.get("issuer_cache_dir"),
+        cusip_isin={c: (i, src) for c, i, src in cusip_isin_map.select("cusip, isin, isin_source").fetchall()},
+        sedol_isin=dict(zip(sedol_isin_map["sedol"], sedol_isin_map["isin"])),
     )
     leaves, unresolved, summaries = [], [], []
     for isin in isins:

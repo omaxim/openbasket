@@ -9,7 +9,7 @@ Status as tested on 2026-11-03.
 | TickerInside | Working | Daily issuer holdings for US equity ETFs, keyed by ticker. |
 | OpenFIGI | Working | ISIN to name, ticker and security type; ISIN to US ticker when matching a fund. |
 | iShares UK | Working | Daily full holdings of UCITS ETFs with ISINs and five-decimal weights, from the issuer's site. |
-| SPDR daily Excel | Not built | |
+| SPDR (State Street) | Working | Daily full holdings of US ETFs (including SPY and DIA) and UCITS ETFs. |
 | justETF, FT and others | Not built | Top holdings only. |
 
 ## SEC Form N-PORT
@@ -123,7 +123,59 @@ by ISIN only, never by ticker.
 terms have not been reviewed for automated or bulk use; the client keeps to
 one request per fund per day and pauses between requests.
 
-## SPDR and the rest
+## SPDR
 
-SPDR's daily Excel files and the top-holdings fallbacks (justETF, FT) are
-not built yet.
+State Street publishes a daily workbook per ETF. Two regions are used:
+
+Fund list
+: `https://www.ssga.com/bin/v1/ssmp/fund/fundfinder?country=us&language=en&role=intermediary&product=etfs&ui=fund-finder`
+  (185 US ETFs with a holdings file) and the same with
+  `country=uk&language=en_gb`, whose `uk-etfs` list holds the 177 UCITS ETFs.
+  The fund's ISIN is in each entry's `keywords` text and the holdings file is
+  linked in `documentPdf`. `ingest` adds them to
+  `data/01_raw/issuers/issuer_products.parquet` with `issuer = spdr`.
+
+Holdings
+: `https://www.ssga.com/library-content/products/fund-data/etfs/us/holdings-daily-us-en-<ticker>.xlsx`
+  and `.../emea/holdings-daily-emea-en-<ticker>-<exchange>.xlsx`. A few
+  header lines (name, ticker, as-of date), then a table whose header row
+  starts with `Name` (US) or `ISIN` (UCITS). Bond funds add coupon, par value
+  and maturity columns. Weights are percent of the fund.
+
+**SPY and DIA** are unit investment trusts and file no N-PORT, so this is the
+only free source of their full holdings.
+
+UCITS files carry an `ISIN` column. US files identify a line by `Identifier`
+(a CUSIP, an ISIN for some bonds, or a State Street code) and `SEDOL`, so an
+ISIN is found, in order, from:
+
+1. the file's own ISIN;
+2. the ISIN N-PORT filings report for the CUSIP (`nport_cusip`);
+3. the ISIN N-PORT filings report next to the SEDOL (`nport_sedol`), from
+   `data/03_primary/sedol_isin_map.parquet`, about 25,400 SEDOLs;
+4. the ISIN derived from the CUSIP (`derived_cusip`), **only if OpenFIGI
+   knows it**. State Street gives some foreign shares CUSIP-shaped internal
+   codes (Samsung's GDR is `494281900`); 345 such ISINs derived for the
+   developed-world fund turned out not to exist, so unverified ones are dropped.
+
+What the data shows (2 November 2026):
+
+| Fund | Constituents | Resolved |
+|---|---|---|
+| SPDR S&P 500 ETF Trust (SPY, US78462F1030) | 503 | 99.90% |
+| SPDR Dow Jones Industrial Average ETF Trust (DIA, US78467X1090) | 30 | 99.95% |
+| SPDR Portfolio Developed World ex-US (SPDW, US78463X8891) | 2,359 | 99.21% |
+| SPDR Portfolio Aggregate Bond (SPAB, US78464A6495) | 8,707 | 99.09% |
+| SPDR S&P 500 UCITS ETF (IE00B6YX5C33) | 504 | 100.00% |
+| State Street Global High Yield Bond UCITS ETF (LU3357226557) | 2,361 | 93.75% |
+
+What stays unresolved: State Street's own money-market fund in US bond funds
+(3.1% of SPAB, internal code only), and new or 144A bonds that UCITS bond
+files list with no ISIN (5.4% of the high-yield fund).
+
+**Terms.** Public data from State Street's website, not reviewed for
+automated or bulk use; files are fetched once per fund per day.
+
+## Top-holdings fallbacks
+
+justETF, FT and similar sources are not built yet.

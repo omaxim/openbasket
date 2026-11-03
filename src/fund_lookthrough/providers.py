@@ -2,7 +2,7 @@
 
 Matching an input ISIN to a fund, in order:
 
-1. an issuer's own fund list (iShares UK covers UCITS ETFs by ISIN);
+1. an issuer's own fund list (iShares UK; SPDR US and EMEA, including SPY);
 2. a configured proxy (for funds with no free holdings, e.g. swap-based);
 3. N-PORT: a holding with this ISIN, or with the CUSIP inside it, whose
    issuer LEI is a fund series' LEI;
@@ -15,15 +15,16 @@ Holdings sources are tried in ``source_order``; see
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import replace
 from functools import lru_cache
 
 import duckdb
 import pandas as pd
 
-from .identifiers import is_valid_isin, isin_to_cusip, normalise_ticker
+from .identifiers import cusip_to_isin, is_valid_isin, isin_to_cusip, normalise_ticker
 from .lookthrough import FundRef, Holdings, Line
-from .sources import ishares, nport
+from .sources import ishares, nport, spdr
 from .sources.openfigi import OpenFIGI
 from .sources.tickerinside_source import fetch_fund
 
@@ -44,6 +45,8 @@ class DataProviders:
         proxies: dict | None = None,
         issuer_products: pd.DataFrame | None = None,
         issuer_cache_dir: str | None = None,
+        cusip_isin: dict[str, tuple[str, str]] | None = None,
+        sedol_isin: dict[str, str] | None = None,
     ):
         unknown = set(source_order) - set(SOURCES)
         if unknown:
@@ -56,6 +59,8 @@ class DataProviders:
         ip = issuer_products if issuer_products is not None else pd.DataFrame(columns=["isin"])
         self.issuer_products = ip.drop_duplicates("isin").set_index("isin")
         self.issuer_cache_dir = issuer_cache_dir
+        self.cusip_isin = cusip_isin or {}
+        self.sedol_isin = sedol_isin or {}
 
         fm = fund_master.copy()
         self.series = fm.drop_duplicates("series_id").set_index("series_id")
@@ -85,9 +90,10 @@ class DataProviders:
         if isin not in self.issuer_products.index:
             return None
         p = self.issuer_products.loc[isin]
+        issuer = p.get("issuer") if isinstance(p.get("issuer"), str) else "ishares"
         return FundRef(
-            series_id=None, ticker=p["ticker"], name=p["fund_name"], via=via,
-            issuer_id=f"ishares-{p['site']}:{p['portfolio_id']}",
+            series_id=None, ticker=p["ticker"], name=p["fund_name"], via=issuer,
+            issuer_id=f"{issuer}-{p['site']}:{p['portfolio_id']}",
         )
 
     def resolve(self, isin: str) -> FundRef | None:
@@ -181,8 +187,67 @@ class DataProviders:
                 out.append(h)
         return out
 
-    @lru_cache(maxsize=None)
     def _from_issuer(self, issuer_id: str) -> Holdings | None:
+        issuer, rest = issuer_id.split("-", 1)
+        if issuer == "spdr":
+            return self._from_spdr(issuer_id)
+        return self._from_ishares(issuer_id)
+
+    @lru_cache(maxsize=None)
+    def _from_spdr(self, issuer_id: str) -> Holdings | None:
+        site, portfolio_id = issuer_id.removeprefix("spdr-").split(":")
+        match = self.issuer_products[
+            (self.issuer_products["issuer"] == "spdr") & (self.issuer_products["portfolio_id"] == portfolio_id)
+        ]
+        if match.empty:
+            return None
+        url = match["holdings_url"].iloc[0]
+        try:
+            got = spdr.holdings(url, cache_dir=self.issuer_cache_dir)
+        except Exception as exc:  # a broken issuer file must not stop the run
+            logger.warning("SPDR %s: %s", issuer_id, exc)
+            return None
+        df = got.holdings.astype(object).where(got.holdings.notna(), None)
+        records = df.to_dict("records")
+        found = [self._isin_for(r.get("isin"), r.get("cusip"), r.get("sedol")) for r in records]
+        # SSGA uses CUSIP-shaped internal codes for some foreign shares, so an
+        # ISIN derived from a CUSIP is kept only if OpenFIGI knows it.
+        derived = [i for i, how in found if how == "derived_cusip"]
+        known = set()
+        if derived and self.figi is not None:
+            known = {i for i, rows in self.figi.map("ID_ISIN", derived).items() if rows}
+        lines = []
+        for r, (isin, how) in zip(records, found):
+            if how == "derived_cusip" and isin not in known:
+                isin, how = None, None
+            name = r.get("name") or ""
+            cash = bool(re.search(r"cash|^(u\.s\. dollar|euro|british pounds?|[a-z]+ (peso|pound|yen|franc|krona|krone|dollar|rupee|won|real|rand))$", name, re.I))
+            lines.append(
+                Line(
+                    weight_pct=float(r.get("weight_pct") or 0.0),
+                    isin=isin, name=r.get("name"), ticker=r.get("ticker"), cusip=r.get("cusip"),
+                    asset_class="cash" if cash and not isin else ("debt" if r.get("is_debt") else "equity" if isin else None),
+                    isin_source=how,
+                    fund_hint="MONEY MARKET" in name.upper() or " ETF" in name.upper(),
+                )
+            )
+        return Holdings("spdr", got.as_of, lines, source_ref=f"SPDR holdings {got.url}")
+
+    def _isin_for(self, isin: str | None, cusip: str | None, sedol: str | None) -> tuple[str | None, str | None]:
+        """Best ISIN for an issuer line, and how it was found."""
+        if isin:
+            return isin, "reported"
+        if cusip and cusip in self.cusip_isin:
+            return self.cusip_isin[cusip][0], "nport_cusip"
+        if sedol and sedol.upper() in self.sedol_isin:
+            return self.sedol_isin[sedol.upper()], "nport_sedol"
+        derived = cusip_to_isin(cusip) if cusip else None
+        if derived:
+            return derived, "derived_cusip"
+        return None, None
+
+    @lru_cache(maxsize=None)
+    def _from_ishares(self, issuer_id: str) -> Holdings | None:
         site, portfolio_id = issuer_id.removeprefix("ishares-").split(":")
         try:
             got = ishares.holdings(portfolio_id, site, cache_dir=self.issuer_cache_dir)

@@ -102,3 +102,26 @@ def ticker_isin_map(security_master: duckdb.DuckDBPyRelation) -> pd.DataFrame:
         qualify row_number() over (partition by ticker order by n_positions desc) = 1
         """
     ).df()
+
+
+def sedol_isin_map(nport_parquet_manifest: pd.DataFrame) -> pd.DataFrame:
+    """SEDOL to ISIN, from holdings whose identifiers report both.
+
+    Issuer files for US funds identify foreign stocks by SEDOL, not ISIN.
+    """
+    con = connection()
+    identifiers = nport.table(con, nport_parquet_manifest, "IDENTIFIERS")  # noqa: F841 - read by DuckDB below
+    return con.sql(
+        """
+        with s as (
+            select HOLDING_ID, upper(trim(OTHER_IDENTIFIER)) as sedol from identifiers
+            where upper(OTHER_IDENTIFIER_DESC) like '%SEDOL%' and length(trim(OTHER_IDENTIFIER)) = 7
+        ),
+        i as (
+            select HOLDING_ID, max(upper(trim(IDENTIFIER_ISIN))) as isin from identifiers
+            where IDENTIFIER_ISIN is not null and IDENTIFIER_ISIN not in ('', 'N/A') group by 1
+        )
+        select sedol, isin from (select sedol, isin, count(*) n from s join i using (HOLDING_ID) group by all)
+        qualify row_number() over (partition by sedol order by n desc, isin) = 1
+        """
+    ).df()

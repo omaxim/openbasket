@@ -101,8 +101,9 @@ html_theme_options = {
     # The Leith site has no dark mode; dark mode gets the same light palette.
     "dark_css_variables": _colors,
     "announcement": (
-        f'<a href="{SITE_URL}">openbasket</a> is an aggregator of public fund holdings data, '
-        "not investment advice and not affiliated with any issuer. "
+        f'<a href="{SITE_URL}">openbasket</a> is a fund look-through tool: the site shows holdings from sources '
+        "that allow republication, and you run it yourself for the rest. Not investment advice and not affiliated "
+        "with any issuer. "
         f'<a href="{SITE_URL}">Search funds &rarr;</a>'
     ),
     "footer_icons": [

@@ -7,13 +7,17 @@ from pathlib import Path
 import pandas as pd
 
 from ...datasets import connection
-from ...sources import ishares, nport, sec, spdr
+from ...sources import ishares, nport, sec, sec_nport_history, spdr
 
 
-def download_nport(quarters: list[str], raw_dir: str, overwrite: bool = False) -> pd.DataFrame:
-    """Download the N-PORT ZIP for each quarter (``2026q3`` style) unless cached."""
+def download_nport(quarters: list[str], raw_dir: str, overwrite: bool = False, history: dict | None = None) -> pd.DataFrame:
+    """Download the N-PORT ZIP for each quarter (``2026q3`` style) unless cached.
+
+    ``history`` (``params:nport_history``) adds older quarters, see
+    :func:`openbasket.sources.sec_nport_history.resolve_quarters`.
+    """
     rows = []
-    for q in quarters:
+    for q in sec_nport_history.resolve_quarters(quarters, history):
         q = q.lower()
         dest = Path(raw_dir) / f"{q}_nport.zip"
         sec.download(sec.NPORT_URL.format(quarter=q), dest, overwrite=overwrite)

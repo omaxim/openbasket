@@ -8,7 +8,7 @@ def create_pipeline(**kwargs) -> Pipeline:
         [
             Node(
                 download_nport,
-                inputs=["params:nport.quarters", "params:nport.raw_dir", "params:nport.overwrite"],
+                inputs=["params:nport.quarters", "params:nport.raw_dir", "params:nport.overwrite", "params:nport_history"],
                 outputs="nport_raw_manifest",
                 name="download_nport",
             ),

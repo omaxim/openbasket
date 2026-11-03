@@ -1,0 +1,21 @@
+# nport_history ----------------------------------------------------------------
+# Older N-PORT quarters to load next to nport.quarters (parameters.yml). Kedro
+# refuses the same top-level key in two parameter files, so this is its own
+# block: ingest's download_nport loads the union of both, oldest first, and
+# consolidate keeps each fund series' latest filing across all of them.
+#
+# Measured on 2026-11-03 with nport.quarters [2026q3]:
+#   2026q3 alone   13,200 series
+#   + 2026q2         +214  positions as of 2025-11-30 .. 2026-05-31
+#   + 2026q1         +151  positions as of 2025-11-28 .. 2026-01-31
+#   + 2025q4         +136  positions as of 2025-05-31 .. 2025-10-31
+#   + 2025q3         +248  positions as of 2025-02-28 .. 2025-07-31
+# Almost all are funds that have stopped filing since (merged, liquidated or
+# late). Two older quarters keep every added portfolio under a year old; each
+# row shows its own as-of date. `kedro run --pipeline=nport_history` writes
+# the current numbers to data/08_reporting/nport_history_coverage.csv.
+nport_history:
+  # Quarters before the newest of nport.quarters to add; 0 loads nport.quarters only.
+  lookback: 2
+  # Further quarters to add by name, e.g. [2025q4].
+  quarters: []

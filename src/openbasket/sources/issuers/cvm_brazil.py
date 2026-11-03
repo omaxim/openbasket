@@ -20,6 +20,7 @@ from .. import cvm_brazil as cda
 from . import PRODUCT_COLUMNS, FetchContext, IssuerAdapter, IssuerHoldings, register
 
 DEFAULT_ROOT = "data/01_raw/reg_brazil"
+EXTRA_PRODUCT_COLUMNS = ["share_class", "fund_type", "net_assets_brl", "cda_month"]
 
 _stores: dict[str, cda.CdaStore] = {}
 
@@ -36,7 +37,7 @@ def products() -> pd.DataFrame:
     if not s.is_built():
         s.refresh()
     df = s.products()
-    return df[PRODUCT_COLUMNS + ["share_class"]] if len(df) else pd.DataFrame(columns=PRODUCT_COLUMNS)
+    return df[PRODUCT_COLUMNS + EXTRA_PRODUCT_COLUMNS] if len(df) else pd.DataFrame(columns=PRODUCT_COLUMNS)
 
 
 def holdings(product: dict, ctx: FetchContext | None = None) -> IssuerHoldings:
@@ -55,15 +56,11 @@ ADAPTER = register(
         title="CVM Brazil: fund portfolio filings (CDA)",
         homepage=cda.CDA_DATASET_PAGE,
         credit=cda.CREDIT,
-        licence=(
-            "CVM open data under the Open Database License (ODbL 1.0): credit CVM and share "
-            "derived databases alike. B3's ISIN register is a free public download from the "
-            "numbering agency; its terms were not found on the download page."
-        ),
+        licence=cda.LICENCE,
         regions=("BR",),
         products=products,
         holdings=holdings,
         frequency="monthly (published weekly; confidential positions released up to 90 days later)",
-        redistribution="public",
+        redistribution=cda.REDISTRIBUTION,
     )
 )

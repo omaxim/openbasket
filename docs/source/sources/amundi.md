@@ -175,21 +175,39 @@ looked through in turn.
 Credit line: *Holdings: Amundi Asset Management, Amundi ETF websites
 (amundietf.de and other country sites).*
 
-No login, cookie or consent step is needed for the API. `robots.txt` on
-amundietf.de disallows only search-query pages (`/*?isin=` and similar), not
-`/mapi/`. The sites show an investor-profile disclaimer in the browser. The
-adapter does not accept it on anyone's behalf. It only sends the retail
-context that the public retail pages already embed.
+**Redistribution class: `local_only`.** The adapter runs when you run
+openbasket yourself (it is on by default), and its rows appear in your local
+site and API. The public build never fetches it and publishes nothing from
+it. A fund only Amundi covers appears in the public index with status
+`local_only`, no constituents, and a note that its holdings are available
+from Amundi when you run openbasket yourself.
 
-**Licence: restricted.** Amundi's legal notice (*Rechtliche Hinweise*,
+Terms in short: Amundi's legal notice (*Rechtliche Hinweise*,
 `https://www.amundietf.de/de/privatanleger/rechtshinweise`, updated
 1 December 2025) says Amundi Asset Management holds the copyright in the
-site's content. It allows downloads for personal use only. Without Amundi's
+site's content and allows downloads for personal use only. Without Amundi's
 prior written permission it forbids reproducing or transmitting the site's
-information, or using it for public or commercial purposes. No open licence is
-offered. **Publishing these rows on openbasket needs that permission**, so
-until it is granted the source should be used for research only, not
-republished.
+information, using it for public or commercial purposes, and **creating links
+to the site**. No open licence is offered. Every row still carries a link to
+the fund's page, because the link is how a reader checks the figure; the
+no-linking clause is one more reason the rows stay on your own machine.
+
+Access: no login, cookie or consent step is needed for the API. `robots.txt`
+on amundietf.de disallows only search-query pages (`/*?isin=` and similar),
+not `/mapi/`. In the browser the sites show an investor-profile disclaimer
+(an `<amundi-consent-disclaimer>` element whose acceptance is kept in the
+browser's local storage); nothing on the server enforces it. The adapter does
+not accept it on anyone's behalf. It only sends the retail context that the
+public retail pages already embed.
+
+The lists include a few white-label funds that Amundi runs for other
+promoters (Finanzen.net MSCI World, LAIQON, Fineco AM). They are credited to
+Amundi, because Amundi publishes their holdings; the `range` column tells
+them apart, and their link is the site's home page when Amundi gives no
+product page.
+
+The holdings request is a POST, so the link cited for a fund is its product
+page; the API call is recorded in the holdings notes.
 
 ## Example
 

@@ -24,7 +24,18 @@ their holdings carry a note saying so.
 
 Each site lists a different subset. :func:`products` reads the retail list of
 every site in :data:`SITES` and keeps the first site that lists an ISIN, so
-holdings are always fetched in a context where the product exists.
+holdings are always fetched in a context where the product exists. The lists
+include a few white-label funds Amundi runs for other promoters (Finanzen.net,
+LAIQON, Fineco AM); their ``range`` column says so.
+
+The holdings call is a POST, so :attr:`IssuerHoldings.url` is the fund's
+product page (what a reader can open) and the API call is in the notes.
+
+Terms: Amundi's legal notice allows downloads for personal use only and,
+without Amundi's prior written permission, forbids reproducing or transmitting
+the site's information, using it for public or commercial purposes and
+creating links to the site. The source is therefore ``local_only``: it runs
+for the person using openbasket and is never published.
 """
 
 from __future__ import annotations
@@ -42,6 +53,12 @@ from ...identifiers import is_valid_cusip, is_valid_isin
 from . import HOLDING_COLUMNS, PRODUCT_COLUMNS, FetchContext, IssuerAdapter, IssuerHoldings, register
 
 logger = logging.getLogger(__name__)
+
+#: Amundi's terms forbid public use, reproduction and linking without permission:
+#: read only for the person running openbasket.
+REDISTRIBUTION = "local_only"
+#: The terms do not forbid automated access for private use.
+ENABLED_BY_DEFAULT = True
 
 PRODUCTS_PATH = "/mapi/ProductAPI/getProductsData"
 PAGE_LINKS_PATH = "/mapi/PageContentAPI/getProductPageLinkByPageIdsAndContext"
@@ -369,7 +386,9 @@ def holdings(product: dict, ctx: FetchContext | None = None) -> IssuerHoldings:
             cache.write_text(json.dumps(payload))
     if product.get("replication") == "swap" and SWAP_NOTE not in notes:
         notes.append(SWAP_NOTE)
-    return IssuerHoldings(as_of=as_of, holdings=df, url=site.products_url, notes=notes)
+    notes.append(f"Fetched with POST {site.products_url} (productIds [{isin}], composition).")
+    page = _text(product.get("product_page_url")) or site.home
+    return IssuerHoldings(as_of=as_of, holdings=df, url=page, notes=notes)
 
 
 register(
@@ -380,14 +399,17 @@ register(
         credit="Holdings: Amundi Asset Management, Amundi ETF websites (amundietf.de and other country sites).",
         licence=(
             "Public data from the retail pages of Amundi's ETF websites, read through the JSON API those "
-            "pages use. Amundi's site terms (legal notice, updated 1 December 2025) reserve all rights and "
-            "forbid reproducing or transmitting the site's information, or using it for public or commercial "
-            "purposes, without Amundi's prior written permission. No open licence is given; publishing these "
-            "rows needs that permission."
+            "pages use. Amundi's site terms (legal notice, updated 1 December 2025) allow downloads for "
+            "personal use, reserve all rights and, without Amundi's prior written permission, forbid "
+            "reproducing or transmitting the site's information, using it for public or commercial purposes, "
+            "and creating links to the site. No open licence is given, so openbasket reads it only for the "
+            "person running it (redistribution class local_only) and never publishes it."
         ),
         regions=("LU", "IE", "FR", "DE", "HK"),
         products=products,
         holdings=holdings,
         frequency="daily",
+        redistribution=REDISTRIBUTION,
+        enabled_by_default=ENABLED_BY_DEFAULT,
     )
 )

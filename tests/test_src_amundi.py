@@ -99,7 +99,9 @@ def test_holdings_swap_note_and_cache(fake_api, tmp_path):
     assert got.as_of == "2026-10-30"  # latest of the position dates
     assert any("substitute basket" in n for n in got.notes)
     assert any("2 dates" in n for n in got.notes)
-    assert got.url == "https://www.amundietf.de/mapi/ProductAPI/getProductsData"
+    # The cited link is the product page a reader can open; the POST is in the notes.
+    assert got.url == product["product_page_url"]
+    assert any("POST https://www.amundietf.de/mapi/ProductAPI/getProductsData" in n for n in got.notes)
     assert got.holdings["weight_pct"].sum() == pytest.approx(95.9)  # never rescaled
     assert validate_holdings(got.holdings) == []
     assert len(list(tmp_path.glob("amundi_de_LU1681044993_*.json"))) == 1

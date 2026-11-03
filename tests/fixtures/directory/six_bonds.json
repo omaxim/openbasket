@@ -1,0 +1,6 @@
+{"protocolVersion":"fqs.json#17x","pageNumber":1,"pageSize":99999,"totalRows":2,"delayMinutes":15,"delayedDateTime":"20261103T15:26:29.101","copyRight":"(c) Copyright by SIX Group Ltd 2026. All rights reserved.",
+"colNames":["ISIN","ValorNumber","ShortName","SecDescriptionFull","IssuerNameFull","IssueCurrencyCode","MaturityDate","CouponRate","AmountInIssue","IndustrySectorDesc","ProductLine"],
+"rowData":[
+["CH0000000122",2000001,"1.5 EXAMPLE 30","Example Industries AG","Example Industries AG","CHF",20300608,1.5,150000000,"Industry","DB"],
+["AT0000000179",2000002,"2 EXRAGB 35 /EE","Republic of Example","Republic of Example","EUR",20350315,2,5000000000,"Countries","EB"]
+],"elapsed":9}

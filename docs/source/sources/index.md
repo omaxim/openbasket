@@ -11,18 +11,50 @@ has its own page with its endpoints, coverage, terms and known gaps.
 *
 ```
 
-Status as tested on 2026-11-03.
+Status as tested on 2026-11-03. *Redistribution* says whether the source's
+terms allow openbasket to republish what it reads (`public`) or only to read
+it for the person running openbasket (`local_only`); the public build and the
+website use `public` sources only (see [](../publishing.md) and
+[](../data-licence.md)). *Enabled by default* is whether a local run reads it
+without any configuration.
 
-| Source | Status | Used for |
-|---|---|---|
-| SEC Form N-PORT | Working | Full holdings of US-registered funds and ETFs, equity and bond, with ISINs, CUSIPs and LEIs. |
-| SEC `company_tickers_mf.json` | Working | Fund and ETF ticker to series ID. |
-| TickerInside | Working | Daily issuer holdings for US equity ETFs, keyed by ticker. |
-| OpenFIGI | Working | ISIN to name, ticker and security type; ISIN to US ticker when matching a fund. |
-| iShares UK | Working | Daily full holdings of UCITS ETFs with ISINs and five-decimal weights, from the issuer's site. |
-| iShares US | Working | Daily full holdings of US iShares ETFs with ISINs; equity weights to two decimals. |
-| SPDR (State Street) | Working | Daily full holdings of US ETFs (including SPY and DIA) and UCITS ETFs. |
-| justETF, FT and others | Not built | Top holdings only. |
+## Holdings sources
+
+| Source | Coverage | Redistribution | Enabled by default | Freshness |
+|---|---|---|---|---|
+| SEC Form N-PORT (`nport`) | Full holdings of US-registered funds and ETFs (equity and bond), with ISINs, CUSIPs and LEIs | public (US government data) | yes | monthly positions, published quarterly about 60 days after the period: two to five months old |
+| {doc}`SEC Form N-MFP <sec-nmfp>` (`sec_nmfp`) | Full portfolios of the 328 US money market fund series | public (US government data) | yes | monthly, about one month after month end |
+| {doc}`CVM Brazil <cvm-brazil>` (`cvm_brazil`) | Every Brazilian fund class that files a CDA: 27,428 fund ISINs, 266 of them listed on B3 | public (ODbL 1.0, see [](../data-licence.md)) | yes | monthly, about one month after month end; confidential positions released up to 90 days later |
+| {doc}`CNMV Spain <cnmv-spain>` (`cnmv_spain`) | Every Spanish fund (FI) and SICAV: 3,510 share classes in 2,067 compartments | public (CNMV legal notice) | yes | quarterly, about four months after quarter end |
+| TickerInside (`tickerinside`) | Daily issuer holdings of US equity ETFs, keyed by ticker | public (CC BY 4.0) | yes | daily, a day or two old |
+| iShares UK and US (`ishares`) | Full holdings of UCITS ETFs (UK site, 1,431 products) and US iShares ETFs (482) | local_only (BlackRock site terms) | yes | daily |
+| SPDR (`spdr`) | Full holdings of US ETFs, including SPY and DIA (185), and UCITS ETFs (177) | local_only (State Street site terms) | yes | daily |
+| {doc}`EDINET Japan <edinet-japan>` | Japanese investment trust reports; client only, nothing parsed | local_only | no (needs a personal API key) | annual and semi-annual reports |
+
+## Reference sources (no holdings)
+
+| Source | Coverage | Redistribution | Enabled by default | Freshness |
+|---|---|---|---|---|
+| SEC `company_tickers_mf.json` | Fund and ETF share-class tickers with SEC series and class IDs | public (US government data) | yes | daily |
+| OpenFIGI | ISIN to name, ticker and security type; ISIN to US ticker when matching a fund | public (names and types) | yes | live API |
+| {doc}`ESMA FIRDS <firds>` (`reference` pipeline) | Every instrument traded on an EU or EEA venue: name, CFI, issuer LEI, currency, bond terms | public (ESMA legal notice) | lookups yes; bulk files off (`firds.bulk.enabled`) | daily deltas, weekly full files |
+| {doc}`Fund and bond directory <directory>` (`directory` pipeline): ESMA FIRDS, ECB eligible assets, GLEIF | 18,698 EU-traded fund ISINs, about 280,000 bonds, fund managers and umbrellas | public | yes, when the pipeline is run | ESMA weekly, ECB and GLEIF daily |
+| {doc}`Fund and bond directory <directory>`: SIX, Xetra, Euronext lists | Swiss, Xetra and Euronext-listed funds and bonds, with issuer and replication (SIX) | local_only (exchange site terms) | yes, when the pipeline is run; never in the public build | daily |
+| {doc}`Fund and bond directory <directory>`: FCA FIRDS | London-listed fund share classes | local_only (FCA terms) | no | weekly |
+
+## Not usable
+
+| Source | Coverage | Redistribution | Enabled by default | Freshness |
+|---|---|---|---|---|
+| {doc}`Xtrackers (DWS) <xtrackers>` | Daily full holdings of Xtrackers UCITS ETFs | not usable: robots.txt disallows the holdings paths | no adapter, and none may read them | daily |
+| {doc}`HSBC <hsbc>` | Full holdings of HSBC UCITS ETFs | not usable: site terms forbid automated access and redistribution | no adapter | daily |
+| {doc}`Swisscanto (ZKB) <swisscanto>` | Holdings files of Swisscanto ETFs and index funds | not usable: terms forbid systematic access without written permission | no adapter | daily |
+| {doc}`UBS <ubs>` | UBS ETFs (371 share classes on SIX) | not usable: legal-terms gate and site terms forbid automated access | no adapter | daily |
+| {doc}`justETF, extraETF <top10-fallback>` | Top 10 holdings of UCITS ETFs | not usable: terms forbid automated retrieval and republishing | no adapter | monthly |
+| FT, Morningstar | Top holdings | not evaluated | no adapter | |
+
+Regulators checked but not built (India, Australia, Korea, Taiwan) are listed
+on {doc}`regulator-filings`.
 
 ## SEC Form N-PORT
 
@@ -227,4 +259,5 @@ once per fund per day.
 
 ## Top-holdings fallbacks
 
-justETF, FT and similar sources are not built yet.
+justETF and extraETF are not usable under their terms; see
+{doc}`top10-fallback`. FT and Morningstar have not been evaluated.

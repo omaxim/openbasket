@@ -45,6 +45,7 @@ _MODULE_FOR = {
     "fund_registry": "fund_identity",
     "firds": "fund_identity",
     "gleif": "fund_identity",
+    "esma_firds": "firds",
 }
 
 _ID_RE = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -66,6 +67,11 @@ def redistribution(source_id: str | None) -> str:
     adapter = issuers.safe_discover().get(sid)
     if adapter is not None:
         return adapter.redistribution if adapter.redistribution in (PUBLIC, LOCAL_ONLY) else LOCAL_ONLY
+    from .directory import SOURCES as DIRECTORY_SOURCES
+
+    if sid in DIRECTORY_SOURCES:
+        value = DIRECTORY_SOURCES[sid].redistribution
+        return value if value in (PUBLIC, LOCAL_ONLY) else LOCAL_ONLY
     module = _MODULE_FOR.get(sid, sid)
     if module == "issuers":
         return LOCAL_ONLY

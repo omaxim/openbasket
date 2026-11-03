@@ -24,6 +24,8 @@ one test file and one page in this folder. Nothing else needs editing.
      are listed there by name and ISIN only, with status `local_only`.
      People who run openbasket themselves still get its holdings locally
      (see [](../running-locally.md)).
+     Say in the docs page which class the source has and quote the licence
+     text it rests on.
    - `enabled_by_default=False` when the site's terms forbid automated
      access even for private use. The adapter then runs only when the user
      names it in `issuers.enabled` (for example in `conf/local`). A site
@@ -46,8 +48,13 @@ module that fails to import is logged and skipped; the other sources still
 run.
 
 A source that is not an issuer adapter (a module directly under
-`src/openbasket/sources/`, such as `nport` or `tickerinside_source`) declares
-its class in a module-level constant, `REDISTRIBUTION = "public"` or
-`"local_only"`. `openbasket.sources.redistribution(source_id)` answers for
-any source id found in the data: the adapter's field, else the module's
-constant, else `"local_only"`.
+`src/openbasket/sources/`, such as `nport`, `firds` or `tickerinside_source`)
+declares its class in a module-level constant, `REDISTRIBUTION = "public"` or
+`"local_only"`; a directory list declares it in its `DirectorySource`.
+`openbasket.sources.redistribution(source_id)` answers for any source id
+found in the data: the adapter's field, else the directory source's, else the
+module's constant, else `"local_only"`.
+
+A regulator's open data that already covers many funds (CVM, CNMV, the SEC)
+belongs in one module per regulator: a second adapter for the same filings
+would list the same funds twice.

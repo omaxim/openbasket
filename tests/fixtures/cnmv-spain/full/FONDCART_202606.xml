@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FondCart xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="FondCart.xsd">
+  <FechaDatos>202606</FechaDatos>
+  <Entidad>
+    <Tipo>FI</Tipo>
+    <NumeroRegistro>101</NumeroRegistro>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <InversionesFinancieras>
+        <ClaseIF>INTERIOR</ClaseIF>
+        <DescripcionIF>Renta Variable Cotizada</DescripcionIF>
+        <CodigoISIN>ES01000000A9</CodigoISIN>
+        <DescripcionValor>ACCIONES|EMPRESA UNO SA</DescripcionValor>
+        <Divisa>EUR</Divisa>
+        <ValorMercado>600000.00</ValorMercado>
+      </InversionesFinancieras>
+      <InversionesFinancieras>
+        <ClaseIF>INTERIOR</ClaseIF>
+        <DescripcionIF>Renta Variable Cotizada</DescripcionIF>
+        <CodigoISIN>ES01000000B7</CodigoISIN>
+        <DescripcionValor>ACCIONES|EMPRESA DOS SA</DescripcionValor>
+        <Divisa>EUR</Divisa>
+        <ValorMercado>300000.00</ValorMercado>
+      </InversionesFinancieras>
+      <InversionesFinancieras>
+        <ClaseIF>INTERIOR</ClaseIF>
+        <DescripcionIF>Adquisicion Temporal Activos</DescripcionIF>
+        <CodigoISIN>ES00000000C7</CodigoISIN>
+        <DescripcionValor>REPO|BANCO EJEMPLO|2,00|2026-07-01</DescripcionValor>
+        <Divisa>EUR</Divisa>
+        <ValorMercado>80000.00</ValorMercado>
+      </InversionesFinancieras>
+    </Compartimento>
+  </Entidad>
+  <Entidad>
+    <Tipo>FI</Tipo>
+    <NumeroRegistro>102</NumeroRegistro>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <InversionesFinancieras>
+        <ClaseIF>INTERIOR</ClaseIF>
+        <DescripcionIF>Deuda Publica Cotizada Mas 1 Anio</DescripcionIF>
+        <CodigoISIN>ES00000000J2</CodigoISIN>
+        <DescripcionValor>BONO|ESTADO EJEMPLO|1,00|2030-04-30</DescripcionValor>
+        <Divisa>EUR</Divisa>
+        <ValorMercado>500000.00</ValorMercado>
+      </InversionesFinancieras>
+      <InversionesFinancieras>
+        <ClaseIF>INTERIOR</ClaseIF>
+        <DescripcionIF>Depositos</DescripcionIF>
+        <DescripcionValor>DEPOSITOS|CAJA EJEMPLO|2,15|2026-10-09</DescripcionValor>
+        <Divisa>EUR</Divisa>
+        <ValorMercado>50000.00</ValorMercado>
+      </InversionesFinancieras>
+      <InversionesFinancieras>
+        <ClaseIF>EXTERIOR</ClaseIF>
+        <DescripcionIF>Renta Fija Cotizada Mas 1 Anio</DescripcionIF>
+        <CodigoISIN>XS00000000D5</CodigoISIN>
+        <DescripcionValor>BONO|EMISOR EJEMPLO|3,50|2031-06-30</DescripcionValor>
+        <Divisa>USD</Divisa>
+        <ValorMercado>300000.00</ValorMercado>
+      </InversionesFinancieras>
+      <InversionesFinancieras>
+        <ClaseIF>EXTERIOR</ClaseIF>
+        <DescripcionIF>Renta Variable Cotizada</DescripcionIF>
+        <CodigoISIN>XXXXXXXXXXXX</CodigoISIN>
+        <DescripcionValor>ACCIONES|SIN CODIGO</DescripcionValor>
+        <Divisa>CHF</Divisa>
+        <ValorMercado>100000.00</ValorMercado>
+      </InversionesFinancieras>
+    </Compartimento>
+  </Entidad>
+  <Entidad>
+    <Tipo>FI</Tipo>
+    <NumeroRegistro>103</NumeroRegistro>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <InversionesFinancieras>
+        <ClaseIF>EXTERIOR</ClaseIF>
+        <DescripcionIF>Renta Fija Cotizada Mas 1 Anio</DescripcionIF>
+        <CodigoISIN>FR00000000F9</CodigoISIN>
+        <DescripcionValor>BONO|EMISOR TRES|2,00|2029-01-15</DescripcionValor>
+        <Divisa>EUR</Divisa>
+        <ValorMercado>1900000.00</ValorMercado>
+      </InversionesFinancieras>
+    </Compartimento>
+  </Entidad>
+  <Entidad>
+    <Tipo>FI</Tipo>
+    <NumeroRegistro>104</NumeroRegistro>
+    <Compartimento>
+      <NumeroCompartimento>1</NumeroCompartimento>
+      <InversionesFinancieras>
+        <ClaseIF>EXTERIOR</ClaseIF>
+        <DescripcionIF>IIC</DescripcionIF>
+        <CodigoISIN>LU00000000G9</CodigoISIN>
+        <DescripcionValor>FONDO|FONDO EXTRANJERO EJEMPLO</DescripcionValor>
+        <Divisa>EUR</Divisa>
+        <ValorMercado>450000.00</ValorMercado>
+      </InversionesFinancieras>
+    </Compartimento>
+  </Entidad>
+</FondCart>

@@ -2,7 +2,8 @@
 
 A regulatory source, not an issuer. See :mod:`openbasket.sources.cnmv_spain`.
 Data is kept in ``data/01_raw/reg_spain`` (or ``$OPENBASKET_REG_SPAIN_DIR``);
-the first call to ``products`` downloads the latest quarter (about 9 MB).
+the ``reg_spain`` pipeline refreshes it, and if it is empty the first call to
+``products`` downloads the latest quarter (about 9 MB).
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from .. import cnmv_spain as cnmv
 from . import PRODUCT_COLUMNS, FetchContext, IssuerAdapter, IssuerHoldings, register
 
 DEFAULT_ROOT = "data/01_raw/reg_spain"
+EXTRA_PRODUCT_COLUMNS = ["manager", "manager_group", "etf", "category"]
 
 _stores: dict[str, cnmv.CnmvStore] = {}
 
@@ -31,12 +33,13 @@ def products() -> pd.DataFrame:
     if not s.is_built():
         s.refresh()
     df = s.products()
-    return df[PRODUCT_COLUMNS + ["manager"]] if len(df) else pd.DataFrame(columns=PRODUCT_COLUMNS)
+    return df[PRODUCT_COLUMNS + EXTRA_PRODUCT_COLUMNS] if len(df) else pd.DataFrame(columns=PRODUCT_COLUMNS)
 
 
 def holdings(product: dict, ctx: FetchContext | None = None) -> IssuerHoldings:
-    as_of, frame, notes = store().holdings(str(product["portfolio_id"]))
-    return IssuerHoldings(as_of=as_of, holdings=frame, url=cnmv.PAGE_URL, notes=notes)
+    s = store()
+    as_of, frame, notes = s.holdings(str(product["portfolio_id"]))
+    return IssuerHoldings(as_of=as_of, holdings=frame, url=s.meta().get("url", cnmv.PAGE_URL), notes=notes)
 
 
 ADAPTER = register(
@@ -45,15 +48,11 @@ ADAPTER = register(
         title="CNMV Spain: quarterly fund and SICAV portfolios",
         homepage=cnmv.PAGE_URL,
         credit=cnmv.CREDIT,
-        licence=(
-            "Public information from the CNMV website. CNMV's legal notice (NotaLegal) authorises reuse "
-            "and calculations on it if the information is reproduced faithfully, unaltered, and buyers of any "
-            "paid product are told it is free on the CNMV website."
-        ),
+        licence=cnmv.LICENCE,
         regions=("ES",),
         products=products,
         holdings=holdings,
         frequency="quarterly, published about four months after quarter end",
-        redistribution="public",
+        redistribution=cnmv.REDISTRIBUTION,
     )
 )

@@ -19,6 +19,7 @@ sources/index
 plan
 data-api
 publishing
+data-licence
 deployment
 api
 ```

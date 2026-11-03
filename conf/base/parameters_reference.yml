@@ -1,0 +1,27 @@
+# ESMA FIRDS. `firds_lookup` looks up the run's `isin` param through the
+# Solr API:
+#   kedro run --pipeline=reference --params=isin=CH0008899764
+firds:
+  # Solr responses, one file per ISIN per day, in <cache_dir>/firds/<date>/.
+  cache_dir: data/01_raw/reference
+  bulk:
+    # The bulk files are large: the weekly FULINS snapshot for C, D and E is
+    # 7 ZIPs, 69 MB in all (3.8 to 17 MB each), and XML is about 36 times
+    # the ZIP size, so roughly 2.5 GB to parse. A weekday DLTINS delta is
+    # 4 ZIPs (part 1 on 3 November 2026 was 13 MB) with every CFI letter. With
+    # `enabled: false` nothing is downloaded and firds_instruments is rebuilt
+    # from the Parquet files already in parquet_dir.
+    #   kedro run --pipeline=reference --params=firds.bulk.enabled=true
+    enabled: false
+    # Explicit file names (without .zip), e.g. [DLTINS_20261102_01of01].
+    # Empty: the newest complete FULINS snapshot for cfi_letters, plus the
+    # DLTINS deltas published after it if include_deltas.
+    files: []
+    include_deltas: true
+    # CFI first letters kept: C funds, D debt, E equities.
+    cfi_letters: [C, D, E]
+    # How far back the file index is searched.
+    lookback_days: 14
+    raw_dir: data/01_raw/firds
+    parquet_dir: data/02_intermediate/firds
+    overwrite: false

@@ -22,6 +22,17 @@ one test file and one page in this folder. Nothing else needs editing.
      access even for private use. The adapter then runs only when the user
      names it in `issuers.enabled` (for example in `conf/local`). A site
      whose robots.txt disallows the pages needed gets no adapter at all.
+   - `stand_in=True` when the holdings are not the fund's own but a peer's
+     (another ETF on the same index, see
+     [Exchange and index publications](exchange-index.md)). `ingest` lists
+     stand-ins after every direct adapter, so they answer only for funds no
+     direct source lists.
+   - `replication` in `products()`: `"swap"` whenever the issuer says the
+     fund is synthetic. A swap fund's listed securities are its substitute
+     basket, not what it tracks: label them with
+     `mark_substitute_basket(df)` (`asset_class`
+     `collateral (substitute basket)`, `SUBSTITUTE_BASKET`) and say so in the
+     notes.
 2. Fetch through `openbasket.http.get` / `post`, which waits between requests
    to the same host and retries rate limits. Do not bypass bot protection,
    log-in walls or consent gates; if a site needs them, it is not a source.

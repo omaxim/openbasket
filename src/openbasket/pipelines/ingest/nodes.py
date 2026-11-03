@@ -47,14 +47,16 @@ def download_issuer_products(ishares_sites: list[str], spdr_regions: list[str], 
     ``issuers.disabled`` drops some), each row with ``issuer`` set to the
     adapter's name. An adapter that fails, or returns rows that break the
     product contract, is logged and skipped or cleaned; it never stops the
-    others. An ISIN two lists share stays with the first. ``listed_on`` is
-    the date the list was read.
+    others. An ISIN two lists share stays with the first; stand-in adapters
+    (a peer's holdings for a fund, :attr:`IssuerAdapter.stand_in`) come last,
+    so they never take a fund a direct adapter lists. ``listed_on`` is the
+    date the list was read.
     """
     from ...pipelines.lookthrough.nodes import issuer_adapters
 
     frames = [ishares.products(s).assign(issuer="ishares") for s in ishares_sites]
     frames += [spdr.products(r) for r in spdr_regions]
-    for name, adapter in sorted(issuer_adapters(issuers_params).items()):
+    for name, adapter in sorted(issuer_adapters(issuers_params).items(), key=lambda kv: (kv[1].stand_in, kv[0])):
         try:
             df = adapter.products()
         except Exception as exc:  # one issuer's site must not stop the others

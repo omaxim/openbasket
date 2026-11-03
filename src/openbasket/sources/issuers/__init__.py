@@ -32,6 +32,10 @@ never fetches or publishes holdings from a ``local_only`` adapter.
 ``enabled_by_default`` is ``False`` for a source whose terms forbid automated
 access even for private use; such an adapter runs only when it is named in
 ``issuers.enabled`` (for example in ``conf/local``).
+
+``stand_in`` is ``True`` for an adapter whose holdings are not the fund's own
+but a peer's (another ETF on the same index). ``ingest`` lists stand-ins after
+every direct adapter, so a fund a direct adapter lists keeps that adapter.
 """
 
 from __future__ import annotations
@@ -76,10 +80,16 @@ HOLDING_COLUMNS = [
     "ticker",
     "name",
     "weight_pct",    # percent of net assets, as reported
-    "asset_class",   # normalised: equity, debt, cash, derivative (...), fund, other
+    "asset_class",   # normalised: equity, debt, cash, derivative (...), fund, other,
+                     # or SUBSTITUTE_BASKET for a swap-based fund's collateral
     "currency",
     "country",
 ]
+
+#: ``asset_class`` for the securities a swap-based fund holds as its substitute
+#: basket (the collateral behind its total return swap). They are what the
+#: fund owns, not what it tracks: the index exposure comes through the swap.
+SUBSTITUTE_BASKET = "collateral (substitute basket)"
 
 #: Columns a holdings frame may add; the pipeline uses them when present and
 #: nothing requires them. ``sector`` is the issuer's own sector label.
@@ -110,6 +120,7 @@ class IssuerAdapter:
     frequency: str = "daily"   # how often the issuer updates holdings
     redistribution: str = LOCAL_ONLY  # "public" or "local_only", see the module docs
     enabled_by_default: bool = True   # False: runs only when named in issuers.enabled
+    stand_in: bool = False     # True: its holdings are another fund's (a peer on the same index)
 
     def __post_init__(self):
         if self.redistribution not in REDISTRIBUTION_CLASSES:
@@ -219,3 +230,14 @@ def validate_holdings(df: pd.DataFrame) -> list[str]:
     if "weight_pct" in df and not pd.api.types.is_numeric_dtype(df["weight_pct"]):
         problems.append("weight_pct is not numeric")
     return problems
+
+
+def mark_substitute_basket(df: pd.DataFrame) -> pd.DataFrame:
+    """A copy of a swap-based fund's holdings with its securities labelled
+    :data:`SUBSTITUTE_BASKET`; derivative, cash and money-market lines keep
+    their class."""
+    out = df.copy()
+    ac = out["asset_class"].fillna("").astype(str)
+    keep = ac.str.startswith("derivative") | ac.isin(["cash", "money market"])
+    out.loc[~keep, "asset_class"] = SUBSTITUTE_BASKET
+    return out

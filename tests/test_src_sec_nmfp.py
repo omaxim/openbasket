@@ -36,7 +36,7 @@ def ds(monkeypatch):
 
 
 def test_registered():
-    a = discover()["sec-nmfp"]
+    a = discover()["sec_nmfp"]
     assert a.frequency == "monthly"
     assert "Form N-MFP" in a.credit
 
@@ -116,11 +116,34 @@ def test_products(ds):
     assert row["asset_class"] == "Money Market (Government)"
 
 
-def test_products_with_gleif(ds, monkeypatch):
-    monkeypatch.setattr(m, "gleif_isins", lambda lei: ["US99999G2084", "XX123"] if lei.endswith("B02") else [])
-    ev = m.isin_evidence(ds, ds.filings(), gleif=True).set_index("isin")
+def test_ticker_only_for_a_single_share_class(ds):
+    series = ds.filings()
+    ev = m.isin_evidence(ds, series, gleif=False)
+    # One of the two classes has a ticker: the ISIN may belong to the other one.
+    one_known = pd.DataFrame({"series_id": ["S000000001"], "class_id": ["C000000011"], "ticker": ["EXGXX"]})
+    p = m.build_products(series, ev, m.classes(ds, one_known), REF.url)
+    assert pd.isna(p.iloc[0]["ticker"])
+    single = m.classes(ds, one_known)
+    single = single[single["class_id"] == "C000000011"]
+    assert m.build_products(series, ev, single, REF.url).iloc[0]["ticker"] == "EXGXX"
+
+
+def test_products_with_gleif(ds, monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(m, "gleif_isins", lambda lei: calls.append(lei) or (["US99999G2084", "XX123"] if lei.endswith("B02") else []))
+    cache = tmp_path / "gleif.json"
+    ev = m.isin_evidence(ds, ds.filings(), gleif=True, gleif_cache=cache).set_index("isin")
     assert ev.at["US99999G2084", "series_id"] == "S000000002"
     assert "XX123" not in ev.index
+    n = len(calls)
+    again = m.isin_evidence(ds, ds.filings(), gleif=True, gleif_cache=cache)
+    assert len(calls) == n and len(again) == len(ev)  # answered from the cache
+
+
+def test_adapter_is_public():
+    from openbasket.sources import redistribution
+
+    assert discover()["sec_nmfp"].redistribution == "public" and redistribution("sec_nmfp") == "public"
 
 
 def test_repo_collateral(ds):
@@ -146,7 +169,7 @@ def test_cache_written_after_parse(tmp_path, monkeypatch):
     assert not list(tmp_path.iterdir())
     monkeypatch.setattr(m, "_sec_get", lambda url, **kw: R(content))
     m.load(REF, tmp_path)
-    assert (tmp_path / "sec-nmfp_20260909-20261007.zip").exists()
+    assert (tmp_path / "sec_nmfp_20260909-20261007.zip").exists()
     m._datasets.pop(REF.url, None)
 
 

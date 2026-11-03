@@ -249,6 +249,78 @@ def test_link_discovery():
     assert d.ecb_csv_url(ecb).endswith("ea_csv_261102.csv.gz")
 
 
+def test_ecb_cache_hit_keeps_file_date_and_url(tmp_path, monkeypatch):
+    """A second run on the same day reads the cache and still knows which file it was."""
+    content = gzip.compress((FIX / "ecb_eligible.tsv").read_text().encode("utf-16"))
+    page = '<a href="/paym/coll/assets/html/dla/ea_MID/ea_csv_261102.csv.gz">'
+
+    class R:
+        def __init__(self, text="", content=b""):
+            self.text, self.content = text, content
+
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(d.http, "get", lambda url, **kw: R(text=page) if url == d.ECB_PAGE else R(content=content))
+    first = d.ecb_eligible(tmp_path)
+    monkeypatch.setattr(d.http, "get", lambda url, **kw: pytest.fail("should read the cache"))
+    again = d.ecb_eligible(tmp_path)
+    assert (again["as_of"] == "2026-11-02").all()
+    assert again["source_url"].str.endswith("ea_csv_261102.csv.gz").all()
+    assert again.equals(first)
+
+
+@pytest.mark.parametrize(
+    "texts, key",
+    [
+        (("Raiffeisen-Global-Dividende-ESG-Aktien",), "raiffeisen"),
+        (("Vontobel Fund - mtx Sustainable Emerging Markets Leaders",), "vontobel"),
+    ],
+)
+def test_issuer_key_raiffeisen(texts, key):
+    assert d.issuer_key(*texts) == key
+
+
+def _fund(isin: str, name: str, **kw) -> dict:
+    return {c: None for c in d.FUND_LISTING_COLUMNS} | {
+        "isin": isin, "name": name, "as_of": "2026-11-03", "source": "esma_firds_funds", "source_url": "u"} | kw
+
+
+def test_directory_raiffeisen_and_ambiguous_brands():
+    listing = pd.DataFrame([
+        _fund("AT0000495288", "Raiffeisen-Gl.Div-ESG-Akt.", domicile="AT"),
+        _fund("CH0000000015", "Raiffeisen Futura Swiss Stock", domicile="CH"),
+        _fund("LU0000000017", "Amova ARK Disruptive Innovation", fund_lei="5493000000000000FR01"),
+    ])
+    rel = pd.DataFrame([{"lei": "5493000000000000FR01", "relationship": "IS_FUND-MANAGED_BY", "parent_lei": "5493000000000000FR02"}])
+    ent = pd.DataFrame([{"lei": "5493000000000000FR02", "legal_name": "FundRock Management Company S.A.", "jurisdiction": "LU", "category": "GENERAL"}])
+    fd = d.build_fund_directory([listing], None, rel, ent).set_index("isin")
+    assert fd.loc["AT0000495288", "issuer"] == "raiffeisen"
+    assert fd.loc["CH0000000015", "issuer"] == "vontobel"
+    assert fd.loc["LU0000000017", "issuer"] is None  # "ARK" in the name, but GLEIF's manager is FundRock
+
+
+def test_etf_only_adapters_do_not_route_mutual_funds():
+    listing = pd.DataFrame([
+        _fund("IE00B4L5Y983", "iShares Core MSCI World UCITS ETF", instrument_type="ETF"),
+        _fund("LU0171293920", "BGF - US Basic Value Fund", instrument_type="fund"),
+    ])
+    fd = d.build_fund_directory([listing], adapters={"ishares"}, etf_only_adapters={"ishares"}).set_index("isin")
+    assert fd.loc["IE00B4L5Y983", "holdings_route"] == "ishares"
+    assert fd.loc["LU0171293920", "issuer"] == "ishares" and fd.loc["LU0171293920", "holdings_route"] == "no_holdings_source"
+    listed = d.build_fund_directory([listing], adapters={"ishares"}, adapter_isins={"ishares": {"LU0171293920"}})
+    assert listed.set_index("isin")["adapter"].to_dict() == {"IE00B4L5Y983": None, "LU0171293920": "ishares"}
+
+
+def test_redistribution_of_directory_sources():
+    from openbasket.sources import redistribution
+
+    public = {k for k, s in d.SOURCES.items() if s.redistribution == "public"}
+    assert public == {"esma_firds_funds", "esma_firds_debt", "ecb_eligible", "gleif"}
+    assert redistribution("six_funds") == "local_only" and redistribution("esma_firds_funds") == "public"
+    assert redistribution("esma_firds") == "public"
+
+
 def test_pipeline_nodes_skip_disabled_sources():
     from openbasket.pipelines.directory import create_pipeline
     from openbasket.pipelines.directory import nodes as n
@@ -257,7 +329,31 @@ def test_pipeline_nodes_skip_disabled_sources():
     assert n.dir_six_funds(params).empty
     assert list(n.dir_six_bonds(params).columns) == d.BOND_LISTING_COLUMNS
     outputs = set(create_pipeline().all_outputs())
-    assert {"fund_directory", "bond_directory", "directory_coverage"} <= outputs
+    assert {"fund_directory", "bond_directory", "directory_coverage", "directory_sources"} <= outputs
+
+
+def test_public_build_reads_public_sources_only(monkeypatch):
+    from openbasket.pipelines.directory import nodes as n
+
+    monkeypatch.setattr(d, "six_funds", lambda cache_dir=None: pytest.fail("SIX must not be read in the public build"))
+    params = {"sources": {"six_funds": True, "esma_firds_funds": True}, "public_only": True}
+    assert n.dir_six_funds(params).empty
+    report = n.directory_sources(params).set_index("source")
+    assert report.loc["six_funds", "status"] == "local_only" and report.loc["six_funds", "redistribution"] == "local_only"
+    with pytest.raises(RuntimeError, match="esma_firds_funds"):
+        n.directory_sources(params | {"required_sources": ["esma_firds_funds"]})
+
+
+def test_failed_source_is_reported(monkeypatch):
+    from openbasket.pipelines.directory import nodes as n
+
+    def boom(cache_dir=None):
+        raise ConnectionError("unreachable")
+
+    monkeypatch.setattr(d, "xetra", boom)
+    assert n.dir_xetra({"sources": {"xetra": True}}).empty
+    row = n.directory_sources({}).set_index("source").loc["xetra"]
+    assert row["status"] == "failed" and "unreachable" in row["error"]
 
 
 @pytest.mark.network

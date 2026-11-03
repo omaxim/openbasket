@@ -22,5 +22,14 @@ directory:
   gleif_api_max_leis: 50000
   # Adapter names to treat as available even if not registered in this checkout.
   extra_adapters: []
+  # Adapters that read exchange-traded funds only: a mutual fund of the same
+  # brand is not routed to them, so it counts as "fund known, no holdings source".
+  etf_only_adapters: [ishares, spdr, xtrackers, amundi, vanguard, ubs, invesco, wisdomtree, vaneck, globalx,
+                      hsbc, jpmorgan, franklin, bnpparibas, first_trust, avantis]
   # true: a failing source fails the run. false: it is logged and skipped.
   strict: false
+  # Sources that must give rows, or the run fails (the public build sets this).
+  required_sources: []
+  # true: read only sources whose redistribution class is "public" (SIX,
+  # Xetra and Euronext lists are local_only). conf/public sets it.
+  public_only: false

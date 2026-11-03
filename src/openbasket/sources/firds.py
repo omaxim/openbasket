@@ -48,6 +48,13 @@ from ..identifiers import is_valid_isin
 
 logger = logging.getLogger(__name__)
 
+#: Redistribution class (see :func:`openbasket.sources.redistribution`).
+#: ESMA's legal notice (https://www.esma.europa.eu/about-esma/legal-notice-and-data-protection,
+#: read 2026-11-03): "Reproduction is authorised provided the source is
+#: acknowledged"; material transformed from it carries the disclaimer in
+#: :data:`CREDIT`.
+REDISTRIBUTION = "public"
+
 SOLR_URL = "https://registers.esma.europa.eu/solr/esma_registers_firds/select"
 FILES_URL = "https://registers.esma.europa.eu/solr/esma_registers_firds_files/select"
 SEARCH_PAGE = "https://registers.esma.europa.eu/publication/searchRegister?core=esma_registers_firds"
@@ -294,6 +301,9 @@ def _interest(cfi: str | None, fixed: object, floating_ref: object) -> tuple[str
     if floating_ref or letter == "V":
         return "floating", None
     rate = _num(fixed)
+    if letter == "X" and not rate:
+        # CFI "not applicable/undefined" with a zero rate: may be an FRN without reference-rate fields.
+        return None, None
     if letter == "Z" or (rate == 0 and letter not in ("F", None)):
         return "zero", 0.0 if rate is None else rate
     if rate is not None:
@@ -512,7 +522,7 @@ def instruments_sql(records: str) -> str:
             a.termination_date,
             a.as_of,
             '{SOURCE}' as source,
-            '{SEARCH_PAGE}' as url,
+            '{SOLR_URL}?q=isin%3A%28' || p.isin || '%29+AND+latest_received_flag%3A1&wt=json&rows=1000' as url,
             '{CREDIT.replace("'", "''")}' as credit
         from pick p join agg a using (isin) left join names n using (isin)
         order by p.isin

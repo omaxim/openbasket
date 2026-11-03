@@ -15,6 +15,18 @@ kedro run --pipeline=directory
 Code: `openbasket.sources.directory` (parsers and merge) and the `directory`
 pipeline (`src/openbasket/pipelines/directory/`), configured in
 `conf/base/parameters_directory.yml` and `conf/base/catalog_directory.yml`.
+The pipeline downloads about 120 MB, so it is not part of a plain `kedro run`;
+run it with `--pipeline=directory`.
+
+Each source has a redistribution class (column *Class* below). ESMA FIRDS,
+the ECB list and GLEIF are `public`; the SIX, Xetra and Euronext lists are
+`local_only`, read for the person running openbasket only. The public build
+(`kedro run --env public`, `conf/public/parameters.yml`) sets
+`directory.public_only: true`: the `local_only` sources are not downloaded
+at all, and the directory is built from the public ones, with
+`esma_firds_funds` required to give rows.
+
+Status as tested on 2026-11-03: working.
 
 ## Outputs
 
@@ -23,6 +35,7 @@ pipeline (`src/openbasket/pipelines/directory/`), configured in
 | `fund_directory` (`data/03_primary/fund_directory.parquet`) | 19,963 | One row per fund, ETF, ETN or ETC ISIN. |
 | `bond_directory` (`data/03_primary/bond_directory.parquet`) | 281,399 | One row per bond ISIN. |
 | `directory_coverage` (`data/08_reporting/directory_coverage.csv`) | | ISINs per issuer and domicile, with and without a holdings adapter. |
+| `directory_sources` (`data/08_reporting/directory_sources.csv`) | one per source | What each source gave in the run: `status` (`ok`, `empty`, `off`, `local_only`, `failed`), rows, newest as-of date, redistribution class and the error if it failed. |
 | `dir_<source>` (`data/02_intermediate/directory/`) | | Each source parsed on its own. |
 
 `fund_directory` columns: `isin`, `name`, `issuer` (adapter-style key such as
@@ -30,9 +43,9 @@ pipeline (`src/openbasket/pipelines/directory/`), configured in
 `asset_class`, `replication` (`physical`, `swap` or empty), `instrument_type`
 (`ETF`, `fund`, `ETN`, `ETC`, `REIT`, ...), `management` (active/passive, Xetra
 only), `ticker`, `venues` (MIC codes), `fund_lei`, `manager_lei`,
-`manager_name`, `umbrella_lei`, `umbrella_name`, `adapter` (the issuer key if
-an adapter with that name is registered), `holdings_route` (the adapter, or
-`no_holdings_source`), a `<field>_source` column for every derived field,
+`manager_name`, `umbrella_lei`, `umbrella_name`, `adapter` (the adapter that
+can read this ISIN's holdings, see step 7 below), `holdings_route` (the
+adapter, or `no_holdings_source`), a `<field>_source` column for every derived field,
 `listed_in` (every source that lists the ISIN), and the citation columns
 `source`, `source_url`, `credit` and `as_of`.
 
@@ -47,25 +60,31 @@ state; a FIRDS-only row has the FIRDS publication date).
 
 ## Sources
 
-| Key | What | Endpoint | ISINs | As-of | Default |
-|---|---|---|---|---|---|
-| `six_funds` | SIX Swiss Exchange funds and ETFs, with issuer, domicile, replication, asset class | `https://www.six-group.com/fqs/ref.json?select=...&where=PortalSegment=FU` | 3,088 (2,355 ETF rows, 877 other funds; 144 listed in two currencies) | `delayedDateTime` in the response | on |
-| `six_bonds` | SIX-listed bonds with issuer, coupon, maturity, amount | same API, `where=PortalSegment=BO` | 3,011 (2,501 CHF) | `delayedDateTime` | on |
-| `xetra` | Deutsche Boerse "all tradable instruments" for Xetra: ETF, ETN, ETC rows | CSV linked from `https://www.cashmarket.deutsche-boerse.com/cash-en/trading/Tradable-Instruments-Xetra/` | 3,641 (3,072 ETF, 364 ETN, 205 ETC) | `Date Last Update` line | on |
-| `euronext_etfs` | Euronext ETF/ETP list, all Euronext markets and Borsa Italiana's ETFplus | POST to the `jsongateway_download` URL on `https://live.euronext.com/en/products/etfs/list` | 3,358 | date line of the CSV | on |
-| `euronext_bonds` | Euronext bond list (Paris, Amsterdam, Brussels, Lisbon, Oslo, MOT, EuroTLX, ...) | same, from `https://live.euronext.com/en/products/fixed-income/list` | 14,986 | date line of the CSV | on |
-| `ecb_eligible` | ECB eligible marketable assets: EUR bonds with issuer name and residence | `ea_csv_<yymmdd>.csv.gz` linked from `https://www.ecb.europa.eu/mopo/coll/assets/html/list-MID.en.html` | 31,375 | date in the file name | on |
-| `esma_firds_funds` | ESMA FIRDS weekly full file `FULINS_C`: every fund unit traded on an EU venue, with the fund's LEI, CFI code and every venue | index `https://registers.esma.europa.eu/solr/esma_registers_firds_files/select`, files `https://firds.esma.europa.eu/firds/FULINS_C_<date>_01of01.zip` | 18,698 | publication date | on |
-| `esma_firds_debt` | ESMA FIRDS `FULINS_D` (4 files, about 70 MB zipped): bonds traded on EU venues, with issuer LEI, coupon, maturity | same index, `FULINS_D_<date>_0Nof04.zip` | 274,321 (structured products CFI `DE`/`DS` left out) | publication date | on |
-| `fca_firds_funds` | FCA FIRDS `FULINS_C` (London and other UK venues) | `https://api.data.fca.org.uk/fca_data_firds_files` | 21,027 in the 2026-10-31 file | publication date | **off** |
-| `gleif` | GLEIF ISIN-LEI file, level 2 relationship file (`IS_FUND-MANAGED_BY`, `IS_SUBFUND_OF`), LEI records API for names and jurisdictions | `https://mapping.gleif.org/api/v2/isin-lei/latest`, `https://goldencopy.gleif.org/api/v2/golden-copies/publishes/latest` (`rr` CSV), `https://api.gleif.org/api/v1/lei-records?filter[lei]=...` | 97,789 ISIN-LEI pairs matched; 227,604 active fund links | daily golden copy | on |
+| Key | What | Endpoint | ISINs | As-of | Default | Class |
+|---|---|---|---|---|---|---|
+| `six_funds` | SIX Swiss Exchange funds and ETFs, with issuer, domicile, replication, asset class | `https://www.six-group.com/fqs/ref.json?select=...&where=PortalSegment=FU` | 3,088 (2,355 ETF rows, 877 other funds; 144 listed in two currencies) | `delayedDateTime` in the response | on | local_only |
+| `six_bonds` | SIX-listed bonds with issuer, coupon, maturity, amount | same API, `where=PortalSegment=BO` | 3,011 (2,501 CHF) | `delayedDateTime` | on | local_only |
+| `xetra` | Deutsche Boerse "all tradable instruments" for Xetra: ETF, ETN, ETC rows | CSV linked from `https://www.cashmarket.deutsche-boerse.com/cash-en/trading/Tradable-Instruments-Xetra/` | 3,641 (3,072 ETF, 364 ETN, 205 ETC) | `Date Last Update` line | on | local_only |
+| `euronext_etfs` | Euronext ETF/ETP list, all Euronext markets and Borsa Italiana's ETFplus | POST to the `jsongateway_download` URL on `https://live.euronext.com/en/products/etfs/list` | 3,358 | date line of the CSV | on | local_only |
+| `euronext_bonds` | Euronext bond list (Paris, Amsterdam, Brussels, Lisbon, Oslo, MOT, EuroTLX, ...) | same, from `https://live.euronext.com/en/products/fixed-income/list` | 14,986 | date line of the CSV | on | local_only |
+| `ecb_eligible` | ECB eligible marketable assets: EUR bonds with issuer name and residence | `ea_csv_<yymmdd>.csv.gz` linked from `https://www.ecb.europa.eu/mopo/coll/assets/html/list-MID.en.html` | 31,375 | date in the file name | on | public |
+| `esma_firds_funds` | ESMA FIRDS weekly full file `FULINS_C`: every fund unit traded on an EU venue, with the fund's LEI, CFI code and every venue | index `https://registers.esma.europa.eu/solr/esma_registers_firds_files/select`, files `https://firds.esma.europa.eu/firds/FULINS_C_<date>_01of01.zip` | 18,698 | publication date | on | public |
+| `esma_firds_debt` | ESMA FIRDS `FULINS_D` (4 files, about 70 MB zipped): bonds traded on EU venues, with issuer LEI, coupon, maturity | same index, `FULINS_D_<date>_0Nof04.zip` | 274,321 (structured products CFI `DE`/`DS` left out) | publication date | on | public |
+| `fca_firds_funds` | FCA FIRDS `FULINS_C` (London and other UK venues) | `https://api.data.fca.org.uk/fca_data_firds_files` | 21,027 in the 2026-10-31 file | publication date | **off** | local_only |
+| `gleif` | GLEIF ISIN-LEI file, level 2 relationship file (`IS_FUND-MANAGED_BY`, `IS_SUBFUND_OF`), LEI records API for names and jurisdictions | `https://mapping.gleif.org/api/v2/isin-lei/latest`, `https://goldencopy.gleif.org/api/v2/golden-copies/publishes/latest` (`rr` CSV), `https://api.gleif.org/api/v1/lei-records?filter[lei]=...` | 97,789 ISIN-LEI pairs matched; 227,604 active fund links | daily golden copy | on | public |
 
 All downloads go through `openbasket.http` (one request per second per host;
 the ECB's `Crawl-delay: 5` and GLEIF's 60 requests a minute are honoured).
 Raw files are cached under `data/01_raw/directory/<source>/` (one file per
-day, per publication for FIRDS) and written only after they parsed. A full
-run fetches about 120 MB and took 5.5 minutes on 2026-11-03; a rerun on the
-same day reads the cache.
+day, per publication for FIRDS) and written only after they parsed. Where the
+file's URL carries its date (the ECB's `ea_csv_<yymmdd>`, Xetra's CSV link),
+that URL is saved next to the cached file, so a rerun on the same day keeps
+the as-of date and the file link. A full run fetches about 120 MB and took
+5.5 minutes on 2026-11-03; a rerun on the same day reads the cache. A source
+that fails is logged, reported in `directory_sources` and skipped (or fails
+the run with `strict: true`). When there are more LEIs to name than
+`gleif_api_max_leis`, managers and umbrellas are looked up first and the
+number left out is logged.
 
 ### How a fund ISIN is resolved
 
@@ -94,10 +113,20 @@ same day reads the cache.
    isin_prefix`; XS and EU prefixes are left empty).
 6. Replication is SIX's (`Synthetic` -> `swap`), else `swap` when the name
    says "Swap" or "Synthetic" (`replication_source = name`).
-7. `adapter` is the issuer key when an adapter of that name is registered in
-   `openbasket.sources.issuers` (or listed in `extra_adapters`), and
-   `holdings_route` is that adapter or `no_holdings_source`. Whether the
-   adapter really has the fund is decided by the adapter's own `products()`.
+7. The issuer key is the brand; the route is separate. `adapter` is set when
+   an adapter of that name is registered in `openbasket.sources.issuers` (or
+   listed in `extra_adapters`) and can read this ISIN: an adapter in
+   `etf_only_adapters` (iShares, SPDR, Xtrackers, Amundi, UBS and other ETF
+   issuers) routes only `instrument_type = ETF`, so a brand's mutual funds
+   (BGF, DWS funds) stay `no_holdings_source`. `holdings_route` is that
+   adapter or `no_holdings_source`.
+
+Two brand rules: Raiffeisen funds get the key `raiffeisen`, except Swiss
+Raiffeisen funds (domicile CH, or a GLEIF manager that is Vontobel), which
+Vontobel runs and which get `vontobel`. Short brand keys that also occur as
+ordinary words (`ark`, `gam`, `seb`, `purpose`, `efg`, `axa` and a few more)
+are taken from a fund's name only when GLEIF's manager agrees, or when GLEIF
+names no manager.
 
 `openbasket.sources.directory.route(isin, fund_directory)` returns the row
 for one ISIN.
@@ -182,8 +211,9 @@ weekly (Saturday); GLEIF files are daily. Run the pipeline daily or weekly.
   terms apply. Credit: "Instrument list: Deutsche Boerse AG (Xetra)".
 - **Euronext**: public CSV download, no login; website terms apply. Price
   columns are dropped. Credit: "Product directory: Euronext N.V.".
-- **ECB**: public download; cite the ECB. The `robots.txt` `Crawl-delay: 5`
-  is honoured.
+- **ECB**: public download; the ECB's copyright notice permits reproduction
+  provided the source is acknowledged. The `robots.txt` `Crawl-delay: 5` is
+  honoured.
 - **ESMA FIRDS**: ESMA's legal notice authorises reproduction provided the
   source is acknowledged. Credit: "Source: ESMA Financial Instruments
   Reference Data System (FIRDS)".
@@ -197,9 +227,10 @@ weekly (Saturday); GLEIF files are daily. Run the pipeline daily or weekly.
   FCA's permission. It would add London-listed share classes.
 
 The SIX, Deutsche Boerse and Euronext lists are reference data published for
-the public on the exchanges' own sites, without a stated open licence.
-openbasket uses them to route and label ISINs and shows the credit line on
-every row; check their terms before republishing the tables in bulk.
+the public on the exchanges' own sites, without a stated open licence, and
+the EU database right can cover reusing a substantial part of a database. So
+they are `local_only`: a local run uses them to route and label ISINs, and
+the public build does not read them.
 
 ## Known gaps
 
@@ -209,8 +240,11 @@ every row; check their terms before republishing the tables in bulk.
   whose names carry no brand in `ISSUER_PATTERNS`. Add patterns as adapters
   appear.
 - **Brand is not portfolio manager.** BlackRock's non-ETF ranges (BGF, BSF)
-  map to `ishares`, DWS mutual funds to `xtrackers`, as asked; the adapter's
-  `products()` decides whether it really has the fund.
+  get the issuer key `ishares` and DWS mutual funds `xtrackers`, but they are
+  not routed to those ETF-only adapters (see step 7).
+- **Public build.** Without SIX, the public directory has no replication from
+  SIX and fewer issuer names; FIRDS, GLEIF and the ISIN prefix still give
+  name, LEI, manager and domicile.
 - **Replication is only known for SIX-listed funds** (and names containing
   "Swap"). Amundi and others run swap ETFs whose names do not say so; for
   those, replication is empty unless the fund is listed on SIX.

@@ -47,6 +47,8 @@ from ``.env``; the SEC answers a generic User-Agent with HTTP 403.
 from __future__ import annotations
 
 import csv
+import json
+import os
 import html
 import io
 import logging
@@ -66,7 +68,17 @@ from . import FetchContext, IssuerAdapter, IssuerHoldings, PRODUCT_COLUMNS, regi
 
 logger = logging.getLogger(__name__)
 
-NAME = "sec-nmfp"
+NAME = "sec_nmfp"
+
+#: Redistribution class (see :func:`openbasket.sources.redistribution`).
+#: US federal government data is not subject to copyright in the United
+#: States, and https://www.sec.gov/about/privacy-information (read 2026-11-03)
+#: says information on sec.gov "may be copied or further distributed ...
+#: without the SEC's permission", asking only for a citation.
+REDISTRIBUTION = "public"
+
+#: Where the registered adapter keeps the monthly ZIP and GLEIF answers.
+DEFAULT_CACHE_DIR = "data/01_raw/sec_nmfp"
 HOST = "https://www.sec.gov"
 INDEX_URL = HOST + "/data-research/sec-markets-data/dera-form-n-mfp-data-sets"
 ZIP_RE = re.compile(r"/files/dera/data/form-n-mfp-data-sets/(\d{8})-(\d{8})_nmfp\.zip")
@@ -255,7 +267,7 @@ def _check(ds: Dataset) -> None:
 def load(ref: DatasetRef, cache_dir: str | Path | None = None) -> Dataset:
     """One monthly data set, from the cache when present, else downloaded.
 
-    A download is cached (``sec-nmfp_<period>.zip``, one file per monthly
+    A download is cached (``sec_nmfp_<period>.zip``, one file per monthly
     data set, since every fund of the month is in it) only after its tables
     parse.
     """
@@ -329,7 +341,7 @@ def gleif_isins(lei: str) -> list[str]:
         return []
 
 
-def isin_evidence(ds: Dataset, series: pd.DataFrame, gleif: bool = True) -> pd.DataFrame:
+def isin_evidence(ds: Dataset, series: pd.DataFrame, gleif: bool = True, gleif_cache: str | Path | None = None) -> pd.DataFrame:
     """Share ISINs tied to a series by its LEI: ``isin``, ``series_id``, ``via``.
 
     Two kinds of evidence: positions in other money market funds whose issuer
@@ -343,8 +355,16 @@ def isin_evidence(ds: Dataset, series: pd.DataFrame, gleif: bool = True) -> pd.D
     held = held[held["lei"].isin(by_lei.index) & held["isin"].map(is_valid_isin)].drop_duplicates()
     rows += [{"isin": i.upper(), "series_id": by_lei[lei], "via": "N-MFP holding"} for lei, i in zip(held["lei"], held["isin"])]
     if gleif:
+        # GLEIF answers are kept per monthly data set, so a second run that month asks again only for new LEIs.
+        path = Path(gleif_cache) if gleif_cache else None
+        known = json.loads(path.read_text()) if path is not None and path.exists() else {}
         for lei, sid in by_lei.items():
-            rows += [{"isin": i, "series_id": sid, "via": "GLEIF"} for i in gleif_isins(lei) if is_valid_isin(i)]
+            if lei not in known:
+                known[lei] = gleif_isins(lei)
+            rows += [{"isin": i, "series_id": sid, "via": "GLEIF"} for i in known[lei] if is_valid_isin(i)]
+        if path is not None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(known))
     ev = pd.DataFrame(rows, columns=["isin", "series_id", "via"])
     if ev.empty:
         return ev
@@ -360,6 +380,7 @@ def build_products(series: pd.DataFrame, evidence: pd.DataFrame, cls: pd.DataFra
         return pd.DataFrame(columns=PRODUCT_COLUMNS)
     s = series.set_index("series_id")
     tick = cls.dropna(subset=["ticker"]).groupby("series_id")["ticker"].agg(list)
+    n_classes = cls.groupby("series_id")["class_id"].nunique()
     rows = []
     for e in evidence.itertuples(index=False):
         if e.series_id not in s.index:
@@ -372,8 +393,8 @@ def build_products(series: pd.DataFrame, evidence: pd.DataFrame, cls: pd.DataFra
             "site": "us",
             "portfolio_id": e.series_id,
             "isin": e.isin,
-            # Only certain when the series has one ticker.
-            "ticker": tickers[0] if len(tickers) == 1 else None,
+            # Only certain when the series has a single share class, with a ticker.
+            "ticker": tickers[0] if len(tickers) == 1 and n_classes.get(e.series_id, 0) <= 1 else None,
             "fund_name": r["series_name"],
             "domicile": "US",
             "currency": "USD",
@@ -402,8 +423,14 @@ def products(gleif: bool = True, cache_dir: str | Path | None = None) -> pd.Data
     ds = load(ref, cache_dir)
     series = ds.filings()
     cls = classes(ds, fund_tickers())
-    ev = isin_evidence(ds, series, gleif=gleif)
+    gleif_cache = Path(cache_dir) / f"{NAME}_gleif_{ref.period}.json" if cache_dir else None
+    ev = isin_evidence(ds, series, gleif=gleif, gleif_cache=gleif_cache)
     return build_products(series, ev, cls, ref.url)
+
+
+def _registered_products() -> pd.DataFrame:
+    """``products`` as the ingest pipeline calls it: cached under ``$OPENBASKET_SEC_NMFP_DIR``."""
+    return products(cache_dir=os.environ.get("OPENBASKET_SEC_NMFP_DIR") or DEFAULT_CACHE_DIR)
 
 
 # -- holdings -------------------------------------------------------------------
@@ -550,8 +577,9 @@ ADAPTER = register(
             "requester and stay under ten requests a second. Share ISINs come from GLEIF (CC0)."
         ),
         regions=("us",),
-        products=products,
+        products=_registered_products,
         holdings=holdings,
         frequency="monthly",
+        redistribution=REDISTRIBUTION,
     )
 )

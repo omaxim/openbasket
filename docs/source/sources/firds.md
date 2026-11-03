@@ -15,7 +15,13 @@ find a fund's LEI, and to describe bonds that no fund file describes.
 Code: `openbasket.sources.firds`. Pipeline: `reference`
 (`src/openbasket/pipelines/reference/`), with its catalog in
 `conf/base/catalog_reference.yml` and parameters in
-`conf/base/parameters_reference.yml`.
+`conf/base/parameters_reference.yml`. The pipeline is not part of a plain
+`kedro run`; run it with `--pipeline=reference`. Redistribution class
+`public` (ESMA legal notice, see below).
+
+Status as tested on 2026-11-03: working. A live lookup of IE00B4L5Y983 that
+day gave the fund's name, CFI `CEOGES`, LEI `549300QS4Q1IT6XCA514`, 75 venues
+(41 active) and `as_of` 2026-11-01.
 
 ## Per-ISIN lookup
 
@@ -80,7 +86,10 @@ Columns (`firds.INSTRUMENT_COLUMNS`): `isin`, `full_name`, `short_name`,
 is `V`, `interest_type` is `floating`, `coupon_pct` is empty, and
 `floating_ref` holds the reference rate (an ISIN such as `EU0009652783` for
 3-month Euribor, or an index code or name) with its spread in basis points.
-A third CFI letter `Z` gives `zero`.
+A third CFI letter `Z` gives `zero`. A third letter `X` (not applicable or
+undefined) with a fixed rate of `0` gives no interest type and no coupon,
+since such a record may be a floating-rate note without reference-rate fields.
+Every row's `url` is the Solr query for its ISIN, from either route.
 
 ## Classification
 
@@ -218,6 +227,11 @@ derivatives) and wrote 27 debt ISINs to `firds_instruments` with
   most of their EU venues as terminated.
 - **Fixed rate of `0`** is reported both for genuine zero-coupon and 0%
   bonds and, in Solr, for floating-rate notes; see `interest_type`.
+- **Active venues and first trade date.** A venue counts as active when its
+  termination date is on or after the record's publication date, so a venue
+  that terminated without a new record since is still counted.
+  `first_trade_date` is the earliest across venues, so one venue's odd date
+  (DE0001102580, issued 2022, shows 2016-01-01) gives a misleading value.
 - **Bulk throughput.** The stdlib parser handled about 4 MB of XML per second
   on a heavily loaded machine during development, so a full C/D/E snapshot
   takes minutes, not seconds. Only one small delta file was downloaded while

@@ -225,7 +225,7 @@ def test_snapshot_plus_delta(tmp_path):
         "XS0000000025": "debt",
     }
     assert df.loc["US0000000010", "relevant_venue"] == "XFRA" and df.loc["US0000000010", "venue"] == "XGAT"
-    assert (df["url"] == firds.SEARCH_PAGE).all()
+    assert all(u == firds.solr_url(i) for i, u in df["url"].items())  # a direct link per ISIN
 
 
 def test_parse_file_name_and_select_files():
@@ -348,3 +348,10 @@ def test_live_lookup_swiss_etf_and_bond(tmp_path):
     assert bond["asset_class"] == "debt" and bond["maturity_date"] == "2035-11-23"
     assert bond["coupon_pct"] == pytest.approx(1.4125) and bond["currency"] == "CHF"
     assert df["as_of"].notna().all()
+
+
+def test_interest_type_of_undefined_debt_cfi():
+    """A zero fixed rate on a CFI whose interest letter is X (undefined) is not called zero-coupon."""
+    assert firds._interest("DBXXXX", "0", None) == (None, None)
+    assert firds._interest("DBZUFB", "0", None) == ("zero", 0.0)
+    assert firds._interest("DBFTFB", "1.5", None) == ("fixed", 1.5)

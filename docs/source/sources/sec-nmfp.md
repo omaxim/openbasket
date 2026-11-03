@@ -9,8 +9,11 @@ Vanguard, Schwab, BlackRock, JPMorgan, Goldman Sachs, State Street, BNY
 Dreyfus, Morgan Stanley, Federated Hermes and others), one month after
 month end.
 
-Module: `openbasket.sources.issuers.sec_nmfp`, adapter name `sec-nmfp`,
-frequency `monthly`.
+Module: `openbasket.sources.issuers.sec_nmfp`, adapter name `sec_nmfp`,
+frequency `monthly`. Redistribution class `public` (US federal government
+data, see Terms). Enabled by default.
+
+Status as tested on 2026-11-03: working.
 
 ## Coverage
 
@@ -86,7 +89,7 @@ ISIN. So:
    (OpenFIGI) gives the class and series in `company_tickers_mf.json`, which
    is how the N-PORT route already works.
 2. The newest data set is downloaded once and cached as
-   `sec-nmfp_<window>.zip` in `ctx.cache_dir`, one file per month (every fund
+   `sec_nmfp_<window>.zip` in `ctx.cache_dir`, one file per month (every fund
    of the month is in it), and only after its tables parse.
 3. For the series, the filing with the latest `REPORTDATE` is used, then the
    latest `FILING_DATE`; an amendment (`N-MFP3/A`) for the same report date
@@ -139,7 +142,14 @@ ID, `domicile` `US`, `currency` `USD`, `asset_class` `Money Market
 securities they report), `product_page_url` = the latest filing's EDGAR page,
 and extra columns `isin_via`, `registrant`, `series_lei`, `net_assets`,
 `report_date` and `feeder`. `ticker` is set only when the series has a
-single ticker, because nothing says which class an ISIN belongs to.
+single share class and it has a ticker, because nothing says which class an
+ISIN belongs to (3 of the 78 series with one ticker have other, untickered
+classes).
+
+The registered adapter (what `ingest` calls) keeps the monthly ZIP and the
+GLEIF answers in `data/01_raw/sec_nmfp` (`$OPENBASKET_SEC_NMFP_DIR`). GLEIF
+answers are stored per monthly data set (`sec_nmfp_gleif_<window>.json`), so
+only the first run of a month makes the 328 GLEIF requests.
 
 `classes(dataset, fund_tickers())` lists all share classes with their class
 IDs, net assets and tickers, for matching by ticker.
@@ -222,3 +232,11 @@ for citation to the SEC as the source. The readme notes the data sets are
 filings as submitted and not a substitute for the filings themselves.
 Automated access must declare a User-Agent with a contact and stay under ten
 requests a second. Share ISINs from GLEIF are published under CC0.
+
+## Freshness
+
+Monthly. The data set for a month-end appears in the following month's
+filing window: on 3 November 2026 the newest was the 30 September 2026
+report (filed by 7 October). A live check that day read JPMorgan U.S.
+Government Money Market Fund (S000003909): 282 lines summing to 97.71%, as of
+2026-09-30, in 6 s including the download.

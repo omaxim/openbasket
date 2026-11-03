@@ -4,7 +4,7 @@ Every source has a redistribution class. ``"public"``: its licence allows
 the holdings to be republished (SEC N-PORT, TickerInside under CC BY 4.0,
 CVM, CNMV ...). ``"local_only"``: its terms restrict republication (issuer
 websites), so openbasket reads it only for the person running it and the
-public build never fetches or publishes it. :func:`redistribution` gives the
+public build is meant never to fetch or publish it. :func:`redistribution` gives the
 class for any source id that appears in the data.
 
 A source module declares its class in a module-level ``REDISTRIBUTION``
@@ -27,6 +27,7 @@ _MODULE_FOR = {
     "security_master": "nport",
     "fund_master": "nport",
     "sec_tickers": "sec",
+    "esma_firds": "firds",
 }
 
 _ID_RE = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -48,6 +49,11 @@ def redistribution(source_id: str | None) -> str:
     adapter = issuers.safe_discover().get(sid)
     if adapter is not None:
         return adapter.redistribution if adapter.redistribution in (PUBLIC, LOCAL_ONLY) else LOCAL_ONLY
+    from .directory import SOURCES as DIRECTORY_SOURCES
+
+    if sid in DIRECTORY_SOURCES:
+        value = DIRECTORY_SOURCES[sid].redistribution
+        return value if value in (PUBLIC, LOCAL_ONLY) else LOCAL_ONLY
     module = _MODULE_FOR.get(sid, sid)
     if module == "issuers":
         return LOCAL_ONLY

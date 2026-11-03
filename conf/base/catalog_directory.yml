@@ -17,3 +17,9 @@ directory_coverage:
   filepath: data/08_reporting/directory_coverage.csv
   save_args:
     index: false
+
+directory_sources:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/directory_sources.csv
+  save_args:
+    index: false

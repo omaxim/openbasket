@@ -35,5 +35,11 @@ def create_pipeline(**kwargs) -> Pipeline:
             ),
             Node(n.bond_directory, ["dir_gleif_isin_lei", *BOND_LISTINGS], "bond_directory", name="bond_directory"),
             Node(n.directory_coverage, "fund_directory", "directory_coverage", name="directory_coverage"),
+            Node(
+                n.directory_sources,
+                [p, *FUND_LISTINGS, *BOND_LISTINGS, "dir_gleif_isin_lei", "dir_gleif_entities"],
+                "directory_sources",
+                name="directory_sources",
+            ),
         ]
     )

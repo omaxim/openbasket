@@ -26,8 +26,8 @@ Identifiers that fail their check digit must be ``None``.
 ``redistribution`` says whether the source's terms allow its holdings to be
 republished: ``"public"`` (an open licence, e.g. a regulator's open data) or
 ``"local_only"`` (the default: an issuer site whose terms restrict reuse,
-which openbasket reads only for the person running it). The public build
-never fetches or publishes holdings from a ``local_only`` adapter.
+which openbasket reads only for the person running it). The public build is
+meant never to fetch or publish holdings from a ``local_only`` adapter.
 
 ``enabled_by_default`` is ``False`` for a source whose terms forbid automated
 access even for private use; such an adapter runs only when it is named in

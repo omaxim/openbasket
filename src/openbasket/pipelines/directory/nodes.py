@@ -3,7 +3,10 @@
 Each source node downloads one public list (cached per day) and returns it
 parsed. A source that is switched off in ``parameters_directory.yml``, or
 that fails while ``strict`` is false, returns an empty frame and logs why, so
-one unreachable exchange does not stop the rest of the directory.
+one unreachable exchange does not stop the rest of the directory. With
+``public_only`` (set by ``conf/public``), sources whose redistribution class
+is ``local_only`` are not read at all. :func:`directory_sources` reports what
+each source gave (rows, as-of date, or why it gave nothing).
 """
 
 from __future__ import annotations
@@ -17,19 +20,30 @@ from ...sources import directory as d
 
 logger = logging.getLogger(__name__)
 
+#: What each source gave in this run: ``{key: {"status": ..., "error": ...}}``.
+_STATUS: dict[str, dict] = {}
+
 
 def _run(params: dict, key: str, fn: Callable[[], pd.DataFrame], columns: list[str]) -> pd.DataFrame:
+    source = d.SOURCES.get(key)
     if not params.get("sources", {}).get(key, False):
         logger.info("directory source %s is switched off", key)
+        _STATUS[key] = {"status": "off"}
+        return pd.DataFrame(columns=columns)
+    if params.get("public_only", False) and (source is None or source.redistribution != "public"):
+        logger.info("directory source %s is not read: its terms do not allow republishing (public build)", key)
+        _STATUS[key] = {"status": "local_only"}
         return pd.DataFrame(columns=columns)
     try:
         out = fn()
-    except Exception:
+    except Exception as exc:
         if params.get("strict", False):
             raise
         logger.exception("directory source %s failed; continuing without it", key)
+        _STATUS[key] = {"status": "failed", "error": f"{type(exc).__name__}: {exc}"[:300]}
         return pd.DataFrame(columns=columns)
     logger.info("directory source %s: %d rows", key, len(out))
+    _STATUS[key] = {"status": "ok" if len(out) else "empty"}
     return out
 
 
@@ -104,10 +118,11 @@ def dir_gleif_entities(
         # The umbrella's own manager, for sub-funds that only link to their umbrella.
         umb = set(rel.loc[rel["relationship"] == "IS_SUBFUND_OF", "parent_lei"])
         wanted |= set(relationships.loc[relationships["lei"].isin(umb), "parent_lei"])
+    parents = set(relationships["parent_lei"]) if len(relationships) else set()
     return _run(
         params,
         "gleif",
-        lambda: d.gleif_entities(wanted, _cache(params), max_leis=params.get("gleif_api_max_leis")),
+        lambda: d.gleif_entities(wanted, _cache(params), max_leis=params.get("gleif_api_max_leis"), first=parents),
         ["lei", "legal_name", "jurisdiction", "category"],
     )
 
@@ -124,12 +139,34 @@ def fund_directory(
 
     adapters = set(discover())
     adapters |= set(params.get("extra_adapters") or [])
-    return d.build_fund_directory(list(fund_listings), isin_lei, relationships, entities, adapters)
+    return d.build_fund_directory(
+        list(fund_listings), isin_lei, relationships, entities, adapters,
+        etf_only_adapters=params.get("etf_only_adapters") or (),
+    )
 
 
 def bond_directory(isin_lei: pd.DataFrame, *bond_listings: pd.DataFrame) -> pd.DataFrame:
     """One row per bond ISIN: issuer, currency, maturity, coupon, and their sources."""
     return d.build_bond_directory(list(bond_listings), isin_lei)
+
+
+def directory_sources(params: dict, *listings: pd.DataFrame) -> pd.DataFrame:
+    """One row per directory source: status, rows, newest as-of date, redistribution class and error."""
+    rows = []
+    for key, source in d.SOURCES.items():
+        frames = [l for l in listings if len(l) and "source" in l and (l["source"] == key).any()]
+        got = pd.concat([l[l["source"] == key] for l in frames]) if frames else pd.DataFrame(columns=["as_of"])
+        st = _STATUS.get(key, {"status": "not run"})
+        rows.append({
+            "source": key, "title": source.title, "status": st["status"], "rows": len(got),
+            "as_of": got["as_of"].dropna().max() if len(got) else None,
+            "redistribution": source.redistribution, "error": st.get("error"),
+        })
+    out = pd.DataFrame(rows)
+    missing = out[out["source"].isin(params.get("required_sources") or []) & (out["rows"] == 0)]
+    if len(missing):
+        raise RuntimeError(f"Required directory sources gave no rows: {', '.join(missing['source'])}")
+    return out
 
 
 def directory_coverage(fund_directory: pd.DataFrame) -> pd.DataFrame:

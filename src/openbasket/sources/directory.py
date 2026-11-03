@@ -67,6 +67,10 @@ class DirectorySource:
     credit: str
     licence: str
     frequency: str
+    #: "public": the licence allows republishing the fields kept; "local_only":
+    #: the list is read for the person running openbasket only (see
+    #: docs/source/publishing.md). The public build reads public sources only.
+    redistribution: str = "local_only"
 
 
 SIX_FQS = "https://www.six-group.com/fqs/ref.json"
@@ -145,20 +149,24 @@ SOURCES: dict[str, DirectorySource] = {
         DirectorySource(
             "ecb_eligible", "ECB eligible marketable assets", ECB_PAGE,
             "Source: European Central Bank, list of eligible marketable assets",
-            "Public ECB download, no login. Cite the ECB as the source.",
+            "Public ECB download, no login. ECB copyright notice: reproduction is permitted provided the source is "
+            "acknowledged; cite the ECB as the source.",
             "daily",
+            "public",
         ),
         DirectorySource(
             "esma_firds_funds", "ESMA FIRDS: fund units (FULINS_C)", "https://registers.esma.europa.eu/publication/searchRegister?core=esma_registers_firds",
             "Source: ESMA Financial Instruments Reference Data System (FIRDS)",
             "Public ESMA bulk files. ESMA legal notice: reproduction is authorised provided the source is acknowledged.",
             "weekly",
+            "public",
         ),
         DirectorySource(
             "esma_firds_debt", "ESMA FIRDS: debt instruments (FULINS_D)", "https://registers.esma.europa.eu/publication/searchRegister?core=esma_registers_firds",
             "Source: ESMA Financial Instruments Reference Data System (FIRDS)",
             "Public ESMA bulk files. ESMA legal notice: reproduction is authorised provided the source is acknowledged.",
             "weekly",
+            "public",
         ),
         DirectorySource(
             "fca_firds_funds", "FCA FIRDS: fund units (FULINS_C)", "https://data.fca.org.uk/#/firds",
@@ -172,6 +180,7 @@ SOURCES: dict[str, DirectorySource] = {
             "LEI data: Global Legal Entity Identifier Foundation (GLEIF), CC0",
             "CC0 1.0 (GLEIF LEI data terms of use).",
             "daily",
+            "public",
         ),
     ]
 }
@@ -278,15 +287,26 @@ def cached(
     fetch: Callable[[], bytes],
     parse: Callable[[bytes], pd.DataFrame],
     day: date | None = None,
+    state: dict[str, str] | None = None,
 ) -> pd.DataFrame:
-    """Parse today's cached copy of a download, or fetch, parse and then cache it."""
+    """Parse today's cached copy of a download, or fetch, parse and then cache it.
+
+    ``state`` is what ``fetch`` learned along the way (the resolved file URL,
+    which carries the publication date). It is saved next to the cached file
+    and restored on a cache hit, so ``parse`` sees the same values either way.
+    """
     path = Path(cache_dir) / key / f"{(day or date.today()).isoformat()}{suffix}" if cache_dir else None
+    meta = path.with_name(path.name + ".json") if path is not None else None
     if path is not None and path.exists():
+        if state is not None and meta.exists():
+            state.update(json.loads(meta.read_text()))
         return parse(path.read_bytes())
     content = fetch()
     out = parse(content)
     if path is not None:
         path.parent.mkdir(parents=True, exist_ok=True)
+        if state:
+            meta.write_text(json.dumps(state))
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_bytes(content)
         tmp.replace(path)
@@ -435,7 +455,7 @@ def xetra(cache_dir: str | Path | None = None) -> pd.DataFrame:
         state["url"] = xetra_csv_url(page.text)
         return _get_bytes(state["url"])
 
-    return cached(cache_dir, "xetra", ".csv", fetch, lambda b: parse_xetra(b, state.get("url", XETRA_PAGE)))
+    return cached(cache_dir, "xetra", ".csv", fetch, lambda b: parse_xetra(b, state.get("url", XETRA_PAGE)), state=state)
 
 
 # --------------------------------------------------------------------------
@@ -614,7 +634,9 @@ def ecb_eligible(cache_dir: str | Path | None = None) -> pd.DataFrame:
         state["url"] = ecb_csv_url(page.text)
         return _get_bytes(state["url"])
 
-    return cached(cache_dir, "ecb_eligible", ".csv.gz", fetch, lambda b: parse_ecb_eligible(b, state.get("url", ECB_PAGE)))
+    return cached(
+        cache_dir, "ecb_eligible", ".csv.gz", fetch, lambda b: parse_ecb_eligible(b, state.get("url", ECB_PAGE)), state=state
+    )
 
 
 # --------------------------------------------------------------------------
@@ -860,27 +882,42 @@ def parse_gleif_records(payload: dict) -> list[dict]:
     return rows
 
 
-def gleif_entities(leis: Iterable[str], cache_dir: str | Path | None = None, batch: int = 100, max_leis: int | None = None) -> pd.DataFrame:
+def gleif_entities(
+    leis: Iterable[str],
+    cache_dir: str | Path | None = None,
+    batch: int = 100,
+    max_leis: int | None = None,
+    first: Iterable[str] = (),
+) -> pd.DataFrame:
     """Legal name, jurisdiction and category for LEIs, from the GLEIF API (batched).
 
     Results are kept in one Parquet file per day under ``cache_dir``, so a
-    rerun only asks for LEIs it has not seen today.
+    rerun only asks for LEIs it has not seen today. When there are more than
+    ``max_leis``, the LEIs in ``first`` (managers and umbrellas, which name
+    many funds each) are kept before the others, and the number left out is
+    logged.
     """
     http.set_min_interval("api.gleif.org", 1.1)  # GLEIF allows about 60 requests a minute
-    want = sorted({l for l in leis if isinstance(l, str) and len(l) == 20})
-    if max_leis is not None:
+    priority = {l for l in first if isinstance(l, str)}
+    want = sorted({l for l in leis if isinstance(l, str) and len(l) == 20}, key=lambda l: (l not in priority, l))
+    if max_leis is not None and len(want) > max_leis:
+        logger.warning("GLEIF API: %d LEIs wanted, only the first %d are looked up (gleif_api_max_leis)", len(want), max_leis)
         want = want[:max_leis]
     path = Path(cache_dir) / "gleif_entities" / f"{date.today().isoformat()}.parquet" if cache_dir else None
     have = pd.read_parquet(path) if path is not None and path.exists() else pd.DataFrame(columns=["lei", "legal_name", "jurisdiction", "category"])
     todo = [l for l in want if l not in set(have["lei"])]
     rows: list[dict] = []
+    failed = 0
     for i in range(0, len(todo), batch):
         chunk = todo[i : i + batch]
         r = http.get(GLEIF_API, params={"filter[lei]": ",".join(chunk), "page[size]": batch, "fields[lei-records]": "lei,entity"})
         if r.status_code != 200:
             logger.warning("GLEIF API %s for a batch of %d LEIs; skipped", r.status_code, len(chunk))
+            failed += len(chunk)
             continue
         rows.extend(parse_gleif_records(r.json()))
+    if failed:
+        logger.warning("GLEIF API: %d of %d LEIs not looked up because their batch failed", failed, len(todo))
     out = pd.concat([have, pd.DataFrame(rows, columns=have.columns)], ignore_index=True).drop_duplicates("lei")
     if path is not None and rows:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -922,7 +959,10 @@ ISSUER_PATTERNS: list[tuple[str, str]] = [
     (r"\bfirst trust\b", "first_trust"),
     (r"\bhanetf\b", "hanetf"),
     (r"\bossiam\b", "ossiam"),
-    (r"\bvontobel\b|\braiffeisen\b", "vontobel"),
+    (r"\bvontobel\b", "vontobel"),
+    # Raiffeisen Switzerland's funds are run by Vontobel (see build_fund_directory);
+    # Raiffeisen Kapitalanlage (Austria) and the German Raiffeisen banks are not.
+    (r"\braiffeisen\b", "raiffeisen"),
     (r"\bswiss life\b|\bswisslife\b", "swisslife"),
     (r"\bjulius b(ä|ae|a)r\b", "juliusbaer"),
     (r"\blombard odier\b", "lombard_odier"),
@@ -1045,6 +1085,9 @@ ABBREVIATION_PATTERNS: list[tuple[str, str]] = [
     (r"^(va\b|van\b)", "vanguard"),
     (r"^sg\b", "societe_generale"),
 ]
+#: Brand keys short or common enough to match other words in a fund name
+#: ("EFG-Hermes", "Amova ARK"); a name match is checked against GLEIF's manager.
+AMBIGUOUS_KEYS = frozenset({"ark", "gam", "seb", "purpose", "efg", "axa", "neos", "dje", "edmond_de_rothschild", "mfs", "dnb"})
 _ISSUER_RES = [(re.compile(p, re.IGNORECASE), key) for p, key in ISSUER_PATTERNS]
 _ABBREV_RES = [(re.compile(p, re.IGNORECASE), key) for p, key in ABBREVIATION_PATTERNS]
 
@@ -1171,8 +1214,15 @@ def build_fund_directory(
     relationships: pd.DataFrame | None = None,
     entities: pd.DataFrame | None = None,
     adapters: Iterable[str] = (),
+    etf_only_adapters: Iterable[str] = (),
+    adapter_isins: dict[str, Iterable[str]] | None = None,
 ) -> pd.DataFrame:
-    """Merge fund listings into one row per ISIN with :data:`FUND_DIRECTORY_COLUMNS`."""
+    """Merge fund listings into one row per ISIN with :data:`FUND_DIRECTORY_COLUMNS`.
+
+    ``adapters`` are the registered issuer adapters. ``adapter_isins`` maps an
+    adapter to the ISINs it lists (its ``products()``); ``etf_only_adapters``
+    are adapters that read exchange-traded funds only.
+    """
     frames = [l for l in listings if l is not None and len(l)]
     if not frames:
         return pd.DataFrame(columns=FUND_DIRECTORY_COLUMNS)
@@ -1244,6 +1294,18 @@ def build_fund_directory(
     out.loc[fill, "domicile"] = pref[fill]
     out.loc[fill, "domicile_source"] = "isin_prefix"
 
+    # Short brand keys can match unrelated words in a fund's name: when GLEIF
+    # names the manager, a name match must agree with it.
+    for i, (key, src, mname) in enumerate(zip(out["issuer"], out["issuer_source"], out["manager_name"])):
+        if key in AMBIGUOUS_KEYS and src == "name" and isinstance(mname, str) and issuer_key(mname) != key:
+            out.iat[i, out.columns.get_loc("issuer")] = issuer_key(mname)
+            out.iat[i, out.columns.get_loc("issuer_source")] = "gleif" if issuer_key(mname) else None
+    # Raiffeisen Switzerland's funds are run by Vontobel; other Raiffeisen funds keep their own key.
+    vont = out["issuer"].eq("raiffeisen") & (
+        out["domicile"].eq("CH") | out["manager_name"].map(lambda v: issuer_key(v) == "vontobel")
+    )
+    out.loc[vont, "issuer"] = "vontobel"
+
     # Replication and asset class from the name where no source states them.
     for field, fn in (("replication", _name_replication), ("asset_class", _name_asset_class)):
         guess = out["name"].map(fn)
@@ -1251,8 +1313,24 @@ def build_fund_directory(
         out.loc[fill, field] = guess[fill]
         out.loc[fill, f"{field}_source"] = "name"
 
+    # The issuer key is the brand; the route is the adapter that can read this
+    # ISIN's holdings. An adapter that lists its ISINs routes only those; an
+    # ETF-only adapter routes only exchange-traded funds, so a brand's mutual
+    # funds count as "fund known, no holdings source".
     adapters = set(adapters)
-    out["adapter"] = out["issuer"].map(lambda k: k if k in adapters else None)
+    etf_only = set(etf_only_adapters)
+    lists = {k: set(v) for k, v in (adapter_isins or {}).items()}
+
+    def routed(isin: str, key: object, kind: object) -> str | None:
+        if key not in adapters:
+            return None
+        if key in lists:
+            return key if isin in lists[key] else None
+        if key in etf_only and kind != "ETF":
+            return None
+        return key
+
+    out["adapter"] = [routed(i, k, t) for i, k, t in zip(out.index, out["issuer"], out["instrument_type"])]
     out["holdings_route"] = out["adapter"].fillna("no_holdings_source")
     out["source"] = out["name_source"].fillna(out["listed_in"].str.split(";").str[0])
     out["source_url"] = _source_urls(out, all_)

@@ -6,3 +6,9 @@ lookthrough:
 
 universe:
   sources: [nport]
+
+# The fund and bond directory reads only openly licensed lists here (ESMA
+# FIRDS, ECB, GLEIF); SIX, Xetra and Euronext lists are local_only.
+directory:
+  public_only: true
+  required_sources: [esma_firds_funds]

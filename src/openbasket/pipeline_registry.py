@@ -5,8 +5,9 @@ from kedro.framework.project import find_pipelines
 from kedro.pipeline import Pipeline
 
 #: Run only when asked for: ``universe`` reads every fund's holdings, and
-#: ``publish`` needs its outputs.
-BATCH_PIPELINES = ("universe", "publish")
+#: ``publish`` needs its outputs. ``full`` (every pipeline but
+#: ``lookthrough``, see :mod:`openbasket.pipelines.full`) holds both.
+BATCH_PIPELINES = ("universe", "publish", "full")
 
 
 def register_pipelines() -> dict[str, Pipeline]:

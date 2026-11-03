@@ -5,7 +5,7 @@
 ```bash
 uv venv --python 3.12 .venv
 uv pip install --python .venv -e '.[dev,docs]'
-cp .env.example .env   # then fill in the two values
+cp .env.example .env   # then put your own contact in SEC_USER_AGENT
 ```
 
 `.env` is gitignored and holds:
@@ -30,7 +30,11 @@ kedro run --pipeline=consolidate      # latest filing per fund, holdings with IS
 kedro run --pipeline=lookthrough --params=isin=US4642872000
 ```
 
-`kedro run` with no pipeline runs all four. To look through several ISINs at
+`kedro run` with no pipeline runs all four (and the `reg_brazil` and
+`reg_spain` downloads). `kedro run --pipeline=full` instead builds the whole
+site: everything but the one-fund look-through, then `universe` and
+`publish`; `python scripts/serve.py` then serves it on
+<http://localhost:8000> ([](running-locally.md)). To look through several ISINs at
 once, separate them with semicolons (Kedro splits `--params` on commas):
 
 ```bash

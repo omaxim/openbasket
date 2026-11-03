@@ -1,0 +1,36 @@
+{
+  "_comment": "Synthetic borHoldings responses keyed by portId, layer and page (lastItemKey or 'first'). Shapes copy vanguard.ca; names and values are invented.",
+  "9001": {
+    "dailyHoldings": {"first": {"items": [], "totalHoldings": 0, "lastItemKey": null}},
+    "delayeredHoldings": {"first": {"items": [], "totalHoldings": 0, "lastItemKey": null}},
+    "holdings": {"first": {"items": [
+      {"issuerName": "Example Bank of Canada", "securityLongDescription": "Example Bank of Canada", "marketValuePercentage": 61.25, "sedol1": "2000008", "ticker": "EXB", "securityType": "EQ.STOCK", "finalMaturity": null, "effectiveDate": "2026-09-30", "bloombergIsoCountry": "CA", "couponRate": null},
+      {"issuerName": "Example REIT", "securityLongDescription": "Example REIT", "marketValuePercentage": 38.5, "sedol1": "3000007", "ticker": "EXR.UN", "securityType": "EQ.REIT", "finalMaturity": null, "effectiveDate": "2026-09-30", "bloombergIsoCountry": "CA", "couponRate": 0},
+      {"issuerName": null, "securityLongDescription": "S&P/TSX 60 IX FUT DEC26", "marketValuePercentage": 0.12, "sedol1": null, "ticker": "PTZ6", "securityType": "DE.IND", "finalMaturity": null, "effectiveDate": "2026-09-30", "bloombergIsoCountry": "CA", "couponRate": null},
+      {"issuerName": null, "securityLongDescription": "Canadian Dollar", "marketValuePercentage": 0.13, "sedol1": null, "ticker": "CAD", "securityType": "CRNY", "finalMaturity": null, "effectiveDate": "2026-09-30", "bloombergIsoCountry": "CA", "couponRate": null}
+    ], "totalHoldings": 4, "lastItemKey": null}}
+  },
+  "9002": {
+    "dailyHoldings": {"first": {"items": [], "totalHoldings": 0, "lastItemKey": null}},
+    "delayeredHoldings": {
+      "first": {"items": [
+        {"issuerName": "Example Bank of Canada", "securityLongDescription": "Example Bank of Canada", "marketValuePercentage": 30.0, "sedol1": "2000008", "ticker": "EXB", "securityType": "EQ.STOCK", "finalMaturity": null, "effectiveDate": "2026-09-30", "bloombergIsoCountry": "CA", "couponRate": 0},
+        {"issuerName": "Example Province", "securityLongDescription": "Province of Example", "marketValuePercentage": 25.5, "sedol1": "BX99990", "ticker": "EXP", "securityType": "FI.NONUS_GOV", "finalMaturity": "2031-06-02", "effectiveDate": "2026-09-30", "bloombergIsoCountry": "CA", "couponRate": 3.25}
+      ], "totalHoldings": 5, "lastItemKey": "page-2"},
+      "page-2": {"items": [
+        {"issuerName": "Example Corp", "securityLongDescription": "EXAMPLE CORP - Temp Line", "marketValuePercentage": 44.4, "sedol1": "99X4640", "ticker": null, "securityType": "EQ.STOCK", "finalMaturity": null, "effectiveDate": "2026-09-30", "bloombergIsoCountry": "US", "couponRate": null},
+        {"issuerName": null, "securityLongDescription": "CAD/USD FWD 20261001", "marketValuePercentage": -0.02, "sedol1": null, "ticker": "CAD", "securityType": "CT.FOREX", "finalMaturity": null, "effectiveDate": "2026-09-30", "bloombergIsoCountry": null, "couponRate": null},
+        {"issuerName": null, "securityLongDescription": "US Dollar", "marketValuePercentage": 0.12, "sedol1": null, "ticker": "USD", "securityType": "CRNY", "finalMaturity": null, "effectiveDate": "2026-09-30", "bloombergIsoCountry": "US", "couponRate": null}
+      ], "totalHoldings": 5, "lastItemKey": null}
+    },
+    "holdings": {"first": {"items": [
+      {"issuerName": "Vanguard Example Equity Index ETF", "securityLongDescription": "Vanguard Example Equity Index ETF", "marketValuePercentage": 99.9, "sedol1": "B0000B0", "ticker": "VXEQ", "securityType": "EQ.ETF", "finalMaturity": null, "effectiveDate": "2026-09-30", "bloombergIsoCountry": "CA", "couponRate": null}
+    ], "totalHoldings": 1, "lastItemKey": null}}
+  },
+  "D101": {
+    "dailyHoldings": {"first": {"items": [
+      {"effectiveDate": "2026-11-02", "securityLongDescription": "Example Software Inc", "securityType": "EQ.STOCK", "isin": "US0378331005", "marketValuePercentage": 97.5},
+      {"effectiveDate": "2026-11-02", "securityLongDescription": "Example Line With A Bad ISIN", "securityType": "EQ.STOCK", "isin": "US0378331006", "marketValuePercentage": 2.0}
+    ], "totalHoldings": 2, "lastItemKey": null}}
+  }
+}

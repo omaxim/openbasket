@@ -116,7 +116,7 @@ jobs:
           printf 'OPENFIGI_API_KEY=%s\nSEC_USER_AGENT=%s\n' "$OPENFIGI_API_KEY" "$SEC_USER_AGENT" > .env
 
       - name: Ingest
-        run: kedro run --pipeline=ingest
+        run: kedro run --env public --pipeline=ingest
 
       - name: Save N-PORT downloads
         if: steps.nport-cache.outputs.cache-hit != 'true'
@@ -126,16 +126,16 @@ jobs:
           key: ${{ steps.nport-cache.outputs.cache-primary-key }}
 
       - name: Security master
-        run: kedro run --pipeline=security_master
+        run: kedro run --env public --pipeline=security_master
 
       - name: Consolidate
-        run: kedro run --pipeline=consolidate
+        run: kedro run --env public --pipeline=consolidate
 
       - name: Universe
         run: |
           args=()
           [ -z "$SAMPLE" ] || args+=("--params=universe.sample=$SAMPLE")
-          kedro run --pipeline=universe "${args[@]}"
+          kedro run --env public --pipeline=universe "${args[@]}"
 
       - name: Save OpenFIGI cache
         # Kept even when a later step fails, so a rerun does not repeat the lookups.
@@ -147,7 +147,7 @@ jobs:
 
       - name: Publish
         # Writes build/site/api/v1 and build/release (publish.site_dir, publish.release_dir).
-        run: kedro run --pipeline=publish --params=publish.release_tag=${{ steps.settings.outputs.tag }}
+        run: kedro run --env public --pipeline=publish --params=publish.release_tag=${{ steps.settings.outputs.tag }}
 
       - name: Docs
         run: sphinx-build -b html -W --keep-going -q docs/source docs/build/html

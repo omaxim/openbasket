@@ -13,4 +13,6 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 CONFIG_LOADER_ARGS = {
     "base_env": "base",
     "default_run_env": "local",
+    # Environments (e.g. conf/public) override single nested keys, not whole sections.
+    "merge_strategy": {"parameters": "soft"},
 }

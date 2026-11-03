@@ -1,0 +1,8 @@
+# Public build: only sources whose terms allow republication.
+# Used by the GitHub Action with `kedro run --env public`; local runs use
+# conf/base (plus conf/local) and can read every source for private use.
+lookthrough:
+  source_order: [tickerinside, nport]
+
+universe:
+  sources: [nport]

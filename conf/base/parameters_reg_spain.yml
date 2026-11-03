@@ -1,0 +1,4 @@
+reg_spain:
+  # Latest quarter-end ZIP from CNMV (about 9 MB) and its Parquet; the
+  # cnmv_spain adapter reads the same folder (OPENBASKET_REG_SPAIN_DIR).
+  root: data/01_raw/reg_spain

@@ -1,0 +1,10 @@
+reg_brazil:
+  # Raw ZIPs and Parquet; the cvm_brazil issuer adapter reads the same folder
+  # (override both with OPENBASKET_REG_BRAZIL_DIR).
+  root: data/01_raw/reg_brazil
+  # Newest CDA months to keep (about 25 MB each). CVM withholds positions a
+  # fund keeps confidential for up to 90 days, so three months lets a fund
+  # fall back to an older, fully public filing.
+  months: 3
+  # Use an older month when more than this share of net assets is confidential.
+  max_confidential_pct: 10.0

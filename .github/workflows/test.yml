@@ -11,14 +11,18 @@ concurrency:
   group: test-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  KEDRO_DISABLE_TELEMETRY: "1"
+  DO_NOT_TRACK: "1"
+
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           python-version: "3.12"
           activate-environment: true
@@ -26,10 +30,17 @@ jobs:
           cache-dependency-glob: pyproject.toml
 
       - name: Install
-        run: uv pip install -e '.[dev,docs]'
+        run: uv pip install -e '.[dev,docs,viz]'
 
       - name: Tests
         run: pytest -q -m 'not network'
 
       - name: Docs
         run: sphinx-build -b html -W --keep-going -q docs/source docs/build/html
+
+      - name: Pipeline diagram
+        # The same static Kedro-Viz build the publish workflow puts at /pipeline/.
+        run: |
+          python scripts/build_pipeline_viz.py --out "$RUNNER_TEMP/pipeline"
+          test -s "$RUNNER_TEMP/pipeline/index.html"
+          test -s "$RUNNER_TEMP/pipeline/api/main"

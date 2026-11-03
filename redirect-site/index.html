@@ -21,7 +21,8 @@
     font: 1.0625rem/1.5 Georgia, "Times New Roman", serif; text-align: center;
   }
   a { color: inherit; text-underline-offset: 3px; }
-  p.small { color: var(--muted); font-size: 0.875rem; }
+  p.small { color: var(--muted); font-size: 0.875rem; max-width: 34em; margin-inline: auto; }
+  code { font-size: 0.8125rem; overflow-wrap: anywhere; }
 </style>
 </head>
 <body>
@@ -29,6 +30,8 @@
   <p>openbasket now lives at</p>
   <p><a id="target" href="https://openbasket.leithresearch.org/">openbasket.leithresearch.org</a></p>
   <p class="small">You should be taken there automatically.</p>
+  <p class="small">Using the JSON API or a script? This address only redirects browsers.
+  Request <code>https://openbasket.leithresearch.org/api/v1/&hellip;</code> directly.</p>
 </main>
 <script>
   document.getElementById("target").href =

@@ -9,6 +9,7 @@ Status as tested on 2026-11-03.
 | TickerInside | Working | Daily issuer holdings for US equity ETFs, keyed by ticker. |
 | OpenFIGI | Working | ISIN to name, ticker and security type; ISIN to US ticker when matching a fund. |
 | iShares UK | Working | Daily full holdings of UCITS ETFs with ISINs and five-decimal weights, from the issuer's site. |
+| iShares US | Working | Daily full holdings of US iShares ETFs with ISINs; equity weights to two decimals. |
 | SPDR daily Excel | Not built | |
 | justETF, FT and others | Not built | Top holdings only. |
 
@@ -73,23 +74,46 @@ and types and the ticker that links a fund ISIN to its SEC series.
 
 BlackRock moved its sites in 2026. The `.ajax` CSV endpoints that
 `etf-scraper` used (US `1467271812596`, UK `1506575576011`) now return the
-HTML product page, so `etf-scraper` was not used. Two JSON endpoints replace
-them:
+HTML product page, so `etf-scraper` was not used. Two JSON endpoints per
+site replace them. The sites read are set in `issuers.ishares_sites`
+(`[uk, us]`).
 
-Fund list
+Fund list, UK
 : `https://www.ishares.com/varnish-api/blk-product-screener-server/api/v1/product-screener/product-data?country=gb&language=en&siteName=ishares-uk&userType=individual`
   returns all 1,431 UK-site products keyed by portfolio ID, each with its
-  `isin`, ticker, asset class and `totalNetAssets`. `ingest` saves it as
-  `data/01_raw/issuers/ishares_products.parquet`; an input ISIN found there
-  is matched to that fund before any other route.
+  `isin`, ticker, asset class and `totalNetAssets`.
+
+Fund list, US
+: The same endpoint with `country=us&siteName=ishares-us` returns HTTP 500
+  (no configuration for the US site). The US screener page loads
+  `https://www.ishares.com/us/product-screener/product-screener-v3.jsn?dcrPath=/templatedata/config/product-screener-v3/data/en/us-ishares/ishares-product-screener-backend-config&siteEntryPassthrough=true`
+  instead, which returns `data.tableData` as a column list plus rows: 526
+  products, every one with `isin`, `cusip`, `portfolioId` and ticker. The 44
+  BlackRock mutual funds in it (`productType` `BLK_MUTUAL_FUND_DATA`) are
+  dropped, because their holdings have no identifiers and N-PORT covers
+  them; the 482 iShares ETFs are kept. A missing ISIN would be derived from
+  the CUSIP.
+
+`ingest` saves both lists as `data/01_raw/issuers/ishares_products.parquet`;
+an input ISIN found there is matched to that fund before any other route.
 
 Holdings
-: `https://www.blackrock.com/varnish-api/uk-retail01-product-data/product-data/api/v2/get-product-data?appType=PRODUCT_PAGE&appSubType=ISHARES&targetSite=ishares-uk&locale=en_GB&userType=individual&component=holdings&portfolioId=<id>`
-  returns the full holdings table column by column: `isin`, `ticker`,
-  `issueName`, `holdingPercent` (five decimals), `assetClass`,
-  `marketValue`, and for bond funds `couponRate`, `maturityDate` and
-  `duration`, with `asOfDate`. Responses are cached per fund per day in
+: `https://www.blackrock.com/varnish-api/<data_site>/product-data/api/v2/get-product-data?appType=PRODUCT_PAGE&appSubType=ISHARES&targetSite=<site>&locale=<locale>&userType=individual&component=holdings&portfolioId=<id>`,
+  with `uk-retail01-product-data`, `ishares-uk`, `en_GB` for the UK and
+  `blk-one01-product-data`, `us-ishares`, `en_US` for the US (the US names
+  are in the `apiHost` and `targetSite` config of each US product page).
+  It returns the full holdings table column by column: `isin`, `ticker`,
+  `issueName`, the weight, `assetClass`, `marketValue`, and for bond funds
+  `couponRate`, `maturityDate` and `duration`, with `asOfDate`. US tables add
+  `cusip` and `sedol`. Responses are cached per fund per day in
   `data/01_raw/issuers/holdings/`.
+
+The weight column differs by fund. UK funds and US bond and fund-of-funds
+tables give `holdingPercent` to five decimals. US equity tables give
+`marketWeight` (and `notionalWeight`) to two decimals instead; `marketWeight`
+is used, so IVV's lines sum to 100.06%. Where a US line has a CUSIP but no
+ISIN, the ISIN is derived from the CUSIP (US and Canadian numbers only) and
+`isin_source` in the parsed table says `derived_cusip`.
 
 Each product page also links `latest-holdings.csv`, which still works, but it
 has no ISIN column and rounds weights to two decimals. The fund download
@@ -104,10 +128,19 @@ What the data shows (2 November 2026):
 | iShares Core MSCI World UCITS ETF (IE00B4L5Y983) | 1,270 | 99.65% |
 | iShares Core UK Gilts UCITS ETF (IE00B1FZSB30) | 74 | 100.02% |
 | iShares Core Global Aggregate Bond UCITS ETF (IE00B3F81409) | 20,000\* | 92.22% |
+| iShares Core S&P 500 ETF (IVV, US4642872000) | 508 | 99.99% |
+| iShares Core U.S. Aggregate Bond ETF (AGG, US4642872265) | 13,465 | 102.97% |
+| iShares Core 60/40 Balanced Allocation ETF (AOR, US4642898674) | 9 | 99.91% |
 
 \* Exactly 20,000 lines in both the JSON and the CSV, which looks like a cap
 on the site's side. The lines still sum to 100.27%, so anything cut is a tail
 of very small positions, but very large bond funds may be incomplete.
+
+AGG's ISIN lines add up to more than 100% because its USD cash line is
+−2.92%. Of its 35 lines without an ISIN, 25 (0.05%) are commercial mortgage
+bonds whose ISIN is derived from the CUSIP. AOR's lines are seven iShares
+ETFs and a cash fund, each found in the US fund list and expanded from its
+own issuer file.
 
 Lines without an ISIN are cash, futures and FX forwards, and in bond funds
 US agency mortgage pools, which are listed by pool number only (about 7.7% of

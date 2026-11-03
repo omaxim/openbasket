@@ -11,7 +11,7 @@ nport:
 
 issuers:
   # iShares regional sites whose fund lists are downloaded by `ingest`.
-  ishares_sites: [uk]
+  ishares_sites: [uk, us]
 
 lookthrough:
   # Holdings sources in priority order. "issuer" is iShares for now;

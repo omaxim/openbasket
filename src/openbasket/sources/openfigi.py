@@ -27,10 +27,16 @@ FIELDS = ("name", "ticker", "exchCode", "securityType", "securityType2", "market
 
 
 class OpenFIGI:
-    """Batch mapper. Results are cached in a Parquet file keyed by id type and value."""
+    """Batch mapper. Results are cached in a Parquet file keyed by id type and value.
 
-    def __init__(self, cache_path: str | Path, api_key: str | None = None, timeout: int = 60):
+    The cache is rewritten after every call that maps something new, unless
+    ``autosave`` is off; a universe run maps thousands of small batches and
+    saves the cache itself, now and then.
+    """
+
+    def __init__(self, cache_path: str | Path, api_key: str | None = None, timeout: int = 60, autosave: bool = True):
         self.cache_path = Path(cache_path)
+        self.autosave = autosave
         self.api_key = api_key if api_key is not None else os.environ.get("OPENFIGI_API_KEY") or None
         self.batch = 100 if self.api_key else 10
         self.timeout = timeout
@@ -72,11 +78,13 @@ class OpenFIGI:
                 self._cache[(key_type, v)] = rows
             self._dirty = True
             logger.info("OpenFIGI %s: %d/%d mapped", id_type, min(i + self.batch, len(todo)), len(todo))
-        if self._dirty:
+        if self._dirty and self.autosave:
             self.save()
         return {v: self._cache.get((key_type, v), []) for v in values}
 
     def save(self) -> None:
+        if not self._dirty and self.cache_path.exists():
+            return
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         df = pd.DataFrame(
             [{"id_type": t, "id_value": v, "result": json.dumps(r)} for (t, v), r in self._cache.items()]

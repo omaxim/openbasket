@@ -64,6 +64,8 @@ class Holdings:
     as_of: str | None
     lines: list[Line]
     source_ref: str | None = None
+    #: A page a reader can open to check the figures (product page, filing).
+    source_url: str | None = None
 
     @property
     def resolved_pct(self) -> float:
@@ -104,12 +106,22 @@ def choose(candidates: list[Holdings], min_resolved_pct: float) -> Holdings:
 
 
 def look_through(
-    isin: str, providers: Providers, max_depth: int = 4, min_resolved_pct: float = 90.0
+    isin: str,
+    providers: Providers,
+    max_depth: int = 4,
+    min_resolved_pct: float = 90.0,
+    ref: FundRef | None = None,
 ) -> Result:
-    """Expand ``isin`` into its constituents."""
+    """Expand ``isin`` into its constituents.
+
+    With ``ref`` the fund is already known (a universe run builds its refs
+    up front), so ``isin`` is only the label rows carry and no matching or
+    single-security fallback happens.
+    """
     isin = isin.strip().upper()
     res = Result()
-    ref = providers.resolve(isin)
+    if ref is None:
+        ref = providers.resolve(isin)
     summary = {
         "input_isin": isin,
         "matched": ref is not None,
@@ -119,6 +131,8 @@ def look_through(
         "matched_via": ref.via if ref else None,
         "note": ref.note if ref else None,
         "source": None,
+        "source_ref": None,
+        "source_url": None,
         "as_of": None,
         "sources_tried": None,
         "reported_total_pct": None,
@@ -133,6 +147,8 @@ def look_through(
         chosen = choose(candidates, min_resolved_pct)
         if depth == 0:
             summary["source"] = chosen.source
+            summary["source_ref"] = chosen.source_ref
+            summary["source_url"] = chosen.source_url
             summary["as_of"] = chosen.as_of
             summary["reported_total_pct"] = round(chosen.reported_pct, 6)
             summary["sources_tried"] = "; ".join(f"{h.source}={h.resolved_pct:.2f}%" for h in candidates)
@@ -161,6 +177,7 @@ def look_through(
                 "isin_source": line.isin_source,
                 "source": chosen.source,
                 "source_ref": chosen.source_ref,
+                "source_url": chosen.source_url,
                 "as_of": chosen.as_of,
                 "depth": depth,
                 "via_fund": fund.name or fund.key,

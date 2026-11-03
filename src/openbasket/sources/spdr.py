@@ -30,6 +30,7 @@ import pandas as pd
 import requests
 
 from ..identifiers import is_valid_cusip, is_valid_isin
+from ..throttle import THROTTLE
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ class IssuerHoldings:
 
 def _get(url: str, params: dict | None = None, timeout: int = 60) -> requests.Response:
     for attempt in range(4):
+        THROTTLE.wait(url)
         r = requests.get(url, params=params, headers={"User-Agent": USER_AGENT}, timeout=timeout)
         if r.status_code in (429, 502, 503, 504):
             time.sleep(2 * (attempt + 1))
@@ -167,6 +169,5 @@ def holdings(url: str, cache_dir: str | Path | None = None) -> IssuerHoldings:
         if cache is not None:
             cache.parent.mkdir(parents=True, exist_ok=True)
             cache.write_bytes(content)
-        time.sleep(0.5)
     as_of, df = parse_holdings(content)
     return IssuerHoldings(as_of, df, url)

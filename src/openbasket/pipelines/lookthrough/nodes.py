@@ -44,12 +44,9 @@ def run_lookthrough(
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Expand each ISIN. Returns position-level constituents, unidentified lines and a summary."""
     figi = OpenFIGI(params["openfigi_cache"]) if params.get("use_openfigi", True) else None
-    providers = DataProviders(
-        nport_holdings, security_master, fund_master, ticker_isin_map, figi,
-        source_order=params["source_order"], proxies=params.get("proxies"),
-        issuer_products=issuer_products, issuer_cache_dir=params.get("issuer_cache_dir"),
-        cusip_isin={c: (i, src) for c, i, src in cusip_isin_map.select("cusip, isin, isin_source").fetchall()},
-        sedol_isin=dict(zip(sedol_isin_map["sedol"], sedol_isin_map["isin"])),
+    providers = make_providers(
+        nport_holdings, security_master, fund_master, ticker_isin_map, issuer_products, cusip_isin_map,
+        sedol_isin_map, params, figi,
     )
     leaves, unresolved, summaries = [], [], []
     for isin in isins:
@@ -65,6 +62,44 @@ def run_lookthrough(
     return pd.DataFrame(leaves), pd.DataFrame(unresolved), pd.DataFrame(summaries)
 
 
+def make_providers(
+    nport_holdings: duckdb.DuckDBPyRelation,
+    security_master: duckdb.DuckDBPyRelation,
+    fund_master: pd.DataFrame,
+    ticker_isin_map: pd.DataFrame,
+    issuer_products: pd.DataFrame,
+    cusip_isin_map: duckdb.DuckDBPyRelation,
+    sedol_isin_map: pd.DataFrame,
+    params: dict,
+    figi: OpenFIGI | None,
+    **kwargs,
+) -> DataProviders:
+    """The providers both look-through pipelines use; ``kwargs`` go to :class:`DataProviders`."""
+    return DataProviders(
+        nport_holdings, security_master, fund_master, ticker_isin_map, figi,
+        source_order=params["source_order"], proxies=params.get("proxies"),
+        issuer_products=issuer_products, issuer_cache_dir=params.get("issuer_cache_dir"),
+        cusip_isin={c: (i, src) for c, i, src in cusip_isin_map.select("cusip, isin, isin_source").fetchall()},
+        sedol_isin=dict(zip(sedol_isin_map["sedol"], sedol_isin_map["isin"])),
+        **kwargs,
+    )
+
+
+def aggregate(constituents: pd.DataFrame, by: tuple[str, ...] = ("input_isin", "constituent_isin")) -> pd.DataFrame:
+    """One row per value of ``by``: weights summed over every route to it.
+
+    The other columns come from the heaviest route; ``depth`` is the
+    shallowest and ``n_paths`` counts the routes.
+    """
+    c = constituents.sort_values("weight_pct", ascending=False, key=abs)
+    groups = c.groupby(list(by), sort=False, dropna=False)
+    first = groups.first()
+    first["weight_pct"] = groups["weight_pct"].sum()
+    first["n_paths"] = groups.size()
+    first["depth"] = groups["depth"].min()
+    return first.reset_index()
+
+
 def build_output(constituents: pd.DataFrame, summary: pd.DataFrame, params: dict) -> pd.DataFrame:
     """One row per constituent ISIN, plus one unresolved-weight row per input.
 
@@ -74,12 +109,7 @@ def build_output(constituents: pd.DataFrame, summary: pd.DataFrame, params: dict
     if constituents.empty:
         agg = pd.DataFrame(columns=OUTPUT_COLUMNS)
     else:
-        c = constituents.sort_values("weight_pct", ascending=False, key=abs)
-        first = c.groupby(["input_isin", "constituent_isin"], sort=False).first()
-        first["weight_pct"] = c.groupby(["input_isin", "constituent_isin"], sort=False)["weight_pct"].sum()
-        first["n_paths"] = c.groupby(["input_isin", "constituent_isin"], sort=False).size()
-        first["depth"] = c.groupby(["input_isin", "constituent_isin"], sort=False)["depth"].min()
-        agg = first.reset_index()
+        agg = aggregate(constituents)
         if params.get("use_openfigi", True) and params.get("enrich_openfigi", True):
             agg = _enrich(agg, params["openfigi_cache"])
     unresolved_rows = pd.DataFrame(

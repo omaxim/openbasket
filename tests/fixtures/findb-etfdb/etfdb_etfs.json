@@ -1,0 +1,43 @@
+[
+  {
+    "isin": "IE00TSTPHY65", "update_date": "2026-10-24", "asset_class": "equity", "wkn": "TST001", "ticker": "TPHY",
+    "name": "Test MSCI World UCITS ETF", "inception_date": "2020-01-02", "domicile_country": "Ireland", "currency": "USD",
+    "hedged": false, "securities_lending": true, "dividends": "Accumulating", "ter": 0.2, "replication": "Full replication",
+    "size": 5000, "is_sustainable": false, "number_of_holdings": 1400, "strategies": ["Long-only"],
+    "fund_provider": "Test ETFs", "index": "MSCI World",
+    "sectors": [{"name": "Technology", "percentage": 25.0}],
+    "countries": [{"name": "United States", "percentage": 70.0}],
+    "holdings": [
+      {"name": "Test Stock One", "percentage": 5.1, "isin": "US00TSTSTK13"},
+      {"name": "Test Stock Two", "percentage": 4.2, "isin": "US00TSTSTK21"},
+      {"name": "Test Stock Bad ISIN", "percentage": 1.5, "isin": "US00TSTSTK22"},
+      {"name": "Test Stock No ISIN", "percentage": 1.0, "isin": ""}
+    ],
+    "holdings_update_date": "2026-08-27"
+  },
+  {
+    "isin": "IE00TSTSWP72", "update_date": "2026-10-24", "asset_class": "equity", "wkn": "TST002", "ticker": "TSWP",
+    "name": "Test MSCI World Swap UCITS ETF", "inception_date": "2019-05-06", "domicile_country": "Ireland",
+    "currency": "EUR", "hedged": false, "securities_lending": false, "dividends": "Distributing", "ter": 0.15,
+    "replication": "Swap based Unfunded", "size": 800, "is_sustainable": false, "number_of_holdings": 60,
+    "strategies": ["Long-only"], "fund_provider": "Other Test ETFs", "index": "MSCI  world",
+    "sectors": [], "countries": [],
+    "holdings": [
+      {"name": "Test UK Stock", "percentage": 9.9, "isin": "GB00TSTSTK36"}
+    ],
+    "holdings_update_date": "2026-08-25"
+  },
+  {
+    "isin": "IE00TSTLEV81", "update_date": "2026-10-24", "asset_class": "equity", "wkn": "TST003", "ticker": "TLEV",
+    "name": "Test 3x Daily Short ETP", "inception_date": "2021-03-04", "domicile_country": "Ireland", "currency": "USD",
+    "hedged": false, "securities_lending": false, "dividends": "Accumulating", "ter": 0.75, "replication": "Swap based",
+    "size": 12, "is_sustainable": false, "number_of_holdings": null, "strategies": ["Short & Leveraged"],
+    "fund_provider": "Test ETFs", "index": "MSCI World",
+    "sectors": [], "countries": [], "holdings": [],
+    "holdings_update_date": null
+  },
+  {
+    "isin": "not-an-isin", "update_date": "2026-10-24", "asset_class": "bonds", "name": "Broken record",
+    "holdings": [{"name": "x", "percentage": 1.0, "isin": "US00TSTSTK13"}]
+  }
+]

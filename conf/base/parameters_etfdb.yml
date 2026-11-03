@@ -1,0 +1,22 @@
+etfdb:
+  # albertored/etfdb json/etfs.json (about 20 MB), one copy per day. The
+  # etfdb_top issuer adapter reads the same folder (OPENBASKET_ETFDB_DIR).
+  root: data/01_raw/etfdb
+  # Physical ETFs on the same index proposed per swap-based ETF.
+  stand_ins_per_fund: 3
+  # Tables to count etfdb's ISINs against; a missing file is skipped.
+  compare:
+    issuer_products:
+      path: data/01_raw/issuers/issuer_products.parquet
+      holdings: true
+    security_master:
+      path: data/03_primary/security_master.parquet
+    fund_registry:
+      path: data/03_primary/fund_registry.parquet
+      holdings: open_holdings_source
+    fund_directory:
+      path: data/03_primary/fund_directory.parquet
+      holdings: holdings_route
+      none_values: [no_holdings_source]
+    findb_funds:
+      path: data/03_primary/findb_funds.parquet

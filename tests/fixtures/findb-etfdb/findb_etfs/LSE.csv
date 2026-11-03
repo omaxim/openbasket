@@ -1,0 +1,5 @@
+symbol,name,currency,summary,category_group,category,family,exchange,mic,isin,delisted
+TSTA.L,Test World Equity UCITS ETF,USD,"Invented summary text that must never reach an output.",Equities,Global Large-Cap Blend Equity,Test Asset Management,LSE,XLON,IE00TSTETF18,False
+TSTB.L,Test Euro Bond UCITS ETF,EUR,Invented summary.,Fixed Income,Government Bonds,Other Test Funds,LSE,XLON,LU00TSTETF21,True
+TSTX.L,Test Broken ISIN ETF,GBP,Invented summary.,Equities,UK Equity,Test Asset Management,LSE,XLON,IE00TSTETF43,False
+TSTN.L,Test ETF Without ISIN,GBP,Invented summary.,Equities,UK Equity,Test Asset Management,LSE,XLON,,False

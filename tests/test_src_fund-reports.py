@@ -73,7 +73,13 @@ def test_holding_line_variants():
 
 
 def test_unspace_and_clean():
-    assert rp.unspace("To t a l O i l & G a s 1 2.66") .startswith("TotalOil&Gas")
+    assert rp.unspace("To t a l O i l & G a s 1 2.66").startswith("Total Oil&Gas")
+    # every letter spaced, word gaps lost: words start again at a capital after a small letter
+    assert rp.unspace("To y o t a Ts u s h o C o r p . 973,373 5,818,823,794 0.46").startswith("Toyota Tsusho Corp. 973,373")
+    assert rp.unspace("Ta i s e i C o r p . 217,615 3,101,013,750 0.25").startswith("Taisei Corp. 217,615")
+    assert rp.unspace("NTT , Inc. 45,771,725 6,636,900,125 0.52") == "NTT, Inc. 45,771,725 6,636,900,125 0.52"
+    # short words between normal words are not joined
+    assert rp.unspace("Example AG SA Holdings 1,000 2,000 0.10") == "Example AG SA Holdings 1,000 2,000 0.10"
     assert rp.clean_text("T otal Advertising\n%o f") == "Total Advertising\n% of"
     assert rp.clean_text("Reliance Industries Ltd. ............ 10.639.320 1,79") == "Reliance Industries Ltd. 10.639.320 1,79"
     assert rp.text_quality(["abc def"]) == 1.0
@@ -99,6 +105,34 @@ def test_title_scoring():
     assert rp.title_score("UBS ETF (CH) – UBS SMIM ® ETF", "UBS SMI ETF CHF dis") == (0.0, 0)
     assert rp.title_score("PICTET - BIOTECH", "Pictet SICAV - Biotech EUR PC")[0] == 1.0
     assert rp.title_score("UBS (Lux) Equity Fund – Biotech (USD)", "UBS (Lux) Equity Fund FCP - Biotech")[0] == 1.0
+
+
+def test_numeric_ranges_and_siblings_are_not_confused():
+    # "10" must not match inside "1-10", and a title that is only part of the name is a sibling
+    tips = "UBS Core BBG TIPS 1-10 UCITS ETF USD acc"
+    assert rp.title_match("UBS Core BBG TIPS 1-10 UCITS ETF", tips) == 1.0
+    assert rp.title_match("UBS BBG TIPS 10+ UCITS ETF", tips) == 0.0
+    assert rp.title_match("UBS BBG TIPS 10+ UCITS ETF", "UBS BBG TIPS 10+ UCITS ETF hGBP dis") == 1.0
+    assert rp.title_match("UBS MSCI World UCITS ETF", "UBS MSCI World ex USA UCITS ETF USD acc") < 0.999
+    assert rp.title_match("UBS SBI", "UBS SBI Foreign AAA-BBB 1-5 ESG UCITS ETF CHF acc") < 0.999
+    assert rp.title_match("UBS SBI Foreign AAA-BBB 5-10 ESG UCITS ETF", "UBS SBI Foreign AAA-BBB 1-5 ESG UCITS ETF CHF acc") == 0.0
+    # an umbrella prefix of the fund name need not be in the title; share-class words are ignored
+    assert rp.title_match("LO Funds - Convertible Bond", "Lombard Odier Funds Sicav - Convertible Bond - P CHF-") == 1.0
+    assert rp.title_match("Invesco FTSE All-World UCITS ETF", "Invesco FTSE All-World UCITS ETF CHF PfHdg Acc") == 1.0
+    assert rp.title_match("PICTET - BIOTECH", "Pictet SICAV - Biotech EUR PC") == 1.0
+    # titles with ranges are titles, not holding lines
+    assert rp.normalise_title("UBS Core BBG TIPS 1-10 UCITS ETF", ["UBS"]) == "UBS Core BBG TIPS 1-10 UCITS ETF"
+    assert rp.normalise_title("UBS MSCI Switzerland 20/35 UCITS ETF", ["UBS"]) == "UBS MSCI Switzerland 20/35 UCITS ETF"
+    assert rp.normalise_title("UBS Alpha Corp 1,000 150,000 0.10", ["UBS"]) is None
+
+
+def test_sibling_sub_funds_in_one_umbrella():
+    p = pages("numeric_siblings")
+    assert rp.subfund_schedule(p, "Example Core BBG TIPS 1-10 UCITS ETF USD acc", ["Example"]).title == "Example Core BBG TIPS 1-10 UCITS ETF"
+    assert rp.subfund_schedule(p, "Example BBG TIPS 10+ UCITS ETF USD dis", ["Example"]).title == "Example BBG TIPS 10+ UCITS ETF"
+    # the report has MSCI World but not MSCI World ex USA: refused, not the sibling
+    r = rp.subfund_schedule(p, "Example MSCI World ex USA UCITS ETF USD acc", ["Example"])
+    assert r.title is None and r.holdings.empty
 
 
 def test_dates():
@@ -171,6 +205,63 @@ def test_swiss_inventory():
     assert df.loc[df["name"].str.contains("ROCHE"), "weight_pct"].item() == 38.91
     assert not df["name"].str.contains("thereof", case=False).any()
     assert df["weight_pct"].sum() == pytest.approx(100.0)
+
+
+def test_header_percent_sections_countries_and_residuals():
+    """Irish layout: headers carry their weight ("Investment Funds: 0.10% (...)")."""
+    r = rp.subfund_schedule(pages("irish_header_percent"), "Example Hundred UCITS ETF Dist", ["Example"])
+    df = r.holdings.set_index("name")
+    assert r.stats["found_total_line"] and df["weight_pct"].sum() == pytest.approx(100.0)
+    assert df.loc["Northbel SADP", "country"] == "BE" and df.loc["Orchard Computers Inc", "country"] == "US"
+    assert df.loc["Liquid Funds Plc - US Dollar Liquidity Portfolio", "asset_class"] == "fund"
+    fx = [n for n in df.index if n.startswith("Buy 1,972,266 USD to Sell")]
+    assert len(fx) == 1 and df.loc[fx[0], "asset_class"] == "derivative"
+    assert df.loc["Current assets", "residual"] and df.loc["Current liabilities", "residual"]
+    assert df.loc["Current liabilities", "weight_pct"] == -0.40
+    # a futures description wrapped over three lines above its amounts
+    assert df.loc["WIDGET 100 E-Mini June 2026", "asset_class"] == "derivative"
+    assert r.stats["invested_weight_pct"] == pytest.approx(99.92)
+
+
+def test_leading_currency_only_where_the_layout_prints_one():
+    en = rp.NumberStyle(".", ",")
+    assert rp.parse_holding_line("CNH Industrial NV 1,000 2,000 0.10", en, leading_ccy=False).name == "CNH Industrial NV"
+    pl = rp.parse_holding_line("USD ARBUTUS BIOPHARMA NPV 1,000 2,000 0.10", en)
+    assert (pl.currency, pl.name) == ("USD", "ARBUTUS BIOPHARMA NPV")
+
+
+def test_swiss_inventory_restated_to_net_assets():
+    r = rp.subfund_schedule(pages("swiss_inventory"), "Example SMI ETF CHF dis", ["Example"])
+    assert r.stats["total_fund_assets"] == 603085274 and r.stats["net_fund_assets"] == 599473274
+    ref = fr.ReportRef("CH0000000001", "https://example.org/r.pdf", "annual report", "avl")
+    h = fr._result("CH0000000001", "Example SMI ETF CHF dis", ref, r, pages("swiss_inventory"), [], 0.0)
+    df = h.holdings.set_index("name")
+    assert h.weight_basis == "net_assets"
+    assert df.loc["EXAMPLE NESTLE CHF0.10(REGD)", "weight_pct"] == pytest.approx(363326769 / 599473274 * 100, abs=1e-6)
+    # total fund assets are larger than net assets, so the restated weights sum to more than printed
+    assert h.stats["printed_weight_sum_pct"] == pytest.approx(100.0)
+    assert h.stats["weight_sum_pct"] == pytest.approx(100.0 * 603085274 / 599473274, abs=0.01)
+    assert any("restated" in n and "net fund assets" in n for n in h.notes)
+
+
+def test_swiss_inventory_without_net_assets_is_flagged():
+    r = rp.subfund_schedule(pages("swiss_inventory"), "Example SMI ETF CHF dis", ["Example"])
+    r.stats.pop("net_fund_assets")
+    ref = fr.ReportRef("CH0000000001", "https://example.org/r.pdf", "annual report", "avl")
+    h = fr._result("CH0000000001", "Example SMI ETF CHF dis", ref, r, pages("swiss_inventory"), [], 0.0)
+    assert h.weight_basis == "total_assets" and h.stats["weight_basis"] == "total_assets"
+    assert any("percent of total fund assets" in n for n in h.notes)
+
+
+def test_acceptance_gate():
+    assert fr.acceptable({"lines": 10, "weight_sum_pct": 99.5, "found_total_line": True})
+    # with a net-assets total, a schedule far from 100% lost lines or is the wrong section
+    assert not fr.acceptable({"lines": 10, "weight_sum_pct": 92.0, "found_total_line": True})
+    assert not fr.acceptable({"lines": 10, "weight_sum_pct": 104.0, "found_total_line": True})
+    # without one (cash left to the statement of net assets) it is used, and marked incomplete
+    assert fr.acceptable({"lines": 10, "weight_sum_pct": 92.0, "found_total_line": False})
+    assert not fr.complete({"lines": 10, "weight_sum_pct": 92.0})
+    assert not fr.acceptable({"lines": 0, "weight_sum_pct": 0})
 
 
 def test_quantity_first_space_thousands():
@@ -344,6 +435,30 @@ def test_adapters_registered():
         ad = reg[name]
         assert ad.frequency == "semi-annual"
         assert "statutory" in ad.credit and ad.licence
+        # read for the person running openbasket, never republished; on by default locally
+        assert ad.redistribution == "local_only" and ad.enabled_by_default
+        assert "extraETF" not in ad.credit + ad.licence
+
+
+def test_extraetf_route_is_gone():
+    """extraETF's terms forbid automated querying: no locator, no host."""
+    assert "extraetf" not in fr.HOSTS
+    assert not hasattr(fr, "extraetf_locate")
+    with pytest.raises(ValueError, match="Unknown locator"):
+        fr.lookup("CH0017142719", "UBS SMI ETF CHF dis", ["UBS"], ("extraetf",), None, fr.parse_avl_sitemap(""))
+    from openbasket.sources import redistribution
+
+    assert redistribution("ubs_reports") == "local_only" and fr.REDISTRIBUTION == "local_only"
+
+
+def test_public_build_disables_the_report_adapters():
+    import yaml
+
+    conf = yaml.safe_load((Path(__file__).parents[1] / "conf" / "public" / "parameters.yml").read_text())
+    names = {"ubs_reports", "invesco_reports", "pictet_reports", "wisdomtree_reports", "fidelity_reports",
+             "franklin_reports", "lombardodier_reports"}
+    assert names <= set(conf["issuers"]["disabled"])
+    assert conf["lookthrough"]["name_matching"] is False
 
 
 # --------------------------------------------------------------------------
@@ -352,17 +467,17 @@ def test_adapters_registered():
 
 
 @pytest.mark.network
-def test_ubs_smi_etf_report_live(tmp_path):
-    """One real report: UBS ETF (CH)'s annual report (about 1.6 MB) through extraETF's link.
+def test_wisdomtree_report_live(tmp_path):
+    """One real report through WisdomTree's document service (the umbrella report, a few MB).
 
     The AVL route is the same code path but needs the 50 MB sitemap index, so it is not
     rebuilt in a test.
     """
-    h = fr.lookup("CH0017142719", "UBS SMI ETF CHF dis", ["UBS"], ("extraetf",), tmp_path)
+    h = fr.lookup("IE00BDVPNG13", "WisdomTree Artificial Intelligence UCITS ETF - USD Acc", ["WisdomTree"],
+                  ("wisdomtree",), tmp_path)
     df = h.holdings
     assert validate_holdings(df) == []
-    assert "SMI" in h.sub_fund
-    assert 15 <= len(df) <= 40
-    assert 95 < df["weight_pct"].sum() < 105
+    assert "Artificial Intelligence" in h.sub_fund
+    assert 30 <= len(df) <= 150
+    assert 97 < df["weight_pct"].sum() < 103 and h.complete
     assert h.notes[0].startswith(("semi-annual report, positions as of", "annual report, positions as of"))
-    assert any("total fund assets" in n for n in h.notes)

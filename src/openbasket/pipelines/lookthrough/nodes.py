@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 OUTPUT_COLUMNS = [
     "input_isin", "constituent_isin", "name", "weight_pct", "asset_class", "source", "as_of",
-    "issuer_name", "issuer_lei", "title", "ticker", "cusip", "isin_source",
+    "issuer_name", "issuer_lei", "title", "ticker", "cusip", "isin_source", "match_score",
     "figi_name", "figi_ticker", "security_type", "market_sector", "composite_figi",
     "country", "sector", "depth", "n_paths", "via_fund", "source_ref", "note",
 ]
@@ -109,8 +109,22 @@ def make_providers(
         sedol_isin=dict(zip(sedol_isin_map["sedol"], sedol_isin_map["isin"])),
         adapters=issuer_adapters(issuers_params),
         max_issuer_leis=int(params.get("max_issuer_leis_per_isin", 3)),
+        name_matching=name_matching_options(params),
         **kwargs,
     )
+
+
+def name_matching_options(params: dict) -> dict | None:
+    """What :class:`DataProviders` needs to match names to ISINs, or ``None`` when ``name_matching`` is off."""
+    if not params.get("name_matching"):
+        return None
+    return {
+        "security_terms": params.get("name_matching_terms"),
+        "figi_cache": params.get("openfigi_cache") if params.get("use_openfigi", True) else None,
+        "firds": params.get("name_matching_firds"),
+        "peers": params.get("name_matching_peers") or {},
+        "index_peers": bool(params.get("name_matching_index_peers", True)),
+    }
 
 
 def aggregate(constituents: pd.DataFrame, by: tuple[str, ...] = ("input_isin", "constituent_isin")) -> pd.DataFrame:

@@ -71,14 +71,25 @@ _SPACED_RUN = re.compile(r"(?<!\S)(?:\S{1,2} ){3,}\S{1,2}(?!\S)")
 
 def _join_spaced(m: re.Match) -> str:
     toks = m.group(0).split(" ")
-    if sum(1 for t in toks if len(t) == 1) >= 0.6 * len(toks):
-        return "".join(toks)
-    return m.group(0)
+    if sum(1 for t in toks if len(t) == 1) < 0.6 * len(toks) or sum(1 for t in toks if t.isalpha()) < 0.5 * len(toks):
+        return m.group(0)
+    # The typesetter spaced every letter, so the gaps between words are lost too; a word
+    # starts again where a capital follows a small letter ("To y o t a Ts u s h o" -> "Toyota Tsusho").
+    joined = "".join(toks)
+    joined = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", joined)
+    return re.sub(r"(?<=[a-z])\.(?=[A-Z])", ". ", joined)
 
 
 def unspace(line: str) -> str:
-    """'To t a l O i l & G a s' -> 'TotalOil&Gas' (letter-spaced text from some typesetters)."""
-    return _SPACED_RUN.sub(_join_spaced, line)
+    """'To y o t a Ts u s h o C o r p .' -> 'Toyota Tsusho Corp.' (letter-spaced text from some typesetters).
+
+    Only runs of three or more one- and two-character tokens, mostly single
+    letters, are joined; short words such as 'AG' or 'SA' between normal
+    words are left alone. A space before a comma or full stop is dropped
+    ('NTT , Inc.' -> 'NTT, Inc.').
+    """
+    out = _SPACED_RUN.sub(_join_spaced, line)
+    return re.sub(r"(?<=[A-Za-z)])\s+([,.])(?=\s|$)", r"\1", out)
 
 
 def clean_text(text: str) -> str:
@@ -220,7 +231,7 @@ _RESIDUAL = re.compile(
     r"^(?:cash\b|cash and|cash at|bank (?:overdrafts?|deposits?|balances?|accounts?|borrowings?)|"
     r"deposits? (?:at|with) banks?|time deposits|sight deposits|"
     r"other (?:net )?(?:assets|liabilities)|other assets and liabilities|"
-    r"net other (?:assets|liabilities)|net current (?:assets|liabilities)|"
+    r"net other (?:assets|liabilities)|net current (?:assets|liabilities)|current (?:assets|liabilities)|"
     r"sonstige(?:s)? (?:netto)?(?:vermögen|verbindlichkeiten|aktiva|passiva)|bankguthaben|bankverbindlichkeiten|"
     r"liquide mittel|flüssige mittel|avoirs bancaires|autres actifs|autres passifs|liquidités|"
     r"margin (?:cash|accounts?)|cash collateral|kontokorrent|due (?:to|from) brokers?|andere (?:aktiva|passiva|vermögenswerte|verbindlichkeiten)|übrige (?:aktiva|passiva))",
@@ -261,13 +272,26 @@ class ParsedLine:
 
 
 _PCT_GROUP = re.compile(r"\((?:[^()]|\([^()]*\))*%\s*\)?\)")
+#: "(30 September 2025: (0.09%))", "(31 December 2025: 0.17%)": a dated comparison, nested or not.
+_DATED_GROUP = re.compile(r"\([^()]*\b(?:19|20)\d{2}\s*:(?:[^()]|\([^()]*\))*\)")
 
 
 def strip_headers(line: str) -> str:
     """Drop bracketed weight comparisons: 'Other Net Assets (0.42%) (2025: 0.37%) 6,834,221 0.42'."""
     if "%" not in line or "(" not in line or not _SECTION_HEADER.search(line):
         return line
-    return " ".join(_PCT_GROUP.sub(" ", line).split())
+    return " ".join(_PCT_GROUP.sub(" ", _DATED_GROUP.sub(" ", line)).split())
+
+
+#: "Equities: 99.93%", "Belgium: 0.79%", "Futures: 0.00%^", "Details of Forward Foreign Exchange
+#: Contracts: (0.44%)": a section or country header that carries its weight (Irish layouts).
+_HEADER_PCT = re.compile(r"^(?P<label>[^:%\d][^:%]{1,90}?)\s*:\s*\(?-?\d[\d.,]*\s?%\)?\s*[\^*†]*\s*$")
+
+
+def header_label(line: str) -> str | None:
+    """The label of a header line that carries its weight after a colon, else ``None``."""
+    m = _HEADER_PCT.match(strip_headers(line.strip()))
+    return m.group("label").strip() if m else None
 
 
 _NUMERIC_CHUNK = re.compile(r"^[\d\s.,'’()%-]+$")
@@ -298,8 +322,16 @@ def _tokens(line: str, style: NumberStyle) -> list[str]:
     return toks
 
 
-def parse_holding_line(line: str, style: NumberStyle, page: int = 0, leading_qty: bool = False) -> ParsedLine | None:
-    """One holding from one line, or None if the line is not a holding."""
+def parse_holding_line(
+    line: str, style: NumberStyle, page: int = 0, leading_qty: bool = False, leading_ccy: bool = True,
+) -> ParsedLine | None:
+    """One holding from one line, or None if the line is not a holding.
+
+    ``leading_ccy`` reads a currency code that opens the line as the line's
+    currency ("USD ARBUTUS BIOPHARMA ..."); a layout that does not print one
+    there passes ``False``, so a name such as 'CNH Industrial NV' keeps its
+    first word.
+    """
     raw = strip_headers(unspace(line.strip()))
     if len(raw) < 4:
         return None
@@ -338,7 +370,7 @@ def parse_holding_line(line: str, style: NumberStyle, page: int = 0, leading_qty
     if name_toks and name_toks[-1] in CURRENCIES and len(name_toks) > 1:
         currency = name_toks[-1]
         name_toks = name_toks[:-1]
-    elif len(name_toks) > 1 and name_toks[0] in CURRENCIES and name_toks[1][:1].isalpha():   # "USD ARBUTUS BIOPHARMA NPV ..."
+    elif leading_ccy and len(name_toks) > 1 and name_toks[0] in CURRENCIES and name_toks[1][:1].isalpha():   # "USD ARBUTUS BIOPHARMA NPV ..."
         currency = name_toks[0]
         name_toks = name_toks[1:]
     name = " ".join(name_toks).strip(" .:*-–")
@@ -378,12 +410,26 @@ def section_of(line: str) -> str | None:
     return None
 
 
+#: "Buy 1,972,266 USD to Sell 1,494,313 GBP 01/05/2026 BNY Mellon": a forward currency contract.
+_FX_FORWARD = re.compile(r"^(?:buy|kauf)\b.*\b(?:to sell|sell|verkauf)\b", re.I)
+#: Names that say the holding is a fund (a money market or liquidity fund, an ETF).
+_FUND_NAME = re.compile(
+    r"\b(?:ucits|etf|sicav|icav|liquidity (?:funds?|portfolio)|money market fund|investment funds? plc|"
+    r"fonds commun de placement|fcp)\b",
+    re.I,
+)
+
+
 def classify(pl: ParsedLine, section: str | None) -> str:
     if pl.residual:
         return "cash" if _CASHLIKE.match(pl.name) else "other"
+    if _FX_FORWARD.match(pl.name):
+        return "derivative"
     if section == "derivative" or re.search(r"derivative|forward|future|swap|option", pl.name, re.I) and pl.quantity is None:
         return "derivative"
-    if section in ("fund", "other"):
+    if section == "fund" or _FUND_NAME.search(pl.name):
+        return "fund"
+    if section == "other":
         return section
     if section == "debt" or (_COUPON.search(pl.name) and _MATURITY.search(pl.name)):
         return "debt"
@@ -437,7 +483,10 @@ def normalise_title(line: str, brands: list[str]) -> str | None:
     s = _TITLE_TAIL.sub("", s)
     s = re.sub(r"\s+[–-]\s+\d{1,2}[./]\d{1,2}[./]\d{2,4}.*$", "", s)      # "LO Funds - X - 31/03/2026 45"
     s = re.sub(r"\s+\d{1,4}$", "", s).strip(" –-:*")
-    if len(re.findall(r"(?<![A-Za-z])\d[\d.,']*(?![A-Za-z])", s)) >= 2:          # holding line with amounts
+    # a holding line with amounts, not a title; numeric ranges such as "1-10", "10+", "20/35" or a
+    # year are part of a fund's name ("UBS Core BBG TIPS 1-10 UCITS ETF")
+    nums = [w for w in _words(s) if w[:1].isdigit()]
+    if re.search(r"\d[.,'’]\d", s) or len(nums) >= 3:
         return None
     s = " ".join(s.split())
     if not s or len(s) < 5 or len(s) > 130:
@@ -456,16 +505,57 @@ def normalise_title(line: str, brands: list[str]) -> str | None:
 
 
 def compact(s: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", s.lower().replace("&", "and"))
+    return re.sub(r"[^a-z0-9]", "", _fold(s.lower()).replace("&", "and"))
+
+
+def _fold(s: str) -> str:
+    return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+
+
+#: A word of a fund name or title; numeric ranges ("1-10", "10+", "20/35", "7-10") are one word.
+_WORD = re.compile(r"\d+(?:[.,]\d+)?(?:\s*[-–/]\s*\d+(?:[.,]\d+)?)*\+?|[a-z0-9&]+")
+
+
+def _words(s: str) -> list[str]:
+    s = _fold(s.lower()).replace("&", "and")
+    return [re.sub(r"\s+", "", w).replace("–", "-") for w in _WORD.findall(s)]
 
 
 _GENERIC = {"sicav", "sicaf", "plc", "icav", "fcp", "sa", "s", "a", "the", "of", "subfund", "sub", "fund", "ucits", "etf"}
+#: Words of a share-class name that a sub-fund title need not repeat.
+_CLASS_WORDS = _GENERIC | {
+    "fd", "funds", "class", "share", "shares", "units", "acc", "accumulating", "accumulation", "dis", "dist",
+    "distributing", "distribution", "inc", "hedged", "hdg", "unhedged", "to", "and", "und", "et", "de", "du",
+    "pfhdg", "hedgedacc", "hedgeddis", "hedgeddist", "mdis", "qdis", "ukdis", "mdist", "qdist",
+}
+
+
+def _class_word(w: str) -> bool:
+    """A share-class word: 'acc', 'hEUR', 'EURd', 'PC', a currency, or one letter."""
+    if w in _CLASS_WORDS or w.upper() in CURRENCIES or (len(w) == 1 and w.isalpha()):
+        return True
+    m = re.fullmatch(r"h?([a-z]{3})(?:d|a|acc|dis|dist|inc)?", w)
+    return bool(m) and m.group(1).upper() in CURRENCIES
+
+#: Share-class tail of a fund name: "USD acc", "hEUR dis", "(Acc)", "P-acc", "A-dis", "PC".
+_CLASS_TAIL = re.compile(
+    r"(?:-(?:Inc|Acc|Dist?)\b|\s+(?:(?!ETF\b|FCP\b)[A-Z]{1,4}\d?-?|h[A-Z]{3}|acc|dis|dist|inc|Acc|Dis|Dist|Inc|UKdis|"
+    r"[A-Z]?[a-z]?-?(?:acc|dis|qdist|mdist)|\(?(?:Acc|Dis|Dist|Inc|ACC)\)|\(?hedged\)?|Hedged|-|–))+$"
+)
+
+
+def strip_share_class(name: str) -> str:
+    """'UBS Core MSCI World UCITS ETF USD acc' -> 'UBS Core MSCI World UCITS ETF'."""
+    base = _CLASS_TAIL.sub("", name.strip())
+    return base or name
 
 
 def title_score(title: str, fund_name: str) -> tuple[float, int]:
     """How well a sub-fund title matches a share-class name: (share of title words found in order, chars).
 
     A title with an umbrella prefix ("UBS ETF (CH) – UBS SMI ETF") is also tried without it.
+    Numeric words ("1-10", "10+") must appear whole in the fund name: "10" does not
+    match inside "1-10".
     """
     best = _title_score(title, fund_name)
     parts = re.split(r"\s+[–-]\s+", title, maxsplit=1)
@@ -477,10 +567,15 @@ def title_score(title: str, fund_name: str) -> tuple[float, int]:
 
 
 def _title_score(title: str, fund_name: str) -> tuple[float, int]:
-    words = [w for w in re.split(r"[^a-z0-9&]+", title.lower().replace("&", "and")) if w]
     target = compact(fund_name)
+    target_nums = {w for w in _words(fund_name) if w[:1].isdigit()}
     pos, found, chars, distinct = 0, 0, 0, 0
-    for w in words:
+    for w in _words(title):
+        if w[:1].isdigit():
+            if w not in target_nums:
+                return (0.0, 0)
+            found, chars, distinct = found + 1, chars + len(w), distinct + 1
+            continue
         w = compact(w)
         if not w:
             continue
@@ -494,6 +589,38 @@ def _title_score(title: str, fund_name: str) -> tuple[float, int]:
             return (0.0, 0)
         distinct += 0 if generic else 1
     return (found / distinct, chars) if distinct else (0.0, 0)
+
+
+def coverage(title: str, fund_name: str) -> float:
+    """Share of the fund name's own words (share class and legal words aside) that the title carries.
+
+    'UBS MSCI World UCITS ETF' covers only part of 'UBS MSCI World ex USA UCITS ETF USD acc'
+    ('ex' and 'USA' are missing): it is a sibling, not this fund. An umbrella prefix of the fund
+    name ('Lombard Odier Funds SICAV - Convertible Bond') need not be in the title.
+    """
+    target = compact(title)
+    title_words = set(_words(title))
+
+    def share(name: str) -> float:
+        words = [w for w in _words(strip_share_class(name)) if not _class_word(w)]
+        if not words:
+            return 0.0
+        # numbers and short words ("ex", "usa", "10+") must be whole words of the title
+        hit = sum(1 for w in words if (w in title_words if w[:1].isdigit() or len(w) <= 3 else compact(w) in target))
+        return hit / len(words)
+
+    best = share(fund_name)
+    parts = re.split(r"\s+[–-]\s+", fund_name, maxsplit=1)
+    if best < 0.999 and len(parts) == 2 and len(parts[1]) >= 4:
+        best = max(best, share(parts[1]))
+    return best
+
+
+def title_match(title: str, fund_name: str) -> float:
+    """1.0 when the title is this fund's: every title word is in the fund name and every
+    word of the fund's own name is in the title; lower otherwise."""
+    frac, _ = title_score(title, fund_name)
+    return min(frac, coverage(title, fund_name)) if frac else 0.0
 
 
 @dataclass
@@ -631,37 +758,63 @@ def parse_segment(seg: Segment) -> tuple[pd.DataFrame, dict]:
     ]
     lead = sum(1 for p in probe if re.match(r"^\(?\d[\d.,' ]*\)?\s+\S", p.name) and not re.match(r"^\d+(?:[.,]\d+)?\s?%", p.name))
     leading_qty = bool(probe) and lead > 0.5 * len(probe)
+    # a currency column before the name ("USD ARBUTUS BIOPHARMA"): only where most lines have one
+    ccy_first = sum(1 for l in text_lines if (w := l.split()[:1]) and w[0] in CURRENCIES)
+    leading_ccy = bool(probe) and ccy_first > 0.3 * len(probe)
 
     rows = []
     section = None
+    country = None
     pending: str | None = None
+    texts: list[str] = []          # text-only lines since the last holding (wrapped descriptions)
     stopped = False
-    for page, line in seg.lines:
+    stop_at = None
+    for n, (page, line) in enumerate(seg.lines):
         s = line.strip()
         if not s:
             continue
         if _is_stop_line(s, style):
             stopped = True
+            stop_at = n
             break
-        pl = parse_holding_line(s, style, page, leading_qty)
+        pl = parse_holding_line(s, style, page, leading_qty, leading_ccy)
         if pl is None:
+            label = header_label(s)
             bare = strip_headers(s)
-            if not re.search(r"\d[.,]\d{2}", bare):
-                sec = section_of(bare)
-                if sec:
-                    section = sec
+            if label is not None or not re.search(r"\d[.,]\d{2}", bare):
+                text = label if label is not None else bare
+                cc = country_header(text)
+                if cc is not None:
+                    country = cc
+                else:
+                    sec = section_of(text)
+                    if sec:
+                        section = sec
+                        if label is not None:
+                            country = None      # a new asset-class section starts its own country list
+            if label is not None:
+                pending, texts = None, []
+                continue
             # keep a text-only line: the next line may continue it ("... exchange" / "contracts 1,234 0.01")
             pending = s if re.search(r"[A-Za-z]", s) and not re.search(r"\d[.,]\d{2}\b", s) and len(s) < 140 else None
+            if pending and not _COLUMN_HEAD.search(s):
+                texts.append(s)
             continue
+        if section == "derivative" and texts and re.search(r"\b(?:long|short)\b", pl.name, re.I):
+            # a futures contract whose description wraps over several lines above its amounts:
+            # "NASDAQ 100 E-Mini" / "June 2026 37" / "Merrill Lynch" / "International 18,295,266 Long (335,035) 0.00"
+            pl.name = re.sub(r"\s+\d+$", "", " ".join(t.strip() for t in texts[:2]))
+            pending = None
         if pending and (pl.name[:1].islower() or pending.rstrip().endswith(("-", "&", ",", "/", "(", " and", " of"))):
             pl.name = f"{pending.strip()} {pl.name}"
             if _SKIP.match(pl.name) or _SKIP_ANY.search(pl.name):
-                pending = None
+                pending, texts = None, []
                 continue
             if _STOP.match(pl.name):
                 stopped = True
+                stop_at = n
                 break
-        pending = None
+        pending, texts = None, []
         if leading_qty and not pl.lead_qty and not pl.residual and not re.match(r"^\d{1,2}[./]\d{1,2}[./]\d{2,4}\b", pl.name):
             sec = section_of(pl.name)
             if sec:
@@ -677,7 +830,7 @@ def parse_segment(seg: Segment) -> tuple[pd.DataFrame, dict]:
                 "weight_pct": pl.weight_pct,
                 "asset_class": classify(pl, section),
                 "currency": pl.currency,
-                "country": None,
+                "country": None if pl.residual else country,
                 "quantity": pl.quantity,
                 "market_value": pl.market_value,
                 "residual": pl.residual,
@@ -685,6 +838,7 @@ def parse_segment(seg: Segment) -> tuple[pd.DataFrame, dict]:
             }
         )
     df = pd.DataFrame(rows, columns=HOLDING_FRAME_COLUMNS)
+    totals = _totals(seg.lines[stop_at:stop_at + 8], style) if stop_at is not None else {}
     stats = {
         "lines": int(len(df)),
         "weight_sum_pct": round(float(df["weight_pct"].sum()), 4) if len(df) else 0.0,
@@ -693,8 +847,59 @@ def parse_segment(seg: Segment) -> tuple[pd.DataFrame, dict]:
         "found_total_line": stopped,
         "pages": [p + 1 for p in seg.pages],
         "number_style": f"decimal '{style.decimal}', thousands '{style.thousands}'",
+        **totals,
     }
     return df, stats
+
+
+#: Column headings of a schedule ("Description", "Counterparty", "Value of", "Fund %").
+_COLUMN_HEAD = re.compile(
+    r"description|counterpart|commitment|value of|^fund\b|% of|unreali[sz]ed|nominal|holdings|"
+    r"bezeichnung|gegenpartei|^\W*$|contracts\s*counterparty",
+    re.I,
+)
+
+_TOTAL_ASSETS = re.compile(r"^(?:total fund assets|gesamtfondsvermögen|total des actifs)", re.I)
+_NET_ASSETS = re.compile(r"^(?:net fund assets|nettofondsvermögen|actif net)", re.I)
+
+
+def _totals(lines: list[tuple[int, str]], style: NumberStyle) -> dict:
+    """``total_fund_assets`` and ``net_fund_assets`` from the lines that end a Swiss inventory.
+
+    Swiss inventories print each line's percent of *total* fund assets, then
+    'Total fund assets', the liabilities and 'Net fund assets'. Both amounts
+    are returned when the lines carry them, so the caller can restate the
+    weights against net assets.
+    """
+    out: dict = {}
+    for _, line in lines:
+        s = line.strip()
+        name = _tokens_name(s, style)
+        # read the raw tokens: a percent right after the amount ("3 927 520 693 100.00") must
+        # not be taken for its last thousands group
+        nums = [t for t in strip_headers(s).split() if is_num(t) and t not in _DASH]
+        if len(nums) >= 2 and has_decimals(nums[-1], style) and len(re.sub(r"\D", "", nums[-1].split(style.decimal)[0])) <= 3:
+            nums = nums[:-1]
+        if not nums:
+            continue
+        amount = parse_num("".join(nums), style) if style.thousands == " " else parse_num(nums[0], style)
+        if amount is None:
+            continue
+        if _TOTAL_ASSETS.match(name) and "total_fund_assets" not in out:
+            out["total_fund_assets"] = amount
+        elif _NET_ASSETS.match(name) and "net_fund_assets" not in out:
+            out["net_fund_assets"] = amount
+    return out
+
+
+def country_header(text: str) -> str | None:
+    """ISO code of a country heading such as 'Belgium' or 'United States', else ``None``."""
+    t = text.strip(" :.-–")
+    if len(t) < 3 or len(t) > 40 or re.search(r"\d", t):
+        return None
+    from ..countries import country_code
+
+    return country_code(t)
 
 
 def _tokens_name(s: str, style: NumberStyle) -> str:
@@ -806,12 +1011,15 @@ def subfund_schedule(pages: list[str], fund_name: str, brands: list[str] | None 
             titles.append(s.title)
     if not segs:
         return ScheduleResult(None, pd.DataFrame(columns=HOLDING_FRAME_COLUMNS), None, kind, {"lines": 0}, [], 0.0)
-    scored = sorted(((title_score(t, fund_name), t) for t in titles), key=lambda x: (x[0][0] >= 0.999, x[0][1], x[0][0]), reverse=True)
-    (frac, _chars), best = scored[0]
-    if frac == 0 and isin:
-        best = _title_by_isin(pages, segs, isin) or best
-        frac = 0.5 if best else 0.0
-    if frac == 0:
+    # The title must be this fund's both ways: all its words in the fund name, and all the
+    # fund name's own words in it. A sibling whose title is a part of the name ("UBS MSCI World"
+    # for "UBS MSCI World ex USA") is refused, never taken as a near miss.
+    scored = sorted(((title_match(t, fund_name), title_score(t, fund_name)[1], t) for t in titles), reverse=True)
+    frac, _chars, best = scored[0]
+    if frac < 0.999:
+        by_isin = _title_by_isin(pages, segs, isin) if isin else None
+        best, frac = (by_isin, 0.5) if by_isin else (None, 0.0)
+    if best is None:
         return ScheduleResult(None, pd.DataFrame(columns=HOLDING_FRAME_COLUMNS), report_date(pages), kind, {"lines": 0}, titles, 0.0)
     chosen = [s for s in segs if compact(s.title) == compact(best)]
     # the same title can head other sections (statistics, portfolio breakdowns); keep the

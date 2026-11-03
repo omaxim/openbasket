@@ -12,9 +12,16 @@ which is usually two to eight months old.
 
 The fund list for each family is the SIX Swiss Exchange fund and ETF list
 (``IssuerNameFull``), kept to the share classes for which a report route
-exists (in the AVL index, or a Swiss ETF for extraETF's links). Other share
+exists (in the AVL index, or WisdomTree's document service). Other share
 classes can still be looked up by ISIN with
 :func:`openbasket.sources.fund_reports.lookup`.
+
+The reports name holdings without ISINs; with ``lookthrough.name_matching``
+the look-through matches the names to ISINs (:mod:`openbasket.matching`).
+
+Redistribution: ``local_only`` (see :mod:`openbasket.sources.fund_reports`).
+The adapters are enabled by default for local runs; the public build never
+runs them.
 """
 
 from __future__ import annotations
@@ -25,9 +32,14 @@ from dataclasses import dataclass
 import pandas as pd
 
 from .. import fund_reports as fr
-from . import FetchContext, IssuerAdapter, IssuerHoldings, register
+from . import LOCAL_ONLY, FetchContext, IssuerAdapter, IssuerHoldings, register
 
 logger = logging.getLogger(__name__)
+
+#: Redistribution class of every adapter in this module.
+REDISTRIBUTION = LOCAL_ONLY
+#: Read for the person running openbasket; never in the public build (``conf/public``).
+ENABLED_BY_DEFAULT = True
 
 
 @dataclass(frozen=True)
@@ -37,7 +49,7 @@ class Family:
     homepage: str
     issuer_pattern: str          # regex on SIX IssuerNameFull / FundLongName
     brands: tuple[str, ...]      # how sub-fund titles start in the report
-    locators: tuple[str, ...] = ("avl", "extraetf")
+    locators: tuple[str, ...] = ("avl",)
     regions: tuple[str, ...] = ("IE", "LU", "CH")
 
 
@@ -49,7 +61,7 @@ FAMILIES = [
     Family("pictet_reports", "Pictet Asset Management (statutory reports)", "https://am.pictet.com",
            r"\bPictet\b", ("Pictet",), regions=("LU", "IE", "CH")),
     Family("wisdomtree_reports", "WisdomTree Europe (statutory reports)", "https://www.wisdomtree.eu",
-           r"\bWisdomTree\b", ("WisdomTree",), locators=("wisdomtree", "avl", "extraetf"), regions=("IE",)),
+           r"\bWisdomTree\b", ("WisdomTree",), locators=("wisdomtree", "avl"), regions=("IE",)),
     Family("fidelity_reports", "Fidelity International (statutory reports)", "https://www.fidelityinternational.com",
            r"\bFidelity\b|\bFIL Investment", ("Fidelity",), regions=("IE", "LU")),
     Family("franklin_reports", "Franklin Templeton (statutory reports)", "https://www.franklintempleton.lu",
@@ -62,11 +74,12 @@ FAMILIES = [
 
 CREDIT = (
     "Holdings from the fund's statutory {kind_hint} published by {issuer}; report located by ISIN "
-    "on AVL Investmentfonds' public document library{extra}. Positions are as of the report date, not current."
+    "on AVL Investmentfonds' public document library{extra}. Positions are as of the report date, not current; "
+    "names are matched to ISINs by openbasket where noted (isin_source name_match)."
 )
 LICENCE = (
     "Statutory UCITS/KAG reports are public documents the fund must publish. They are read from public, "
-    "ungated copies (AVL Investmentfonds; {extra}) whose terms were not reviewed for automated use; one report "
+    "ungated copies (AVL Investmentfonds{extra}) whose terms were not reviewed for automated use; one report "
     "per umbrella and period is downloaded and only its text is kept."
 )
 
@@ -86,9 +99,7 @@ def _make(f: Family) -> IssuerAdapter:
         avl = _avl_isins(None)
 
         def other_route(row) -> bool:
-            if "wisdomtree" in f.locators and f.name == "wisdomtree_reports":
-                return True
-            return str(row.ISIN).startswith("CH") and (row.ProductLineDesc or "").startswith("Exchange Traded")
+            return "wisdomtree" in f.locators and f.name == "wisdomtree_reports"
 
         return fr.products_from_six(six, f.name, f.issuer_pattern, avl, other_route)
 
@@ -103,17 +114,19 @@ def _make(f: Family) -> IssuerAdapter:
         )
 
     issuer = f.title.split(" (")[0]
-    extra = " and WisdomTree's own document service" if f.name == "wisdomtree_reports" else " (Swiss ETFs: extraETF's document links)"
+    extra = " and WisdomTree's own document service" if f.name == "wisdomtree_reports" else ""
     return IssuerAdapter(
         name=f.name,
         title=f.title,
         homepage=f.homepage,
         credit=CREDIT.format(kind_hint="annual or semi-annual report", issuer=issuer, extra=extra),
-        licence=LICENCE.format(extra="WisdomTree's document service" if f.name == "wisdomtree_reports" else "extraETF"),
+        licence=LICENCE.format(extra=" and WisdomTree's document service" if f.name == "wisdomtree_reports" else ""),
         regions=f.regions,
         products=products,
         holdings=holdings,
         frequency="semi-annual",
+        redistribution=REDISTRIBUTION,
+        enabled_by_default=ENABLED_BY_DEFAULT,
     )
 
 

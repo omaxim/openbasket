@@ -33,6 +33,12 @@ ticker_isin_map:
   type: pandas.ParquetDataset
   filepath: data/03_primary/ticker_isin_map.parquet
 
+# Currency, coupon and maturity per ISIN, read by the name matcher (lookthrough.name_matching).
+security_terms:
+  type: openbasket.datasets.DuckDBParquetDataset
+  filepath: data/03_primary/security_terms.parquet
+  order_by: isin
+
 sedol_isin_map:
   type: pandas.ParquetDataset
   filepath: data/03_primary/sedol_isin_map.parquet

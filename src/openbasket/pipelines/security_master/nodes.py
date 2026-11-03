@@ -103,6 +103,61 @@ def security_master(
     )
 
 
+def security_terms(
+    nport_positions: duckdb.DuckDBPyRelation, cusip_isin_map: duckdb.DuckDBPyRelation, nport_parquet_manifest: pd.DataFrame
+) -> duckdb.DuckDBPyRelation:
+    """Currency, and for bonds coupon and maturity, per ISIN, as N-PORT filings report them.
+
+    Statutory reports name bonds by issuer, coupon and maturity and give no
+    ISIN; :mod:`openbasket.matching` matches them against these terms. One row
+    per ISIN: the values most filings give. Without the ``DEBT_SECURITY``
+    table (a quarter converted before it was read) coupon and maturity are
+    null.
+    """
+    con = connection()
+    positions, cmap = nport_positions, cusip_isin_map  # noqa: F841 - read by DuckDB below
+    holding = nport.table(con, nport_parquet_manifest, "FUND_REPORTED_HOLDING")  # noqa: F841 - read by DuckDB below
+    if (nport_parquet_manifest["table"] == "DEBT_SECURITY").any():
+        debt = nport.table(con, nport_parquet_manifest, "DEBT_SECURITY")  # noqa: F841 - read by DuckDB below
+    else:
+        debt = con.sql(  # noqa: F841 - read by DuckDB below
+            "select null::varchar as HOLDING_ID, null::varchar as MATURITY_DATE, null::varchar as COUPON_TYPE, "
+            "null::varchar as ANNUALIZED_RATE where false"
+        )
+    placeholder = PLACEHOLDER_CUSIP_SQL
+    return con.sql(
+        f"""
+        with pos as (
+            select holding_id, reported_isin, case when not {placeholder} then cusip end as cusip from positions
+        ),
+        p as (
+            select pos.holding_id, coalesce(pos.reported_isin, m.isin) as isin
+            from pos
+            left join cmap m on pos.reported_isin is null and pos.cusip = m.cusip
+        ),
+        h as (select HOLDING_ID, nullif(upper(trim(CURRENCY_CODE)), '') as currency from holding),
+        d as (
+            select HOLDING_ID,
+                   try_strptime(MATURITY_DATE, '%d-%b-%Y')::date as maturity,
+                   try_cast(ANNUALIZED_RATE as double) as coupon,
+                   nullif(COUPON_TYPE, '') as coupon_type
+            from debt
+        )
+        select p.isin,
+               mode(h.currency) as currency,
+               mode(d.coupon) as coupon,
+               mode(d.maturity) as maturity,
+               mode(d.coupon_type) as coupon_type,
+               count(*) as n_positions
+        from p
+        left join h on h.HOLDING_ID = p.holding_id
+        left join d on d.HOLDING_ID = p.holding_id
+        where p.isin is not null
+        group by p.isin
+        """
+    )
+
+
 def ticker_isin_map(security_master: duckdb.DuckDBPyRelation) -> pd.DataFrame:
     """Ticker to ISIN for equities whose filings report a ticker."""
     con = connection()

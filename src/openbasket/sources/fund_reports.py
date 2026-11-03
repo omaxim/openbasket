@@ -20,17 +20,20 @@ their reports are also published, by ISIN and without any gate, on:
     ``https://dataspanapi.wisdomtree.com/pdr/documents/<TYPE>/UCITS/GB/EN-GB/<ISIN>/``
     with ``TYPE`` ``ANNUAL_REPORT`` or ``SEMI_ANNUAL_REPORT``; the file name
     in ``Content-Disposition`` carries the fund name.
-``extraetf``
-    extraETF's public document links, ``https://docs.extraetf.com/download/<ISIN>/<lang>/<AR|SAR>``.
-    Used last, for funds the others do not have (Swiss ETFs).
-
 A report is downloaded once and its page texts are cached; share classes and
 sub-funds of the same umbrella then reuse them. The schedule is parsed by
 :mod:`openbasket.sources.report_parser`.
 
-Not used: fundinfo's document API (``robots.txt`` disallows ``/document/``),
+Not used: extraETF's document links (its terms forbid automated querying),
+fundinfo's document API (``robots.txt`` disallows ``/document/``),
 swissfunddata.ch (needs an investor-type disclaimer click), and the issuers'
 own sites behind Akamai, Cloudflare, AWS WAF or Fastly challenges.
+
+Redistribution: ``local_only``. The reports are the issuers' documents, read
+from third-party copies whose terms were not reviewed for republication
+(AVL's ``robots.txt`` shuts out AI crawlers by name, which openbasket is not,
+but whether to rely on it is the user's call). The adapters run in local
+runs and never in the public build.
 """
 
 from __future__ import annotations
@@ -54,6 +57,9 @@ from .issuers import HOLDING_COLUMNS, IssuerHoldings
 
 logger = logging.getLogger(__name__)
 
+#: Redistribution class (see :func:`openbasket.sources.redistribution`).
+REDISTRIBUTION = "local_only"
+
 DEFAULT_CACHE_DIR = "data/01_raw/issuers/fund_reports"
 
 AVL_HOST = "https://dl.avl-investmentfonds.de"
@@ -61,13 +67,10 @@ AVL_SITEMAP = AVL_HOST + "/sitemap.xml"
 AVL_KINDS = {"RECHENSCHAFT": "annual report", "HALBJAHRBER": "semi-annual report"}
 WISDOMTREE_DOCS = "https://dataspanapi.wisdomtree.com/pdr/documents/{type}/UCITS/GB/EN-GB/{isin}/"
 WISDOMTREE_KINDS = {"SEMI_ANNUAL_REPORT": "semi-annual report", "ANNUAL_REPORT": "annual report"}
-EXTRAETF_DOCS = "https://docs.extraetf.com/download/{isin}/{lang}/{type}"
-EXTRAETF_KINDS = {"SAR": "semi-annual report", "AR": "annual report"}
 
 HOSTS = {
     "avl": ("AVL Investmentfonds document library", AVL_HOST),
     "wisdomtree": ("WisdomTree document service", "https://dataspanapi.wisdomtree.com"),
-    "extraetf": ("extraETF document links", "https://docs.extraetf.com"),
 }
 
 LANG_ORDER = {"EN": 0, "DE": 1, "FR": 2}
@@ -95,6 +98,11 @@ class ReportHoldings(IssuerHoldings):
     sub_fund: str | None = None
     stats: dict = field(default_factory=dict)
     report: ReportRef | None = None
+    #: ``net_assets``: weights are percent of net assets (the contract); ``total_assets``: a
+    #: Swiss inventory whose percent of total fund assets could not be restated.
+    weight_basis: str = "net_assets"
+    #: False when the lines do not sum to within :data:`COMPLETE_RANGE` of net assets.
+    complete: bool = True
 
 
 # --------------------------------------------------------------------------
@@ -173,17 +181,6 @@ def wisdomtree_locate(isin: str) -> list[ReportRef]:
     return out
 
 
-def extraetf_locate(isin: str, langs: tuple[str, ...] = ("en", "de")) -> list[ReportRef]:
-    out = []
-    for lang in langs:
-        for typ, kind in EXTRAETF_KINDS.items():
-            url = EXTRAETF_DOCS.format(isin=isin, lang=lang, type=typ)
-            r = http.request("HEAD", url, allow_redirects=True)
-            if r.status_code == 200 and "pdf" in (r.headers.get("content-type") or ""):
-                out.append(ReportRef(isin, url, kind, "extraetf", lang.upper(), None, _last_modified(r)))
-    return out
-
-
 def wisdomtree_fund_name(filename: str | None) -> str | None:
     """'SEMI_ANNUAL_REPORT-EN-GB-IE00BZ56RN96-WisdomTree Global Quality ... - USD.pdf' -> the fund name."""
     if not filename:
@@ -206,7 +203,7 @@ def report_pages(ref: ReportRef, cache_dir: str | Path | None = None) -> list[st
     """Page texts of a report, downloaded once and cached (gzip JSON, no PDF kept).
 
     AVL file names carry the period end, so their cache never goes stale;
-    undated links (WisdomTree, extraETF) are re-read once a week.
+    undated links (WisdomTree) are re-read once a week.
     """
     path = _text_path(ref, cache_dir)
     if path.exists():
@@ -276,10 +273,8 @@ def shared_report(ref: ReportRef, fund_name: str, brands, cache_dir) -> tuple[Re
 
 
 def _specific_match(title: str, fund_name: str) -> bool:
-    """A title that matches the fund name fully and covers most of its non-share-class part."""
-    frac, chars = rp.title_score(title, fund_name)
-    key = portfolio_key(fund_name)
-    return rp.compact(title) == key or (frac >= 0.999 and chars >= 0.85 * len(key))
+    """A title that is this fund's both ways (see :func:`report_parser.title_match`)."""
+    return rp.compact(title) == portfolio_key(fund_name) or rp.title_match(title, fund_name) >= 0.999
 
 
 _KID_NAME = [
@@ -335,16 +330,37 @@ def rank(refs: list[ReportRef]) -> list[ReportRef]:
     return sorted(refs, key=key, reverse=True)
 
 
-def acceptable(stats: dict) -> bool:
+#: Weight sum (percent of net assets) a schedule that ends with its net-assets total must reach.
+COMPLETE_RANGE = (97.0, 103.0)
+
+
+def complete(stats: dict) -> bool:
+    """True when the lines sum to within :data:`COMPLETE_RANGE` of net assets."""
     s = stats.get("weight_sum_pct") or 0
-    return stats.get("lines", 0) > 0 and 50 <= s <= 150
+    return stats.get("lines", 0) > 0 and COMPLETE_RANGE[0] <= s <= COMPLETE_RANGE[1]
+
+
+def acceptable(stats: dict) -> bool:
+    """Whether a parsed schedule is used.
+
+    A schedule that ends with its net-assets total must sum to 97-103%: if it
+    does not, lines were lost or a wrong section was read. A schedule without
+    that line (some layouts leave cash to the statement of net assets) is
+    used when it sums to 50-150%, and :func:`complete` says whether it is whole.
+    """
+    s = stats.get("weight_sum_pct") or 0
+    if stats.get("lines", 0) <= 0:
+        return False
+    if stats.get("found_total_line"):
+        return complete(stats)
+    return 50 <= s <= 150
 
 
 def lookup(
     isin: str,
     fund_name: str | None = None,
     brands: list[str] | None = None,
-    locators: tuple[str, ...] = ("wisdomtree", "avl", "extraetf"),
+    locators: tuple[str, ...] = ("wisdomtree", "avl"),
     cache_dir: str | Path | None = None,
     index: pd.DataFrame | None = None,
 ) -> ReportHoldings:
@@ -352,7 +368,7 @@ def lookup(
 
     Locators are tried in order. Each one's reports are tried newest first
     (at most :data:`MAX_DOWNLOADS` downloads in all) until one parses: lines
-    found and weights summing to between 50% and 150%. If the report that
+    found and weights that pass :func:`acceptable`. If the report that
     parses is not that locator's newest (the newer one was unreadable or did
     not contain the sub-fund), the remaining locators are asked for a newer
     one, and the newest report that parses wins.
@@ -360,7 +376,6 @@ def lookup(
     t0 = time.time()
     attempts: list[str] = []
     found_any = False
-    best: tuple[ReportRef, rp.ScheduleResult, list[str]] | None = None
     accepted: tuple[ReportRef, rp.ScheduleResult, list[str]] | None = None
     downloads = 0
     for loc in locators:
@@ -373,8 +388,6 @@ def lookup(
         elif loc == "avl":
             index = index if index is not None else avl_index(cache_dir)
             refs = avl_locate(isin, index)
-        elif loc == "extraetf":
-            refs = extraetf_locate(isin)
         else:
             raise ValueError(f"Unknown locator {loc!r}")
         if not refs:
@@ -416,15 +429,10 @@ def lookup(
                 if accepted is None or (res.as_of or "") > (accepted[1].as_of or ""):
                     accepted = (ref, res, pages)
                 break
-            if res.stats.get("lines", 0) and (best is None or res.stats["lines"] > best[1].stats.get("lines", 0)):
-                best = (ref, res, pages)
         if accepted is not None and accepted[0].url == ranked[0].url:
             break       # this locator's newest report parsed: nothing newer to look for
     if accepted is not None:
         ref, res, pages = accepted
-        return _result(isin, fund_name, ref, res, pages, attempts, time.time() - t0)
-    if best is not None:
-        ref, res, pages = best
         return _result(isin, fund_name, ref, res, pages, attempts, time.time() - t0)
     if not found_any:
         raise LookupError(f"No annual or semi-annual report found for {isin} on {', '.join(locators)}")
@@ -438,6 +446,11 @@ def _result(isin, fund_name, ref: ReportRef, res: rp.ScheduleResult, pages, trie
     st = dict(res.stats)
     st["seconds"] = round(seconds, 1)
     swiss = bool(re.search(r"inventory of fund assets|vermögensinventar", "\n".join(pages[i - 1] for i in st.get("pages", [])[:2]), re.I))
+    basis_note = None
+    st["weight_basis"] = "net_assets"
+    if swiss:
+        df, st, basis_note = _swiss_net_assets(df, st)
+    st["complete"] = complete(st)
     host_name, _ = HOSTS[ref.host]
     notes = [
         f"{kind}, positions as of {as_of}",
@@ -449,8 +462,8 @@ def _result(isin, fund_name, ref: ReportRef, res: rp.ScheduleResult, pages, trie
         f"{st.get('lines')} lines; weights as printed, not rescaled, sum to {st.get('weight_sum_pct')}%"
         f" (investments {st.get('invested_weight_pct')}%, the rest is cash and other net assets).",
     ]
-    if swiss:
-        notes.append("Swiss inventory: weights are percent of total fund assets, as the report prints them, not of net assets.")
+    if basis_note:
+        notes.append(basis_note)
     if st.get("isin_share", 0) < 0.5:
         notes.append(f"The report names holdings without ISINs ({st.get('isin_share', 0):.0%} of lines carry one); the others stay unresolved until matched by name.")
     if res.match_score < 0.999:
@@ -459,8 +472,9 @@ def _result(isin, fund_name, ref: ReportRef, res: rp.ScheduleResult, pages, trie
         notes.append("The schedule contains swaps: for a swap-based fund it lists the substitute basket and the swap, not the index it tracks.")
     if not st.get("found_total_line"):
         notes.append("The schedule has no net-assets total line; cash and other net assets are not listed and stay unresolved.")
-    if not acceptable(st):
-        notes.append("Parse is incomplete: the lines do not sum to near 100%; treat with care.")
+    if not st["complete"]:
+        notes.append(f"Parse may be incomplete: the lines sum to {st.get('weight_sum_pct')}% of net assets, "
+                     f"outside {COMPLETE_RANGE[0]:g}-{COMPLETE_RANGE[1]:g}%; treat with care.")
     for a in tried:
         if a.startswith(ref.url) and "text reused" in a:
             msg = a.split(": ", 1)[1]
@@ -469,7 +483,43 @@ def _result(isin, fund_name, ref: ReportRef, res: rp.ScheduleResult, pages, trie
     if others:
         notes.append("Other reports tried: " + "; ".join(others))
     df = df[HOLDING_COLUMNS + [c for c in df.columns if c not in HOLDING_COLUMNS]]
-    return ReportHoldings(as_of, df.reset_index(drop=True), ref.url, notes, kind, res.title, st, ref)
+    return ReportHoldings(as_of, df.reset_index(drop=True), ref.url, notes, kind, res.title, st, ref,
+                          weight_basis=st["weight_basis"], complete=st["complete"])
+
+
+def _swiss_net_assets(df: pd.DataFrame, st: dict) -> tuple[pd.DataFrame, dict, str]:
+    """Restate a Swiss inventory's weights from percent of total fund assets to percent of net assets.
+
+    The inventory prints each line's share of *total* fund assets and ends with
+    'Total fund assets' and 'Net fund assets'. Each line's market value divided
+    by net fund assets is its weight in percent of net assets. Where a market
+    value is missing, or disagrees with the printed percent (a quantity read
+    into the value column), the printed percent times total / net assets is
+    used instead. Without both totals the printed weights are kept and
+    ``weight_basis`` says ``total_assets``.
+    """
+    tfa, nfa = st.get("total_fund_assets"), st.get("net_fund_assets")
+    if not tfa or not nfa or nfa <= 0 or not 0.5 <= tfa / nfa <= 2:
+        st["weight_basis"] = "total_assets"
+        return df, st, ("Swiss inventory: weights are percent of total fund assets, as the report prints them, "
+                        "not of net assets (the net fund assets were not found to restate them).")
+    df = df.copy()
+    factor = tfa / nfa
+    printed = pd.to_numeric(df["weight_pct"], errors="coerce")
+    by_factor = printed * factor
+    mv = pd.to_numeric(df["market_value"], errors="coerce") if "market_value" in df else pd.Series(float("nan"), index=df.index)
+    by_value = mv / nfa * 100
+    agree = by_value.notna() & ((by_value - by_factor).abs() <= 0.006 * factor + 1e-9)
+    df["weight_pct"] = by_value.where(agree, by_factor).round(6)
+    st = dict(st)
+    st["printed_weight_sum_pct"] = st.get("weight_sum_pct")
+    st["weight_sum_pct"] = round(float(df["weight_pct"].sum()), 4)
+    if "residual" in df:
+        st["invested_weight_pct"] = round(float(df.loc[~df["residual"].astype(bool), "weight_pct"].sum()), 4)
+    note = (f"Swiss inventory: the report prints percent of total fund assets ({tfa:,.0f}); weights are restated "
+            f"to percent of net fund assets ({nfa:,.0f}) from each line's market value "
+            f"({int(agree.sum())} of {len(df)} lines; the others by the ratio of the two totals).")
+    return df, st, note
 
 
 def _pages(p: list[int]) -> str:
@@ -497,16 +547,9 @@ def six_funds(cache_dir: str | Path | None = None, max_age_days: float = 1) -> p
     return pd.read_csv(path, sep=";", encoding="latin-1", dtype=str)
 
 
-_CLASS_TAIL = re.compile(
-    r"(?:-(?:Inc|Acc|Dist?)\b|\s+(?:(?!ETF\b|FCP\b)[A-Z]{1,4}\d?-?|h[A-Z]{3}|acc|dis|dist|inc|Acc|Dis|Dist|Inc|UKdis|"
-    r"[A-Z]?[a-z]?-?(?:acc|dis|qdist|mdist)|\(?(?:Acc|Dis|Dist|Inc|ACC)\)|\(?hedged\)?|Hedged|-|–))+$"
-)
-
-
 def portfolio_key(name: str) -> str:
     """'UBS Core MSCI World UCITS ETF USD acc' -> 'ubscoremsciworlducitsetf' (shared by share classes)."""
-    base = _CLASS_TAIL.sub("", name.strip())
-    return rp.compact(base or name)
+    return rp.compact(rp.strip_share_class(name))
 
 
 def products_from_six(six: pd.DataFrame, issuer: str, pattern: str, avl_isins: set[str] | None, extra_ok=None) -> pd.DataFrame:

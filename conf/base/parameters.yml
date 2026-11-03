@@ -37,6 +37,21 @@ lookthrough:
   openfigi_cache: data/03_primary/openfigi_cache.parquet
   # Issuer responses, one file per fund per day, written only once they parse.
   issuer_cache_dir: data/01_raw/issuers/holdings
+  # Match holdings an issuer adapter names without any identifier (statutory
+  # reports) to ISINs by name, country, currency and, for bonds, coupon and
+  # maturity. Only a match that leaves exactly one ISIN is used; its rows say
+  # isin_source: name_match and carry a match_score. See openbasket.matching.
+  name_matching: true
+  # Coupons, maturities and currencies from N-PORT (built by the security_master pipeline).
+  name_matching_terms: data/03_primary/security_terms.parquet
+  # A FIRDS extract (isin, name, cfi[, currency, coupon, maturity]) to match against, if you have one.
+  name_matching_firds: null
+  # Peer funds whose holdings files confirm matches, by fund ISIN; funds named
+  # after a plain index (MSCI World, S&P 500, SMI ...) find an iShares or SPDR
+  # peer on the same index by themselves when name_matching_index_peers is true.
+  #   IE00BD4TXV59: [IE00B4L5Y983]
+  name_matching_peers: {}
+  name_matching_index_peers: true
   # An ISIN or CUSIP that N-PORT reports under more than this many fund
   # series LEIs is a placeholder or an error and is not used to match a fund.
   # Holdings under other LEIs (a trust's, a typo) are not counted.

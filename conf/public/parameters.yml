@@ -3,6 +3,15 @@
 # conf/base (plus conf/local) and can read every source for private use.
 lookthrough:
   source_order: [tickerinside, nport]
+  # Name matching serves the statutory-report adapters, which are local_only,
+  # and its peers are issuer files; the public build does not use it.
+  name_matching: false
+  name_matching_index_peers: false
+
+issuers:
+  # local_only adapters that must never run in the public build.
+  disabled: [ubs_reports, invesco_reports, pictet_reports, wisdomtree_reports, fidelity_reports, franklin_reports,
+             lombardodier_reports]
 
 universe:
   sources: [nport]

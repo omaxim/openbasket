@@ -14,6 +14,13 @@
    :members:
 ```
 
+## Name matching
+
+```{eval-rst}
+.. automodule:: openbasket.matching
+   :members: NameMatcher, Named, NameMatch, Candidate, name_key, bond_terms, index_of, peer_candidates
+```
+
 ## Identifiers
 
 ```{eval-rst}

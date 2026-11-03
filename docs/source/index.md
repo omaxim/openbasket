@@ -17,5 +17,6 @@ output
 sources/index
 plan
 data-api
+publishing
 api
 ```

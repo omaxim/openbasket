@@ -10,6 +10,10 @@ Matching an input ISIN to a fund, in order:
 
 Holdings sources are tried in ``source_order``; see
 :func:`openbasket.lookthrough.choose` for how one is picked.
+
+A fund can also be named directly by its SEC series ID (``S000004310``) or
+its issuer ID (``ishares-uk:253743``), which is how a universe run refers to
+funds it already knows.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from functools import lru_cache
 import duckdb
 import pandas as pd
 
+from .datasets import connection
 from .identifiers import cusip_to_isin, is_valid_isin, isin_to_cusip, normalise_ticker
 from .lookthrough import FundRef, Holdings, Line
 from .sources import ishares, nport, spdr
@@ -31,6 +36,10 @@ from .sources.tickerinside_source import fetch_fund
 logger = logging.getLogger(__name__)
 
 SOURCES = ("issuer", "tickerinside", "nport", "top_holdings")
+
+SERIES_RE = re.compile(r"^S\d{9}$")
+ISSUER_ID_RE = re.compile(r"^(ishares|spdr)-([a-z]+):(.+)$", re.I)
+NPORT_DATASETS_URL = "https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets"
 
 
 class DataProviders:
@@ -47,7 +56,14 @@ class DataProviders:
         issuer_cache_dir: str | None = None,
         cusip_isin: dict[str, tuple[str, str]] | None = None,
         sedol_isin: dict[str, str] | None = None,
+        stop_at_pct: float | None = None,
+        tickerinside_tickers: set[str] | None = None,
     ):
+        """``stop_at_pct`` stops reading further sources once one resolves that
+        much, which spares a universe run the network calls whose answer
+        :func:`~openbasket.lookthrough.choose` would ignore anyway.
+        ``tickerinside_tickers`` limits TickerInside requests to the tickers it
+        lists in its issuer layer."""
         unknown = set(source_order) - set(SOURCES)
         if unknown:
             raise ValueError(f"Unknown sources {sorted(unknown)}; choose from {SOURCES}")
@@ -58,6 +74,12 @@ class DataProviders:
         self.proxies = {k.upper(): v for k, v in (proxies or {}).items()}
         ip = issuer_products if issuer_products is not None else pd.DataFrame(columns=["isin"])
         self.issuer_products = ip.drop_duplicates("isin").set_index("isin")
+        self.issuer_by_id = {
+            issuer_id(r.get("issuer"), r["site"], r["portfolio_id"]): r for r in ip.to_dict("records")
+        }
+        self.stop_at_pct = stop_at_pct
+        self.tickerinside_tickers = {t.upper() for t in tickerinside_tickers} if tickerinside_tickers is not None else None
+        self._fund_holding_index: tuple[dict, dict, list] | None = None
         self.issuer_cache_dir = issuer_cache_dir
         self.cusip_isin = cusip_isin or {}
         self.sedol_isin = sedol_isin or {}
@@ -68,6 +90,10 @@ class DataProviders:
         tickers = fm.dropna(subset=["ticker"])
         self.series_by_ticker = {normalise_ticker(t): s for t, s in zip(tickers["ticker"], tickers["series_id"])}
         self.tickers_by_series = tickers.groupby("series_id")["ticker"].apply(list).to_dict()
+        self.cik_by_series = (
+            fm.dropna(subset=["cik"]).drop_duplicates("series_id").set_index("series_id")["cik"].to_dict()
+            if "cik" in fm else {}
+        )
         self.global_ticker_isin = {
             normalise_ticker(t): i for t, i in zip(ticker_isin_map["ticker"], ticker_isin_map["isin"])
         }
@@ -86,17 +112,33 @@ class DataProviders:
         series_id = self.series_by_ticker.get(normalise_ticker(ticker))
         return self._ref(series_id, ticker.upper(), via, note)
 
-    def _issuer_ref(self, isin: str, via: str = "ishares") -> FundRef | None:
+    def _issuer_ref(self, isin: str) -> FundRef | None:
         if isin not in self.issuer_products.index:
             return None
-        p = self.issuer_products.loc[isin]
-        issuer = p.get("issuer") if isinstance(p.get("issuer"), str) else "ishares"
-        return FundRef(
-            series_id=None, ticker=p["ticker"], name=p["fund_name"], via=issuer,
-            issuer_id=f"{issuer}-{p['site']}:{p['portfolio_id']}",
-        )
+        return self._issuer_ref_from(self.issuer_products.loc[isin].to_dict())
+
+    @staticmethod
+    def _issuer_ref_from(p: dict) -> FundRef:
+        iid = issuer_id(p.get("issuer"), p["site"], p["portfolio_id"])
+        ticker = p.get("ticker") if isinstance(p.get("ticker"), str) else None
+        return FundRef(series_id=None, ticker=ticker, name=p["fund_name"], via=iid.split("-")[0], issuer_id=iid)
+
+    def resolve_ref(self, fund: str) -> FundRef | None:
+        """A fund named by series ID or issuer ID; ``None`` if ``fund`` is neither or is unknown."""
+        fund = fund.strip()
+        if SERIES_RE.match(fund.upper()):
+            sid = fund.upper()
+            return self._ref(sid, None, "series_id") if sid in self.series.index else None
+        m = ISSUER_ID_RE.match(fund)
+        if m:
+            p = self.issuer_by_id.get(issuer_id(m.group(1), m.group(2), m.group(3)))
+            return self._issuer_ref_from(p) if p is not None else None
+        return None
 
     def resolve(self, isin: str) -> FundRef | None:
+        ref = self.resolve_ref(isin)
+        if ref is not None:
+            return ref
         isin = isin.strip().upper()
         ref = self._issuer_ref(isin)
         if ref is not None:
@@ -125,17 +167,47 @@ class DataProviders:
         return None
 
     def _series_from_nport(self, isin: str) -> str | None:
+        """The series whose LEI is the issuer of most holdings with this ISIN (or its CUSIP)."""
+        by_isin, by_cusip, groups = self._fund_holdings()
         cusip = isin_to_cusip(isin)
-        rows = duckdb_rows(
-            self.holdings_rel,
-            "select issuer_lei, count(*) n from rel where (isin = ? or cusip = ?) and issuer_lei is not null "
-            "group by 1 order by n desc",
-            [isin, cusip or ""],
-        )
-        for lei, _ in rows:
-            if lei in self.series_by_lei:
-                return self.series_by_lei[lei]
-        return None
+        hits = set(by_isin.get(isin, ())) | set(by_cusip.get(cusip, ()) if cusip else ())
+        counts: dict[str, int] = {}
+        for g in hits:
+            lei, n = groups[g]
+            counts[lei] = counts.get(lei, 0) + n
+        if not counts:
+            return None
+        return self.series_by_lei[max(counts, key=counts.get)]
+
+    def _fund_holdings(self) -> tuple[dict, dict, list]:
+        """Holdings whose issuer is a fund series, indexed by ISIN and CUSIP.
+
+        Built with one scan of N-PORT; a query per ISIN would scan all of it
+        each time, which a universe run would do thousands of times.
+        """
+        if self._fund_holding_index is None:
+            con = connection()
+            con.register("_series_leis", pd.DataFrame({"lei": list(self.series_by_lei)}, dtype=object))
+            con.register("rel", self.holdings_rel)
+            try:
+                rows = con.execute(
+                    "select isin, cusip, issuer_lei, count(*) from rel "
+                    "where issuer_lei in (select lei from _series_leis) group by all"
+                ).fetchall()
+            finally:
+                con.unregister("rel")
+                con.unregister("_series_leis")
+            by_isin: dict[str, list[int]] = {}
+            by_cusip: dict[str, list[int]] = {}
+            groups = []
+            for i, (isin, cusip, lei, n) in enumerate(rows):
+                groups.append((lei, n))
+                if isin:
+                    by_isin.setdefault(isin, []).append(i)
+                if cusip:
+                    by_cusip.setdefault(cusip, []).append(i)
+            self._fund_holding_index = (by_isin, by_cusip, groups)
+        return self._fund_holding_index
 
     def resolve_line(self, line: Line) -> FundRef | None:
         if line.isin:
@@ -168,13 +240,16 @@ class DataProviders:
             issuer_name=issuer, issuer_lei=lei, title=title, cusip=cusip, ticker=ticker,
             asset_class=nport.ASSET_CLASS.get(cat, cat), isin_source=src,
         )
-        return Holdings("security_master", None, [line], source_ref=f"held in {n} N-PORT positions")
+        return Holdings("security_master", None, [line], source_ref=f"held in {n} N-PORT positions",
+                        source_url=NPORT_DATASETS_URL)
 
     # -- holdings -----------------------------------------------------------
 
     def holdings(self, ref: FundRef) -> list[Holdings]:
         out = []
         for source in self.source_order:
+            if self.stop_at_pct is not None and out and out[-1].resolved_pct >= self.stop_at_pct:
+                break
             h = None
             if source == "issuer" and ref.issuer_id:
                 h = self._from_issuer(ref.issuer_id)
@@ -193,7 +268,11 @@ class DataProviders:
             return self._from_spdr(issuer_id)
         return self._from_ishares(issuer_id)
 
-    @lru_cache(maxsize=None)
+    def _product_page(self, iid: str) -> str | None:
+        page = (self.issuer_by_id.get(iid) or {}).get("product_page_url")
+        return page if isinstance(page, str) and page else None
+
+    @lru_cache(maxsize=256)
     def _from_spdr(self, issuer_id: str) -> Holdings | None:
         site, portfolio_id = issuer_id.removeprefix("spdr-").split(":")
         match = self.issuer_products[
@@ -223,7 +302,8 @@ class DataProviders:
                     fund_hint="MONEY MARKET" in name.upper() or " ETF" in name.upper(),
                 )
             )
-        return Holdings("spdr", got.as_of, lines, source_ref=f"SPDR holdings {got.url}")
+        return Holdings("spdr", got.as_of, lines, source_ref=f"SPDR holdings {got.url}",
+                        source_url=self._product_page(issuer_id) or got.url)
 
     def _issuer_isins(self, ids: list[tuple[str | None, str | None, str | None]]) -> list[tuple[str | None, str | None]]:
         """ISIN and how it was found for each ``(isin, cusip, sedol)`` of an issuer file.
@@ -252,7 +332,7 @@ class DataProviders:
             return derived, "derived_cusip"
         return None, None
 
-    @lru_cache(maxsize=None)
+    @lru_cache(maxsize=256)
     def _from_ishares(self, issuer_id: str) -> Holdings | None:
         site, portfolio_id = issuer_id.removeprefix("ishares-").split(":")
         try:
@@ -278,10 +358,12 @@ class DataProviders:
             )
             for r, (isin, how) in zip(records, found)
         ]
-        return Holdings("ishares", got.as_of, lines, source_ref=f"iShares holdings {got.url}")
+        return Holdings("ishares", got.as_of, lines, source_ref=f"iShares holdings {got.url}",
+                        source_url=self._product_page(issuer_id) or got.url)
 
-    @lru_cache(maxsize=None)
+    @lru_cache(maxsize=1024)
     def _nport_lines(self, series_id: str) -> tuple[pd.DataFrame, str | None]:
+        # nport_holdings is sorted by series_id, so DuckDB reads only the row groups that hold it.
         df = self.holdings_rel.filter(f"series_id = '{series_id}'").df()
         df = df.astype(object).where(df.notna(), None)
         as_of = pd.Timestamp(df["report_date"].iloc[0]).date().isoformat() if len(df) else None
@@ -308,14 +390,20 @@ class DataProviders:
             for r in df.itertuples(index=False)
         ]
         accession = df["accession_number"].iloc[0]
-        return Holdings("nport", as_of, lines, source_ref=f"SEC Form N-PORT {accession}")
+        return Holdings("nport", as_of, lines, source_ref=f"SEC Form N-PORT {accession}",
+                        source_url=edgar_url(series_id, accession, self.cik_by_series.get(series_id)))
 
-    @lru_cache(maxsize=None)
+    @lru_cache(maxsize=4096)
     def _tickerinside(self, ticker: str | None):
-        return fetch_fund(ticker) if ticker else None
+        if not ticker or (self.tickerinside_tickers is not None and ticker.upper() not in self.tickerinside_tickers):
+            return None
+        return fetch_fund(ticker)
 
     def _from_tickerinside(self, ref: FundRef) -> Holdings | None:
-        tickers = [ref.ticker] if ref.ticker else []
+        # Issuer tickers outside the US are local codes that can collide with
+        # a different US fund's ticker on TickerInside.
+        us_listed = not ref.issuer_id or ref.issuer_id.split(":")[0].endswith("-us")
+        tickers = [ref.ticker] if ref.ticker and us_listed else []
         tickers += [t for t in self.tickers_by_series.get(ref.series_id, []) if t not in tickers][:3]
         for t in tickers:
             f = self._tickerinside(t)
@@ -334,7 +422,7 @@ class DataProviders:
             for l in lines:
                 if l.isin:
                     l.name = names.get(l.isin)
-            return Holdings("tickerinside", f.as_of, lines, source_ref=f.cite_as)
+            return Holdings("tickerinside", f.as_of, lines, source_ref=f.cite_as, source_url=f.page_url)
         return None
 
     def _ticker_isin_for(self, series_id: str | None) -> dict[str, str]:
@@ -360,10 +448,21 @@ class DataProviders:
         return dict(zip(df["isin"], df["issuer_name"]))
 
 
+def issuer_id(issuer: str | None, site: str, portfolio_id: object) -> str:
+    """``ishares-uk:253743`` style ID of an issuer fund; lists without an issuer column are iShares."""
+    issuer = issuer if isinstance(issuer, str) and issuer else "ishares"
+    return f"{issuer.lower()}-{str(site).lower()}:{portfolio_id}"
+
+
+def edgar_url(series_id: str, accession: str | None, cik: str | None) -> str:
+    """The filing's EDGAR folder when the registrant's CIK is known, else the series' N-PORT filings."""
+    if cik and accession and str(cik).isdigit():
+        return f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accession.replace('-', '')}/"
+    return f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={series_id}&type=NPORT-P"
+
+
 def duckdb_rows(rel: duckdb.DuckDBPyRelation, sql: str, params: list) -> list[tuple]:
     """Run ``sql`` against ``rel`` (named ``rel``) with positional parameters."""
-    from .datasets import connection
-
     con = connection()
     con.register("rel", rel)
     try:

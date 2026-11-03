@@ -34,3 +34,77 @@ lookthrough:
   #     ticker: IVV
   #     note: "swap-based; physical S&P 500 ETF as a stand-in"
   proxies: {}
+
+universe:
+  # Which fund lists to run: ishares, spdr, nport. A US ETF that is both an
+  # issuer fund and an N-PORT series counts as the issuer's.
+  sources: [ishares, spdr, nport]
+  # Quick runs: only these fund ids or series IDs, `sample` funds per source
+  # (seeded), then the first `limit`. null runs everything.
+  #   kedro run --pipeline=universe --params=universe.sample=15
+  ids: []
+  sample: null
+  seed: 0
+  limit: null
+  # Stop reading sources for a fund once one resolves lookthrough.min_resolved_pct.
+  stop_early: true
+  # Ask TickerInside only for tickers in its issuer layer (one list download).
+  tickerinside_prefilter: true
+  log_every: 100
+  openfigi_save_every: 500
+  rows_per_part: 500000
+  work_dir: data/07_model_output/universe_parts
+  issuers:
+    ishares: iShares
+    spdr: SPDR
+  http:
+    # Minimum seconds between two requests to the same host.
+    default_interval_s: 1.0
+    per_host_interval_s:
+      tickerinside.com: 0.25
+
+publish:
+  # The scheduled build passes the tag: --params=publish.release_tag=2026-11.
+  # null uses the current UTC year and month.
+  release_tag: null
+  repo: omaxim/openbasket
+  site_dir: build/site
+  release_dir: build/release
+  max_constituents: 1000
+  # If api/v1 comes out larger, fund files are cut further (never below
+  # min_constituents) and the cut is logged and put in the quality report.
+  site_budget_mb: 800
+  min_constituents: 50
+  # Every source a published row can come from. Each fund file credits the
+  # sources its rows came from; meta.json lists them all.
+  sources:
+    ishares:
+      name: iShares (BlackRock) fund holdings
+      url: https://www.ishares.com/
+      licence: Public website data; terms not reviewed
+      credit: Holdings data from iShares by BlackRock
+    spdr:
+      name: SPDR (State Street) daily fund holdings
+      url: https://www.ssga.com/
+      licence: Public website data; terms not reviewed
+      credit: Holdings data from SPDR ETFs by State Street Global Advisors
+    tickerinside:
+      name: TickerInside
+      url: https://tickerinside.com/
+      licence: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+      credit: TickerInside (https://tickerinside.com/), CC BY 4.0
+    nport:
+      name: SEC Form N-PORT
+      url: https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets
+      licence: Public US government data
+      credit: Holdings from SEC Form N-PORT filings, U.S. Securities and Exchange Commission
+    security_master:
+      name: Security master built from SEC Form N-PORT
+      url: https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets
+      licence: Public US government data
+      credit: Security details from SEC Form N-PORT filings, U.S. Securities and Exchange Commission
+    openfigi:
+      name: OpenFIGI
+      url: https://www.openfigi.com/
+      licence: OpenFIGI API terms; terms not reviewed
+      credit: Names and security types from OpenFIGI

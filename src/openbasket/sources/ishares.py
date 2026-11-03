@@ -36,6 +36,7 @@ import pandas as pd
 import requests
 
 from ..identifiers import cusip_to_isin
+from ..throttle import THROTTLE
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,7 @@ class IssuerHoldings:
 
 def _get(url: str, params: dict, timeout: int = 60) -> requests.Response:
     for attempt in range(4):
+        THROTTLE.wait(url)
         r = requests.get(url, params=params, headers={"User-Agent": USER_AGENT}, timeout=timeout)
         if r.status_code in (429, 502, 503, 504):
             time.sleep(2 * (attempt + 1))
@@ -160,7 +162,11 @@ def _column(dp: dict) -> object:
 
 def parse_holdings(payload: dict) -> tuple[str | None, pd.DataFrame]:
     """Turn a ``component=holdings`` response into ``(as_of, DataFrame)``."""
-    container = payload["componentsByNameMap"]["holdings"]["containersByNameMap"]["all"]
+    containers = payload["componentsByNameMap"]["holdings"]["containersByNameMap"]
+    if "all" not in containers:
+        # Some funds (index mutual funds among them) publish only their ten largest lines.
+        raise ValueError(f"no full holdings table, only {sorted(containers)}")
+    container = containers["all"]
     cols = {k: _column(v) for k, v in container["dataPointsByNameMap"].items()}
     as_of = cols.pop("asOfDate", None)
     cols.pop("dateList", None)
@@ -206,6 +212,5 @@ def holdings(portfolio_id: str, site: str = "uk", cache_dir: str | Path | None =
         if cache is not None:
             cache.parent.mkdir(parents=True, exist_ok=True)
             cache.write_text(json.dumps(payload))
-        time.sleep(0.5)
     as_of, df = parse_holdings(payload)
     return IssuerHoldings(as_of, df, requests.Request("GET", url, params=params).prepare().url)

@@ -42,7 +42,7 @@ import pandas as pd
 
 from ... import http
 from ...identifiers import cusip_to_isin, is_valid_cusip, is_valid_isin
-from . import HOLDING_COLUMNS, PRODUCT_COLUMNS, FetchContext, IssuerAdapter, IssuerHoldings, register
+from . import HOLDING_COLUMNS, LOCAL_ONLY, PRODUCT_COLUMNS, FetchContext, IssuerAdapter, IssuerHoldings, register
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,15 @@ UCITS_SITES = ("gb", "ch", "de", "nl", "it", "lu", "fr", "es", "at", "se")
 US_SITE = "us"
 LOCALES = {"gb": "en-GB", "ch": "en-CH", "de": "en-DE", "nl": "en-NL", "it": "en-IT", "lu": "en-LU",
            "fr": "en-FR", "es": "en-ES", "at": "en-AT", "se": "en-SE", "us": "en-US"}
+
+#: Language of the human product pages per site. Most sites have an English
+#: page; de, at, it, fr and es do not (``/de/en/...`` is a 404, ``/de/de/...``
+#: works, checked 2026-11-03). The holdings URL keeps its ``en-<CC>`` locale.
+PAGE_LANGUAGES = {"de": "de", "at": "de", "it": "it", "fr": "fr", "es": "es"}
+
+#: Sums of US weights outside this band get a note: they are what J.P. Morgan
+#: publishes, but readers should know why so much is unresolved.
+WEIGHT_SUM_BAND = (95.0, 105.0)
 
 DOMICILES = {"Ireland": "IE", "Luxembourg": "LU", "United States": "US"}
 
@@ -81,7 +90,8 @@ def _slug(text: str) -> str:
 
 def _product_page(site: str, share_class_name: str | None, identifier: str) -> str:
     slug = _slug(share_class_name or "fund")
-    return f"{HOST}/{site}/en/asset-management/adv/products/{slug}-{identifier.lower()}"
+    lang = PAGE_LANGUAGES.get(site, "en")
+    return f"{HOST}/{site}/{lang}/asset-management/adv/products/{slug}-{identifier.lower()}"
 
 
 def ucits_holdings_url(isin: str, site: str) -> str:
@@ -153,6 +163,36 @@ def _clean(v: object) -> str | None:
         return None
     s = str(v).strip()
     return None if s in ("", "-", "nan", "N/A") else s
+
+
+#: Active ISO 4217 currency codes (fund, metal and testing codes left out).
+ISO_CURRENCIES = frozenset(
+    """AED AFN ALL AMD ANG AOA ARS AUD AWG AZN BAM BBD BDT BGN BHD BIF BMD BND BOB BRL BSD BTN BWP BYN
+    BZD CAD CDF CHF CLP CNY COP CRC CUP CVE CZK DJF DKK DOP DZD EGP ERN ETB EUR FJD FKP GBP GEL GHS GIP
+    GMD GNF GTQ GYD HKD HNL HTG HUF IDR ILS INR IQD IRR ISK JMD JOD JPY KES KGS KHR KMF KPW KRW KWD KYD
+    KZT LAK LBP LKR LRD LSL LYD MAD MDL MGA MKD MMK MNT MOP MRU MUR MVR MWK MXN MYR MZN NAD NGN NIO NOK
+    NPR NZD OMR PAB PEN PGK PHP PKR PLN PYG QAR RON RSD RUB RWF SAR SBD SCR SDG SEK SGD SHP SLE SOS SRD
+    SSP STN SVC SYP SZL THB TJS TMT TND TOP TRY TTD TWD TZS UAH UGX USD UYU UZS VES VND VUV WST XAF XCD
+    XCG XOF XPF YER ZAR ZMW ZWG CNH""".split()
+)
+
+
+def normalise_currency(code: object) -> str | None:
+    """An ISO 4217 code, or ``None``.
+
+    US files use internal pseudo codes for collateral and futures margin
+    (``CCC``, ``USQ``, ``EUQ``, ``JPQ``). A code ending in ``Q`` is mapped to
+    the one ISO currency that starts with the same two letters (``USQ`` to
+    ``USD``, ``EUQ`` to ``EUR``); anything else that is not ISO is dropped.
+    """
+    s = (_clean(code) or "").upper()
+    if s in ISO_CURRENCIES:
+        return s
+    if len(s) == 3 and s.endswith("Q"):
+        matches = [c for c in ISO_CURRENCIES if c[:2] == s[:2] and c != "CNH"]
+        if len(matches) == 1:
+            return matches[0]
+    return None
 
 
 _SEDOL_WEIGHTS = (1, 3, 1, 7, 3, 9)
@@ -270,7 +310,7 @@ def parse_us_product_data(payload: dict) -> tuple[str | None, pd.DataFrame]:
                 "name": _clean(r.get("securityDescription")),
                 "weight_pct": r.get("netAssetValuePercent"),
                 "asset_class": asset_class,
-                "currency": _clean(r.get("currencyCode")),
+                "currency": normalise_currency(r.get("currencyCode")),
                 "country": _clean(r.get("country")),
             }
         )
@@ -309,6 +349,12 @@ def holdings(product: dict, ctx: FetchContext | None = None) -> IssuerHoldings:
                 cache.parent.mkdir(parents=True, exist_ok=True)
                 cache.write_text(json.dumps(_trim_product_data(payload)))
         notes = ["Weights are percent of net assets as published, rounded to two decimals."]
+        total = float(df["weight_pct"].sum(skipna=True))
+        if not WEIGHT_SUM_BAND[0] <= total <= WEIGHT_SUM_BAND[1]:
+            notes.append(
+                f"The published weights sum to {total:.2f}% of net assets. J.P. Morgan lists some positions "
+                "(for example commodity futures) at 0% of net assets, so the rest stays unresolved."
+            )
     else:
         if cache is not None and cache.exists():
             as_of, df = parse_ucits_workbook(cache.read_bytes())
@@ -335,11 +381,13 @@ ADAPTER = register(
         licence=(
             "Public data from J.P. Morgan Asset Management's fund pages, which mark the holdings report as "
             "unofficial and for information only. The site's terms of use have not been reviewed for "
-            "automated or bulk use; the client fetches each fund at most once a day at one request per second."
+            "automated or bulk use; the client fetches each fund at most once a day at one request per second. "
+            "Read locally only: the holdings are never republished by the public build."
         ),
         regions=("IE", "EU", "CH", "GB", "US"),
         products=products,
         holdings=holdings,
         frequency="daily",
+        redistribution=LOCAL_ONLY,
     )
 )

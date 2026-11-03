@@ -12,6 +12,14 @@ Both come from `https://am.jpmorgan.com/FundsMarketingHandler/`. No login,
 cookie or consent step is involved, and `robots.txt` does not disallow these
 paths. Holdings are updated **daily**.
 
+**Redistribution: local only.** J.P. Morgan's terms of use have not been cleared for republication. So the adapter is registered with
+`redistribution="local_only"`: openbasket reads J.P. Morgan holdings only for the
+person running it. Under the publishing policy the public build does not
+fetch this source, and none of its rows go to the openbasket site, API or
+releases. A fund that only this source covers is listed there without
+constituents, with a note that its holdings are available when you run
+openbasket yourself. See [Adding a source](adding-a-source.md).
+
 ## Coverage
 
 Real run on 3 November 2026:
@@ -82,8 +90,13 @@ US holdings
   description only), so the JSON is used instead.
 
 Product page (the source link shown for each row)
-: `https://am.jpmorgan.com/<cc>/en/asset-management/adv/products/<slug of share-class name>-<identifier>`,
+: `https://am.jpmorgan.com/<cc>/<lang>/asset-management/adv/products/<slug of share-class name>-<identifier>`,
   for example `.../gb/en/asset-management/adv/products/jpm-ac-asia-pacific-ex-japan-research-enhanced-index-equity-active-ucits-etf-usd-acc-ie00bmdv7354`.
+  `<lang>` is `en` on most sites, but the `de`, `at`, `it`, `fr` and `es`
+  sites have no English pages: `/de/en/...` returns HTTP 404 and
+  `/de/de/...` returns the page (checked 3 November 2026). So those sites
+  link to `/de/de/`, `/at/de/`, `/it/it/`, `/fr/fr/` and `/es/es/`. The
+  holdings URL keeps its `en-<CC>` locale, which works on every site.
 
 ## How a fund ISIN reaches its holdings
 
@@ -107,11 +120,16 @@ Product page (the source link shown for each row)
   column (`SPXW  261125C07825000`), which fails the check digit and becomes
   `None`.
 - **US:** `netAssetValuePercent` is already in percent, **rounded to two
-  decimals**, so sums run a little off 100% (JEPI 100.33%). Lines carry no
+  decimals**, so sums usually run a little off 100% (JEPI 100.33%), and a
+  few funds are far off (see Known gaps). Lines carry no
   ISIN. The CUSIP goes to `cusip` and a SEDOL to `sedol` (both are
   check-digit validated), and the shared providers map them to ISINs
   through N-PORT. Tickers are kept for shares and funds only, because bond
-  lines carry the issuer's ticker (`T`, `FNMA`).
+  lines carry the issuer's ticker (`T`, `FNMA`). US files also use internal
+  pseudo currency codes for collateral and futures margin (`CCC`, `USQ`,
+  `EUQ`, `JPQ`). A code ending in `Q` becomes the one ISO 4217 currency with
+  the same first two letters (`USQ` to `USD`, `EUQ` to `EUR`); any other
+  code that is not ISO 4217 becomes `None`.
 - Asset classes are normalised from J.P. Morgan's labels (`Common Stock`,
   `Corp - Global Bond`, `Mtge - MBS 30yr`, `Option - Index`, `TREASURY NOTES`,
   `Equity Linked Notes`, ...) to `equity`, `debt`, `cash`, `money market`,
@@ -132,6 +150,13 @@ Product page (the source link shown for each row)
 `products()` took 10 to 18 seconds for the 11 country lists. A cached
 `holdings()` call takes under 0.1 s.
 
+After the fixes (same day): JPM Global Government Bond Active UCITS ETF SEK
+Hedged (acc), IE000PYFQ9I0 (`de` site): 528 lines, 100.00%, 99.71% with an
+ISIN, as of 2026-11-02, 1.1 s; its product page
+`.../de/de/asset-management/adv/products/...-ie000pyfq9i0` answers HTTP 200.
+JPMorgan Managed Futures Plus ETF (JPFP): 679 lines, 80.80%, with the
+weight-sum note, and only ISO currency codes left.
+
 What has no identifier: cash (0.08% to 3.7% in UCITS files), futures and
 options, and in JEPI the 15 equity-linked notes (`SPX_7` to `SPX_21`, 13.63%
 of net assets), which carry the fund's option income and have only an
@@ -141,8 +166,21 @@ internal code.
 
 - **Hedged share classes** report the portfolio's holdings. The currency
   forwards of the share-class hedge are not listed.
-- **Futures** in UCITS files show a small market value, not their notional
-  exposure (`F/C US 10YR ULTRA FUT DEC26`, 0.024%).
+- **Futures** in UCITS files are not shown the same way in every fund. Some
+  show a small market value (`F/C US 10YR ULTRA FUT DEC26`, 0.024%). Others
+  show near-notional weights as large offsetting legs: in IE000PYFQ9I0,
+  `F/C ICE 3MTH SONIA FU DEC26` is +9.41% and the SEP26 contract −9.39%.
+  Futures can also carry exchange ISINs that pass the check digit
+  (`GB00JBVNLX64`), so they count towards weight with an ISIN. Downstream
+  code should go by `asset_class` `derivative (futures)`, not by whether a
+  line has an ISIN.
+- **Some US funds sum far below 100%.** JPMorgan Managed Futures Plus ETF
+  (JPFP, US46654Q5264) sums to 80.80% on 2 November 2026: its 37 commodity
+  futures lines carry 0.00% of net assets (their market value is 3.24%),
+  and J.P. Morgan's own workbook shows the same 80.80%. The adapter passes
+  the weights through as published, and `holdings()` adds a note when a US
+  fund's weights sum to less than 95% or more than 105%, so the gap shows as
+  unresolved with a reason.
 - **Equity-linked notes** (US premium-income funds) cannot be looked through.
   `fundHoldingElnData` gives delta and gamma, but no underlying ISIN.
 - **US weights** are rounded to two decimals.
@@ -157,7 +195,7 @@ daily ETF holdings." The workbooks call themselves an "unofficial report"
 for information only, and J.P. Morgan accepts no liability for errors in
 it. The site's terms of use have not been reviewed for automated or bulk
 use. The adapter fetches each fund at most once a day, at one request per
-second.
+second. It is registered with `redistribution="local_only"`.
 
 ## Example
 

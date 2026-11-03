@@ -64,6 +64,41 @@ def test_registered():
     adapter = discover()["jpmorgan"]
     assert adapter.frequency == "daily"
     assert adapter.credit and adapter.licence
+    assert adapter.redistribution == "local_only"
+
+
+def test_product_page_language_follows_site():
+    # The de, at, it, fr and es sites have no English product pages (/de/en/... is a 404).
+    assert jpmorgan._product_page("de", "JPM Example UCITS ETF", "IE000PYFQ9I0") == (
+        "https://am.jpmorgan.com/de/de/asset-management/adv/products/jpm-example-ucits-etf-ie000pyfq9i0")
+    assert "/at/de/" in jpmorgan._product_page("at", "x", "IE000PYFQ9I0")
+    assert "/it/it/" in jpmorgan._product_page("it", "x", "IE000PYFQ9I0")
+    assert "/gb/en/" in jpmorgan._product_page("gb", "x", "IE000PYFQ9I0")
+    assert "/se/en/" in jpmorgan._product_page("se", "x", "IE000PYFQ9I0")
+    # The holdings file keeps its English locale.
+    assert "locale=en-DE" in jpmorgan.ucits_holdings_url("IE000PYFQ9I0", "de")
+
+
+def test_currency_pseudo_codes():
+    assert jpmorgan.normalise_currency("USD") == "USD"
+    assert jpmorgan.normalise_currency("USQ") == "USD"
+    assert jpmorgan.normalise_currency("EUQ") == "EUR"
+    assert jpmorgan.normalise_currency("JPQ") == "JPY"
+    assert jpmorgan.normalise_currency("CCC") is None
+    assert jpmorgan.normalise_currency(None) is None
+
+
+def test_us_weight_sum_far_from_100_gets_a_note(monkeypatch):
+    payload = {"fundData": {"dailyHoldingsAll": {"effectiveDate": "2026-11-02", "data": [
+        {"securityId": "037833100", "securityDescription": "APPLE INC", "securityType": "Common Stock",
+         "netAssetValuePercent": 80.8, "currencyCode": "USD"},
+        {"securityId": "XX1", "securityDescription": "COMMODITY FUTURE", "securityType": "Commodity Futures",
+         "netAssetValuePercent": 0.0, "currencyCode": "USQ"},
+    ]}}}
+    monkeypatch.setattr(jpmorgan.http, "get", lambda url, **kw: FakeResponse(json.dumps(payload).encode(), "application/json"))
+    h = jpmorgan.holdings({"isin": "US46641Q3323", "site": "us", "holdings_url": None})
+    assert any("sum to 80.80%" in n for n in h.notes)
+    assert h.holdings["currency"].tolist() == ["USD", "USD"]
 
 
 def test_products_merges_country_sites(fake_site):

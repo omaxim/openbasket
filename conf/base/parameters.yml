@@ -10,19 +10,25 @@ nport:
   overwrite: false
 
 issuers:
-  # iShares regional sites whose fund lists are downloaded by `ingest`.
-  ishares_sites: [uk, us]
+  # iShares regional sites the `ishares` adapter reads, in order of preference
+  # for a share class several sites list. A site that fails is skipped; only
+  # funds with full holdings are kept. [] reads none.
+  ishares_sites: [uk, ch, us, de, nl, it, se, dk, no, fi, fr, es, latam, hk, sg, jp, au, ca, mx, br, co]
   # SPDR fund finders: "us" (US ETFs, including SPY and DIA) and "emea" (UCITS).
   spdr_regions: [us, emea]
   # Issuer adapters registered in openbasket.sources.issuers are used by
   # `ingest` (their fund lists join issuer_products) and by the look-through
   # (their holdings files). null uses every registered adapter; a list uses
-  # only those. `disabled` drops some either way.
+  # only those. `disabled` drops some either way. Adapters whose terms forbid
+  # automated access are off unless named here (e.g. in conf/local).
   enabled: null
   disabled: []
+  # Keyword arguments for an adapter's products(), by adapter name, e.g.
+  #   first_trust: {limit: 20}
+  options: {}
 
 lookthrough:
-  # Holdings sources in priority order. "issuer" is iShares and SPDR;
+  # Holdings sources in priority order. "issuer" is SPDR and every enabled issuer adapter;
   # "top_holdings" is a placeholder and is skipped.
   source_order: [issuer, tickerinside, nport, top_holdings]
   # Take the first source that resolves at least this much weight to ISINs;

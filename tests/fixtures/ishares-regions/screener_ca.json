@@ -1,0 +1,39 @@
+{
+ "data": {
+  "tableData": {
+   "columns": [
+    {
+     "name": "portfolioId"
+    },
+    {
+     "name": "fundName"
+    },
+    {
+     "name": "localExchangeTicker"
+    },
+    {
+     "name": "aladdinAssetClass"
+    },
+    {
+     "name": "productView"
+    },
+    {
+     "name": "productPageUrl"
+    }
+   ],
+   "data": [
+    [
+     900040,
+     "iShares Example Canada Bond Index ETF",
+     "XCB",
+     "Fixed Income",
+     [
+      "all",
+      "ishares"
+     ],
+     "/ca/investors/en/products/900040/example-canada"
+    ]
+   ]
+  }
+ }
+}

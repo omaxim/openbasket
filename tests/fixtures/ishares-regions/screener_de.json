@@ -1,0 +1,24 @@
+{
+ "900003": {
+  "portfolioId": 900003,
+  "isin": "IE00000000C8",
+  "fundName": "iShares Example 500 Swap UCITS ETF",
+  "productType": "ISHARES_FUND_DATA",
+  "domicile": "Irland",
+  "aladdinAssetClass": "Aktien",
+  "aladdinAssetClassCode": "43511",
+  "localExchangeTicker": "EXSW",
+  "productPageUrl": "/de/privatanleger/de/produkte/900003/example-swap"
+ },
+ "900005": {
+  "portfolioId": 900005,
+  "isin": "IE00000000D6",
+  "fundName": "iShares Example Euro Govt Bond UCITS ETF",
+  "productType": "ISHARES_FUND_DATA",
+  "domicile": "Irland",
+  "aladdinAssetClass": "Anleihen",
+  "localExchangeTicker": "EXGB",
+  "seriesBaseCurrencyCode": "EUR",
+  "productPageUrl": "/de/privatanleger/de/produkte/900005/example-govt"
+ }
+}

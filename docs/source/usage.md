@@ -77,6 +77,13 @@ mapping its ISINs through OpenFIGI; results are cached in
 `lookthrough.issuer_cache_dir`
 : Where issuer responses are cached, one file per fund per day.
 
+`publish.mode`
+: `full` (the default here): every enabled source is read, issuer websites
+  included, for your own use. `conf/public` sets `public`, which the GitHub
+  Action uses: sources whose terms restrict republication are never read
+  and their funds are listed without holdings (see {doc}`running-locally`).
+  Run the public build with `--env public` on every pipeline.
+
 ## Tests and docs
 
 ```bash

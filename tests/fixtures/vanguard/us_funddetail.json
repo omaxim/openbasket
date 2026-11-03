@@ -1,0 +1,15 @@
+{
+  "size": 2,
+  "fund": {
+    "entity": [
+      {"type": "priceMonthEndPerformance", "profile": {
+        "fundId": "3141", "ticker": "VT", "cusip": "922042742", "longName": "Vanguard Total World Stock ETF",
+        "style": "Stock Funds", "isETF": true, "isMutualFund": false,
+        "associatedFundIds": {"admiralFundId": "0628", "etfFundId": "3141"}}},
+      {"type": "priceMonthEndPerformance", "profile": {
+        "fundId": "0628", "ticker": "VTWAX", "cusip": "922042718", "longName": "Vanguard Total World Stock Index Fund Admiral Shares",
+        "style": "Stock Funds", "isETF": false, "isMutualFund": true,
+        "associatedFundIds": {"admiralFundId": "0628", "etfFundId": "3141"}}}
+    ]
+  }
+}

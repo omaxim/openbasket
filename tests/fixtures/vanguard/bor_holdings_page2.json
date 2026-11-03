@@ -1,0 +1,23 @@
+{
+  "borHoldings": [
+    {"portId": "9679", "holdings": {
+      "totalHoldings": 7,
+      "lastItemKey": null,
+      "items": [
+        {"issuerName": "CME E-Mini Standard & Poor's 500 Index Future", "securityLongDescription": "S&P500 EMINI FUT  Dec26",
+         "securityShortDescription": "S&P500 EMINI FUT  Dec26", "isin": null, "sedol1": null, "cusip": null, "ticker": "ESZ6",
+         "securityType": "DE.IND", "marketValuePercentage": 0.1, "quantity": 10, "effectiveDate": "2026-09-30",
+         "couponRate": null, "maturityDate": null},
+        {"issuerName": null, "securityLongDescription": "USD/EUR FWD 20261216", "securityShortDescription": "USD/EUR FWD 20261216",
+         "isin": null, "sedol1": null, "cusip": null, "ticker": "USD", "securityType": "CT.FOREX",
+         "marketValuePercentage": -0.02, "quantity": 100, "effectiveDate": "2026-09-30", "couponRate": null, "maturityDate": "2026-12-16"},
+        {"issuerName": "Vanguard CMT Funds-Vanguard Market Liquidity Fund", "securityLongDescription": "MKTLIQ",
+         "securityShortDescription": "MKTLIQ", "isin": "NOTANISIN01", "sedol1": null, "cusip": "CMT001142", "ticker": null,
+         "securityType": "MM.CASH", "marketValuePercentage": 9.29655, "quantity": 5, "effectiveDate": "2026-09-30",
+         "couponRate": 4.1, "maturityDate": "2999-12-31"},
+        {"issuerName": null, "securityLongDescription": "Euro", "securityShortDescription": "Euro", "isin": null, "sedol1": null,
+         "cusip": null, "ticker": "EUR", "securityType": "CRNY", "marketValuePercentage": 0.0, "quantity": 1,
+         "effectiveDate": "2026-09-30", "couponRate": null, "maturityDate": null}
+      ]}}
+  ]
+}

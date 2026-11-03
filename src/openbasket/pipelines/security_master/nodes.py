@@ -33,7 +33,7 @@ def cusip_isin_map(nport_positions: duckdb.DuckDBPyRelation) -> duckdb.DuckDBPyR
     con = connection()
     positions = nport_positions  # noqa: F841 - read by DuckDB below
     placeholder = PLACEHOLDER_CUSIP_SQL
-    reported = con.sql(
+    reported = con.sql(  # noqa: F841 - read by DuckDB below
         f"""
         select cusip, reported_isin as isin, 'reported_for_cusip' as isin_source
         from (select cusip, reported_isin, count(*) n from positions

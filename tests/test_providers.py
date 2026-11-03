@@ -5,7 +5,7 @@ import pytest
 import requests
 
 from openbasket.datasets import connection
-from openbasket.lookthrough import FundRef, Holdings, Line, look_through
+from openbasket.lookthrough import FundRef, Line, look_through
 from openbasket.providers import DataProviders
 from openbasket.sources import ishares
 

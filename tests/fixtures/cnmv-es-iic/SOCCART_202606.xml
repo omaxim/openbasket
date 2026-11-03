@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<SocCart xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="SocCart.xsd">
+  <FechaDatos>202606</FechaDatos>
+  <Entidad>
+    <Tipo>SICAV</Tipo>
+    <NumeroRegistro>201</NumeroRegistro>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <InversionesFinancieras>
+        <ClaseIF>INTERIOR</ClaseIF>
+        <DescripcionIF>IIC</DescripcionIF>
+        <CodigoISIN>ES0900000011</CodigoISIN>
+        <DescripcionValor>FONDO|EJEMPLO INDICE ETF</DescripcionValor>
+        <Divisa>EUR</Divisa>
+        <ValorMercado>1000000.00</ValorMercado>
+      </InversionesFinancieras>
+      <InversionesFinancieras>
+        <ClaseIF>EXTERIOR</ClaseIF>
+        <DescripcionIF>Renta Variable Cotizada</DescripcionIF>
+        <CodigoISIN>DE00000000E5</CodigoISIN>
+        <DescripcionValor>ACCIONES|EMPRESA ALEMANA AG</DescripcionValor>
+        <Divisa>EUR</Divisa>
+        <ValorMercado>1900000.00</ValorMercado>
+      </InversionesFinancieras>
+    </Compartimento>
+  </Entidad>
+</SocCart>

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FondDeri xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="FondDeri.xsd">
+  <FechaDatos>202606</FechaDatos>
+  <Entidad>
+    <Tipo>FI</Tipo>
+    <NumeroRegistro>101</NumeroRegistro>
+    <CodigoDivisaIIC>EUR</CodigoDivisaIIC>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <OperativaDerivados>
+        <Descripcion>Otros Derechos</Descripcion>
+        <Subyacente>FUT. INDICE EJEMPLO 09/26</Subyacente>
+        <Instrumento>Futuros comprados</Instrumento>
+        <Importe>30000.00</Importe>
+        <Objetivo>Inversión</Objetivo>
+      </OperativaDerivados>
+    </Compartimento>
+  </Entidad>
+  <Entidad>
+    <Tipo>FI</Tipo>
+    <NumeroRegistro>102</NumeroRegistro>
+    <CodigoDivisaIIC>EUR</CodigoDivisaIIC>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <OperativaDerivados>
+        <Descripcion>Derechos en renta fija</Descripcion>
+        <Subyacente>Tipo de interés</Subyacente>
+        <Instrumento>IRS|TIPO DE INTERES FIJO</Instrumento>
+        <Importe>900000.00</Importe>
+        <Objetivo>Inversión</Objetivo>
+      </OperativaDerivados>
+    </Compartimento>
+  </Entidad>
+  <Entidad>
+    <Tipo>FI</Tipo>
+    <NumeroRegistro>103</NumeroRegistro>
+    <CodigoDivisaIIC>EUR</CodigoDivisaIIC>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <OperativaDerivados>
+        <Descripcion>Otros Derechos</Descripcion>
+        <Subyacente>INDICE EJEMPLO TRS</Subyacente>
+        <Instrumento>Permutas financieras. Derechos a recibir</Instrumento>
+        <Importe>1600000.00</Importe>
+        <Objetivo>Inversión</Objetivo>
+      </OperativaDerivados>
+    </Compartimento>
+  </Entidad>
+</FondDeri>

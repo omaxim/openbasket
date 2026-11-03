@@ -40,13 +40,18 @@ ingest ──► security_master ──► consolidate ──► lookthrough
 
 ## Matching an input ISIN
 
-1. An issuer's fund list (iShares UK and US; SPDR US and UCITS).
-2. A configured proxy.
+1. A configured proxy (it wins over an issuer listing, for swap ETFs).
+2. An issuer's fund list (iShares UK and US; SPDR US and UCITS; every
+   registered issuer adapter).
 3. N-PORT: a holding with this ISIN (or its CUSIP) whose issuer LEI is a fund
-   series' LEI.
+   series' LEI. Placeholder CUSIPs and ISINs reported under more than three
+   issuer LEIs are ignored.
 4. OpenFIGI: the ISIN's US ticker, found in SEC's fund ticker list.
 5. Not a fund: if the ISIN is in the security master it is its own
-   constituent at 100% (a single stock or bond, shown with its issuer).
+   constituent at 100% (a single stock or bond, shown with its issuer). An
+   ISIN the security master lists as a fund (issuer type RF or PF, or a
+   short-term investment vehicle) is reported as a fund with no holdings
+   instead.
 6. Otherwise 100% unresolved.
 
 ## Expanding a fund
@@ -62,7 +67,9 @@ A holding is a fund if its ISIN is in an issuer's fund list, its issuer LEI
 is a series LEI, or (for US listings from TickerInside only) its ticker is in
 SEC's fund ticker list. It is expanded in turn, with its weights multiplied
 by its weight in the parent, up to `max_depth` and never around a cycle.
-Stocks and bonds are end points.
+Stocks and bonds are end points. A sub-fund that cannot be expanded stays a
+row of its own, counted as unexpanded weight, not as resolved. TickerInside
+is asked only for US funds.
 
 ## Status
 
@@ -78,6 +85,10 @@ Done (2026-11-03):
   sub-funds) now come from the issuer instead of TickerInside or N-PORT.
 - SPDR US and UCITS daily holdings, covering SPY and DIA, with CUSIP and
   SEDOL lookups through N-PORT.
+- Universe and publish pipelines, data contract 1.1 (row counts,
+  breakdowns, statuses), issuer adapters used automatically, share classes
+  grouped, failures isolated per input and per source, OpenFIGI optional at
+  run time, placeholder CUSIPs dropped.
 
 Sample results, from 2026 Q3 N-PORT, TickerInside as of 2026-10-27 and
 iShares and SPDR as of 2026-11-02:
@@ -114,4 +125,10 @@ settled. IVV's US equity weights are given to two decimals only.
 5. **Top-holdings fallbacks** (justETF, FT) for UCITS funds with no issuer
    file, clearly marked as partial.
 6. **Swap-based ETFs.** Add proxies for the common ones; the summary already
-   flags them.
+   flags them, and proxies now win over issuer listings.
+7. **Canadian CUSIPs.** A CUSIP with no reported ISIN gets a `CA` prefix when
+   N-PORT's investment country (country of risk) is Canada; most of those
+   are not confirmed by OpenFIGI. Use the country of issue, or OpenFIGI,
+   instead.
+8. **Stale filings.** Flag N-PORT series whose latest report is more than a
+   quarter old.

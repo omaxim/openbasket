@@ -153,7 +153,8 @@ def plausibility(summary: dict, min_resolved_pct: float = 90.0) -> tuple[str, li
 
     ``no_holdings`` when no source had any; ``leveraged`` when the name says
     so (2x, Ultra, Inverse, Bear ...) or the reported lines are more than 50
-    points from 100; ``over_100`` when they are more than 5 points above;
+    points from 100; ``over_100`` when they are more than 5 points above, or
+    when the looked-through constituents are (sub-funds over 100%);
     ``partial`` when they are more than 5 points below or less than
     ``min_resolved_pct`` resolves to securities; else ``ok``.
     """
@@ -171,9 +172,14 @@ def plausibility(summary: dict, min_resolved_pct: float = 90.0) -> tuple[str, li
         notes.append("weights are market values, not exposure, so a leveraged, inverse or derivative-based fund is not shown as it trades")
     if summary.get("unexpanded_fund_pct"):
         notes.append(f"{summary['unexpanded_fund_pct']:.2f}% is in funds that could not be looked through")
+    # Sub-funds whose own lines add up to more than 100 push the look-through over too.
+    looked = resolved + (summary.get("unexpanded_fund_pct") or 0.0)
+    deep_over = looked - 100.0 > OFF_BY and (off is None or off <= OFF_BY)
+    if deep_over:
+        notes.append(f"looked through, the constituents add up to {looked:.2f}% of net assets")
     if LEVERAGED_RE.search(summary.get("fund_name") or "") or (off is not None and abs(off) > FAR_OFF_BY):
         return "leveraged", notes
-    if off is not None and off > OFF_BY:
+    if (off is not None and off > OFF_BY) or deep_over:
         return "over_100", notes
     if (off is not None and off < -OFF_BY) or resolved < min_resolved_pct:
         return "partial", notes

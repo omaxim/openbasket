@@ -146,6 +146,19 @@ def test_plausibility_status(lines, name, status):
         assert "703.95%" in r.summary["note"] and "not exposure" in r.summary["note"]
 
 
+def test_sub_funds_over_100_flag_the_parent():
+    p = FakeProviders(
+        {
+            "TOP": [H("nport", [Line(50, "US0000000010", ticker="BOND"), Line(50, "US0000000001")])],
+            "BOND": [H("nport", [Line(130, "US0000000002"), Line(-30, None, name="USD cash")])],
+        },
+        {"X": "TOP"},
+    )
+    s = look_through("X", p).summary
+    assert s["reported_total_pct"] == pytest.approx(100) and s["resolved_pct"] == pytest.approx(115)
+    assert s["status"] == "over_100" and "add up to 115.00%" in s["note"]
+
+
 def test_unmatched_status_is_no_match():
     assert look_through("US9999999999", FakeProviders({}, {})).summary["status"] == "no_match"
 

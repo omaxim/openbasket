@@ -507,7 +507,8 @@ def source_catalogue(sources_cfg: dict, adapters: dict) -> dict:
     """Name, link, licence and credit of every source: the configured ones, then each adapter's own."""
     out = {k: dict(v) for k, v in (sources_cfg or {}).items()}
     for name, a in adapters.items():
-        out.setdefault(name, {"name": a.title, "url": a.homepage, "licence": a.licence, "credit": a.credit})
+        out.setdefault(name, {"name": a.title, "url": a.homepage, "licence": a.licence, "credit": a.credit,
+                              "listed_by": a.title})
     return out
 
 
@@ -673,7 +674,8 @@ def _with_credit(funds: pd.DataFrame, constituents: duckdb.DuckDBPyRelation, sou
     credits = []
     for fid, top, status in zip(funds["id"], funds["source"], funds["status"]):
         if status == "no_holdings" and not by_fund.get(fid):
-            name = (sources.get(top) or {}).get("name") or top
+            cfg = sources.get(top) or {}
+            name = cfg.get("listed_by") or cfg.get("name") or top
             credits.append(f"Fund listed by {name}; no holdings were available from any source")
             continue
         ids = list(dict.fromkeys([top, *by_fund.get(fid, [])]))

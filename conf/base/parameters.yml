@@ -91,18 +91,22 @@ publish:
   # than this many different issuer names.
   shared_isin_issuers: 20
   # Every source a published row can come from. Each fund file credits the
-  # sources its rows came from; meta.json lists them all.
+  # sources its rows came from; meta.json lists them all. `listed_by` names
+  # the source in the credit of a fund it lists but has no holdings for.
+  # Issuer adapters bring their own entries.
   sources:
     ishares:
       name: iShares (BlackRock) fund holdings
       url: https://www.ishares.com/
       licence: Public website data; terms not reviewed
       credit: Holdings data from iShares by BlackRock
+      listed_by: iShares by BlackRock
     spdr:
       name: SPDR (State Street) daily fund holdings
       url: https://www.ssga.com/
       licence: Public website data; terms not reviewed
       credit: Holdings data from SPDR ETFs by State Street Global Advisors
+      listed_by: SPDR ETFs by State Street Global Advisors
     tickerinside:
       name: TickerInside
       url: https://tickerinside.com/
@@ -113,6 +117,7 @@ publish:
       url: https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets
       licence: Public US government data
       credit: Holdings from SEC Form N-PORT filings, U.S. Securities and Exchange Commission
+      listed_by: SEC Form N-PORT
     security_master:
       name: Security master built from SEC Form N-PORT
       url: https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets

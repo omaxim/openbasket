@@ -55,6 +55,7 @@ grants them. Each row says which source it came from.
 | SEC Form N-PORT and N-MFP | US federal government data, not subject to copyright in the United States; sec.gov says its information may be copied or redistributed without permission | cite the SEC as the source |
 | TickerInside | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | keep TickerInside's credit and say what was changed (openbasket maps tickers to ISINs and takes names from N-PORT) |
 | CNMV (Spain) | CNMV legal notice: reuse, including calculations made from the data, if it is reproduced faithfully | keep names and values as filed; say that weights are calculated; anyone selling it must tell buyers it is free on cnmv.es |
+| CMVM (Portugal) | official regulator publication; no licence stated; reused as public sector information under Lei 26/2016 | cite CMVM; keep names and values as filed; say that weights are calculated |
 | ESMA FIRDS | ESMA legal notice: reproduction authorised if the source is acknowledged | credit ESMA and say the material was drafted using data downloaded from ESMA's website, which does not endorse it |
 | GLEIF | CC0 1.0 | none (credit is appreciated) |
 | ECB eligible assets | ECB copyright notice: reproduction permitted if the source is acknowledged | credit the ECB |

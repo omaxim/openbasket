@@ -623,7 +623,7 @@ def _month_end(period: str | None) -> str | None:
 
 
 def regulator_products(adapters: Iterable[str], refresh: bool = False) -> pd.DataFrame:
-    """Fund ISINs from the regulator adapters already in this project (CNMV Spain, CVM Brazil).
+    """Fund ISINs from the regulator adapters already in this project (CNMV Spain, CVM Brazil, CMVM Portugal).
 
     These are open regulator datasets with full portfolios, so an ISIN found
     here gets ``open_holdings_source`` = the adapter. A store that has not

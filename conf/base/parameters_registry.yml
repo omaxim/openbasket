@@ -17,6 +17,7 @@ registry:
   regulator_adapters:
     - cnmv_spain
     - cvm_brazil
+    - cmvm_portugal
   # Download a regulator store that is not built yet (as reg_spain/reg_brazil would).
   refresh_regulators: false
   # SEC fund_master from the security_master pipeline (series, classes,

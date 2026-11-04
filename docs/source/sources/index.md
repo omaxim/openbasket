@@ -26,6 +26,7 @@ without any configuration.
 | {doc}`SEC Form N-MFP <sec-nmfp>` (`sec_nmfp`) | Full portfolios of the 328 US money market fund series | public (US government data) | yes | monthly, about one month after month end |
 | {doc}`CVM Brazil <cvm-brazil>` (`cvm_brazil`) | Every Brazilian fund class that files a CDA: 27,428 fund ISINs, 266 of them listed on B3 | public (ODbL 1.0, see [](../data-licence.md)) | yes | monthly, about one month after month end; confidential positions released up to 90 days later |
 | {doc}`CNMV Spain <cnmv-spain>` (`cnmv_spain`) | Every Spanish fund (FI) and SICAV: 3,510 share classes in 2,067 compartments | public (CNMV legal notice) | yes | quarterly, about four months after quarter end |
+| {doc}`CMVM Portugal <cmvm-portugal>` (`cmvm_portugal`) | Every Portuguese securities fund (UCITS, PPR, alternative): 210 fund ISINs, EUR 28.6 bn; positions without ISINs, share lines matched by name | public (official regulator publication, see the page) | yes | quarterly, about one month after quarter end |
 | TickerInside (`tickerinside`) | Daily issuer holdings of US equity ETFs, keyed by ticker | public (CC BY 4.0) | yes | daily, a day or two old |
 | {doc}`iShares <ishares-regions>` (`ishares`, 21 regional sites) | Daily full holdings of iShares ETFs with ISINs, from BlackRock's sites (UK and US sites by default) | local_only (BlackRock site terms) | yes | daily |
 | {doc}`Amundi ETF <amundi>` (`amundi`) | Full holdings of Amundi (and former Lyxor and ComStage) ETFs | local_only (Amundi site terms) | yes | daily |

@@ -94,7 +94,7 @@ def fetch_isin_lei(entities: pd.DataFrame, firds: pd.DataFrame, params: dict) ->
 
 
 def load_regulators(params: dict) -> pd.DataFrame:
-    """Fund ISINs from the regulator adapters (CNMV Spain, CVM Brazil) whose local store is built."""
+    """Fund ISINs from the regulator adapters (CNMV Spain, CVM Brazil, CMVM Portugal) whose local store is built."""
     df = reg.regulator_products(params.get("regulator_adapters") or [], refresh=bool(params.get("refresh_regulators")))
     logger.info("Regulator fund ISINs: %s", df["adapter"].value_counts().to_dict() if len(df) else {})
     return df

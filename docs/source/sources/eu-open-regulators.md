@@ -3,15 +3,15 @@
 A survey of the regulators and statistics offices of continental Europe for
 **fund-level portfolio holdings published under a licence that allows reuse
 and republication**. Spain (CNMV) is already built, see
-[Regulator filings](regulator-filings.md). Nothing in this survey met the bar,
-so no adapter was built; this page records what was checked so the next wave
-does not repeat it.
+[Regulator filings](regulator-filings.md). Portugal (CMVM) has since been
+built too, see {doc}`cmvm-portugal`. This page records what was checked so the
+next wave does not repeat it.
 
 Status as checked on 2026-11-03.
 
 | Country | Source checked | Fund-level holdings? | Licence for reuse | Status |
 |---|---|---|---|---|
-| Portugal | CMVM *Sistema de Difusão de Informação*, "Composição discriminada das carteiras" | Yes, quarterly, every Portuguese securities and real-estate fund | None stated | Not built: no reuse licence, no ISINs |
+| Portugal | CMVM *Sistema de Difusão de Informação*, "Composição discriminada das carteiras" | Yes, quarterly, every Portuguese securities and real-estate fund | None stated; official publication, reused under Lei 26/2016 | Built for securities funds ({doc}`cmvm-portugal`), 2026-11-04 |
 | Portugal | CMVM on dados.gov.pt | No (long aggregate series) | CC BY | Not relevant |
 | France | AMF open data on data.gouv.fr; AMF GECO / ROSA files | No (lists of management companies; fund and share-class lists with NAVs) | Open licence for the data.gouv.fr files | Not relevant |
 | France | Banque de France statistics | No (aggregates) | | Not relevant |
@@ -43,49 +43,13 @@ fund category, and Danmarks Nationalbank's `DNIF*` tables are sector totals.
 ## Portugal: CMVM portfolio composition
 
 The only continental regulator besides CNMV that publishes every fund's
-portfolio is the Comissão do Mercado de Valores Mobiliários.
-
-Where
-: `https://www.cmvm.pt/PInstitucional/` > *Sistema de Difusão de
-  Informação* > *Fundos / Gestão de Ativos* > *Composição discriminada das
-  carteiras*, with one list for securities funds (FIM, including PPR and
-  alternative securities funds) and one for real-estate funds (FII). The
-  September 2026 securities-fund list has 222 entries, among them funds run by
-  bank groups: ABANCA, Bankinter, BPI (CaixaBank), and others.
-
-What a fund's page holds
-: Quarter-end positions (`dat_mov`, for example `30-09-2026`), each with a
-  section (`DSC_RUB`, such as "Títulos de dívida pública"), a free-text
-  security description (`des_tit`, Bloomberg-style, for example
-  `BTPS 0.95 06/01/32`), quantity, unit price and currency, accrued interest
-  and total value in euros (`val_tot`), plus the fund's net asset value
-  (`vlg_fun`) and units in issue. Weights could be computed as `val_tot /
-  vlg_fun * 100`.
-
-Why it is not built
-
-- **No licence.** The CMVM site has no legal notice, terms of use or reuse
-  policy (its footer links only to accessibility, data protection and a site
-  map). The portfolio page states only that "A informação divulgada reproduz
-  os dados remetidos à CMVM no cumprimento da legislação e regulamentação em
-  vigor" and that it is the sole responsibility of the entities concerned.
-  That is a disclaimer, not permission to republish. CMVM's datasets on
-  dados.gov.pt are CC BY, but they are long aggregate series and do not
-  include the portfolios.
-- **No ISINs.** Neither the positions nor the fund carry an ISIN: holdings
-  are identified by description only and funds by CMVM's internal number
-  (`num_fun`). The "Versão para download" button builds an Excel file from the
-  same displayed columns.
-- **No bulk file.** The data comes from the site's internal OutSystems
-  screen services (`/PInstitucional/screenservices/CMVM_SDI_Fun_GestAtivos_CW/
-  ComposicaoDescriminadaCarteiras/FIMDetail/DataActionDataAction1`), one fund
-  per request, behind versioned request bodies. That is not a published
-  interface.
-
-`robots.txt` at `www.cmvm.pt` does not disallow these pages for general
-agents. The route to make this a source is to ask CMVM for permission to
-reuse the portfolio data (under Lei 26/2016 on the reuse of public sector
-information) and, ideally, for a bulk file with ISINs.
+portfolio is the Comissão do Mercado de Valores Mobiliários. On 2026-11-03 it
+was left out because the site states no licence and the positions carry no
+ISINs. On 2026-11-04 it was built: CMVM is an official government source
+publishing under a legal duty, the data is reusable as public sector
+information under Lei 26/2016, and openbasket is non-commercial. Fund ISINs
+come from CMVM's own register; share lines get ISINs by exact name; bonds and
+fund units stay unresolved. See {doc}`cmvm-portugal`.
 
 ## Bank-run funds
 

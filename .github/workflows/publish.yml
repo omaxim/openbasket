@@ -135,6 +135,11 @@ jobs:
       - name: Consolidate
         run: kedro run --env public --pipeline=consolidate
 
+      - name: Sector labels
+        # Company ISIN -> GICS sector from FinanceDatabase (MIT), for rows whose source gives none.
+        # Before the universe, which also reads its company names to give CMVM share lines an ISIN.
+        run: kedro run --env public --pipeline=sectors
+
       - name: Universe
         run: |
           args=()
@@ -148,10 +153,6 @@ jobs:
         with:
           path: data/03_primary/openfigi_cache.parquet
           key: openfigi-${{ github.run_id }}-${{ github.run_attempt }}
-
-      - name: Sector labels
-        # Company ISIN -> GICS sector from FinanceDatabase (MIT), for rows whose source gives none.
-        run: kedro run --env public --pipeline=sectors
 
       - name: Publish
         # Writes build/site/api/v1 and build/release (publish.site_dir, publish.release_dir).

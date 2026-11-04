@@ -1,0 +1,8 @@
+# reg_portugal -----------------------------------------------------------------
+reg_portugal_manifest:
+  type: pandas.CSVDataset
+  filepath: data/01_raw/reg_portugal/manifest.csv
+
+reg_portugal_products:
+  type: pandas.ParquetDataset
+  filepath: data/01_raw/reg_portugal/products.parquet

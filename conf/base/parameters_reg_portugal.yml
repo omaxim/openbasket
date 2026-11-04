@@ -1,0 +1,5 @@
+reg_portugal:
+  # Newest quarter of CMVM's fund portfolio pages (about 450 requests) and its
+  # Parquet; the cmvm_portugal adapter reads the same folder
+  # (OPENBASKET_REG_PORTUGAL_DIR).
+  root: data/01_raw/reg_portugal

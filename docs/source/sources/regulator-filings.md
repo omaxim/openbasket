@@ -14,14 +14,15 @@ Status as tested on 2026-11-03.
 | United States | SEC Form N-PORT, Form N-MFP | Working (`nport`, {doc}`sec_nmfp <sec-nmfp>`) | monthly filings, full portfolio | N-PORT 2026 Q3 data set; N-MFP 2026-09-30 |
 | Brazil | CVM CDA, with B3's ISIN register | Working ({doc}`cvm_brazil <cvm-brazil>`) | monthly regulatory filing, full portfolio | 2026-09-30 (older where newer months are mostly confidential) |
 | Spain | CNMV FONDCART / SOCCART | Working ({doc}`cnmv_spain <cnmv-spain>`) | quarterly regulatory filing, full portfolio | 2026-06-30 |
+| Portugal | CMVM composição discriminada das carteiras | Working ({doc}`cmvm_portugal <cmvm-portugal>`) | quarterly regulatory filing, full portfolio, no position ISINs | 2026-09-30 |
 | Japan | EDINET API v2 | Gated: free API key; client only ({doc}`edinet-japan`) | securities and semi-annual reports | not built |
 | India | AMFI / AMC monthly portfolios | Not built | monthly portfolio per AMC, per-AMC Excel formats | |
 | Australia | ASIC portfolio holdings disclosure | No central dataset | semi-annual, on each issuer's site | |
 | Korea | KRX ETF PDF | Not built: needs a decision | daily ETF portfolio deposit file | |
 | Taiwan | SITCA | Not built | no portfolio dataset found | |
 
-The working sources are issuer adapters, so `discover()` picks them up. CVM
-and CNMV also have a pipeline (`reg_brazil`, `reg_spain`) that refreshes a
+The working sources are issuer adapters, so `discover()` picks them up. CVM,
+CNMV and CMVM also have a pipeline (`reg_brazil`, `reg_spain`, `reg_portugal`) that refreshes a
 local store and writes the fund list; the adapters read the same folders.
 Every `IssuerHoldings` from them says in `notes` what it is, for example
 `regulatory filing: CVM monthly portfolio composition (CDA), positions as of

@@ -83,7 +83,13 @@ def test_a_broken_adapter_module_does_not_change_the_answer(tmp_path, monkeypatc
 
 #: Issuer-site adapters whose terms restrict republication but allow private
 #: automated reading: local_only, and on by default.
-ISSUER_SITE_ADAPTERS = ("ishares", "amundi", "vanguard", "avantis", "first_trust", "franklin", "franklin_ca")
+ISSUER_SITE_ADAPTERS = ("ishares", "amundi", "avantis", "first_trust", "franklin", "franklin_ca")
+
+
+def test_vanguard_is_off_by_default():
+    # Its UK terms forbid repeated automated access even for private use.
+    a = issuers.safe_discover()["vanguard"]
+    assert a.redistribution == "local_only" and a.enabled_by_default is False
 
 
 @pytest.mark.parametrize("name", ISSUER_SITE_ADAPTERS)

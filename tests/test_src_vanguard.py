@@ -209,7 +209,7 @@ def test_european_fund_has_no_fallback(monkeypatch):
 def test_regional_readers_are_fallbacks_not_adapters():
     reg = discover()
     assert "vanguard" in reg and "vanguard_us" not in reg and "vanguard_ca" not in reg
-    assert reg["vanguard"].redistribution == "local_only" and reg["vanguard"].enabled_by_default
+    assert reg["vanguard"].redistribution == "local_only" and not reg["vanguard"].enabled_by_default
 
 
 def test_graphql_errors_raise(monkeypatch):

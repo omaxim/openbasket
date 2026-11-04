@@ -70,6 +70,8 @@ logger = logging.getLogger(__name__)
 ISIN_SOURCE = "name_match"
 #: Matches scoring below this are not used.
 MIN_SCORE = 0.9
+#: Coupons closer than this are the same coupon printed with different rounding.
+COUPON_TOLERANCE = 0.0126
 
 # --------------------------------------------------------------------------
 # Name normalisation
@@ -661,15 +663,25 @@ class NameMatcher:
         c = cands[0]
         return NameMatch(c.isin, round(score, 3), via or c.source, c.name)
 
+    @staticmethod
+    def _near(index: dict, coupon: float, when) -> list[Candidate]:
+        out: list[Candidate] = []
+        for (c, w), cands in index.items():
+            if w == when and abs(c - coupon) <= COUPON_TOLERANCE:
+                out.extend(cands)
+        return out
+
     def _match_bond(self, line: Named, terms: BondTerms) -> NameMatch | None:
         if terms.issuer is None or terms.coupon is None:
             self.stats["bond_terms_unread"] += 1
             return None
+        # Sources round coupons differently (N-PORT gives 6.88 for 6.875), so every bond
+        # within COUPON_TOLERANCE is a candidate and the uniqueness check below sees them all.
         if terms.maturity:
-            cands = self.bonds.get((terms.coupon, terms.maturity), [])
+            cands = self._near(self.bonds, terms.coupon, terms.maturity)
             base = 1.0
         else:
-            cands = self.bonds_by_year.get((terms.coupon, terms.maturity_year), [])
+            cands = self._near(self.bonds_by_year, terms.coupon, terms.maturity_year)
             base = 0.92
         fits = []
         for c in cands:

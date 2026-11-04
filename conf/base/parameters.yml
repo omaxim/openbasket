@@ -13,7 +13,7 @@ issuers:
   # iShares regional sites the `ishares` adapter reads, in order of preference
   # for a share class several sites list. A site that fails is skipped; only
   # funds with full holdings are kept. [] reads none.
-  ishares_sites: [uk, ch, us, de, nl, it, se, dk, no, fi, fr, es, latam, hk, sg, jp, au, ca, mx, br, co]
+  ishares_sites: [uk, ch, us, de, nl, it, se, dk, "no", fi, fr, es, latam, hk, sg, jp, au, ca, mx, br, co]  # "no" quoted: bare no is YAML for false
   # SPDR fund finders: "us" (US ETFs, including SPY and DIA) and "emea" (UCITS).
   spdr_regions: [us, emea]
   # Issuer adapters registered in openbasket.sources.issuers are used by

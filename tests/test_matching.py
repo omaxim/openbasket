@@ -250,3 +250,15 @@ def test_name_matching_options():
     assert name_matching_options({"name_matching": False}) is None
     o = name_matching_options({"name_matching": True, "openfigi_cache": "f.parquet", "name_matching_peers": {"X": ["Y"]}})
     assert o["figi_cache"] == "f.parquet" and o["peers"] == {"X": ["Y"]} and o["index_peers"] is True
+
+
+def test_bond_coupon_rounding_never_hides_a_sibling():
+    from openbasket.matching import Candidate, NameMatcher, Named, name_key
+
+    # 6.875% and 6.88% are the same coupon rounded differently; with two such bonds the
+    # matcher must not pick one.
+    k = name_key("EXAMPLE CORP")
+    a = Candidate("US0000000AA1", "EXAMPLE CORP", k, "debt", "nport", None, "USD", 6.875, "2031-05-01")
+    b = Candidate("US0000000BB2", "EXAMPLE CORP", k, "debt", "nport", None, "USD", 6.88, "2031-05-01")
+    m = NameMatcher(equities=[], bonds=[a, b])
+    assert m.match(Named("Example Corp 6.875% 01/05/2031", "debt", currency="USD")) is None

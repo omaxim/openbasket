@@ -105,9 +105,9 @@ Every fund the build covers, as a table, so the search box can load it once
 {
   "fields": ["id", "isin", "name", "ticker", "issuer", "kind", "source", "as_of", "resolved_pct", "n_constituents"],
   "rows": [
-    ["IE00B5BMR087", "IE00B5BMR087", "iShares Core S&P 500 UCITS ETF", "CSPX", "iShares", "fund", "ishares", "2026-11-02", 99.86, 503]
+    ["US4642872000", "US4642872000", "iShares Core S&P 500 ETF", "IVV", "iShares Trust", "fund", "nport", "2026-06-30", 99.8, 503]
   ],
-  "aliases": {"IE00B5BMR087": "IE00B5BMR087", "IE00BD8KRH84": "IE00B5BMR087"}
+  "aliases": {"US4642872000": "US4642872000"}
 }
 ```
 
@@ -127,23 +127,23 @@ Every fund the build covers, as a table, so the search box can load it once
 
 ## `api/v1/funds/{id}.json`
 
-This example is an iShares fund as a local (full) build writes it. The
-public build never carries iShares rows: there the same fund is a
-`local_only` fund (see Funds with no holdings, below).
+This example is a US ETF whose holdings come from its SEC N-PORT filing, a
+public source, so the public build writes it like this. Numbers in these
+examples are illustrative, not taken from a real file.
 
 ```json
 {
-  "id": "IE00B5BMR087",
-  "isin": "IE00B5BMR087",
-  "isins": ["IE00B5BMR087", "IE00BD8KRH84"],
-  "name": "iShares Core S&P 500 UCITS ETF",
-  "ticker": "CSPX",
-  "issuer": "iShares",
-  "source": "ishares",
-  "source_url": "https://www.ishares.com/uk/individual/en/products/253743/...",
-  "credit": "Holdings data from iShares by BlackRock",
-  "as_of": "2026-11-02",
-  "matched_via": "ishares",
+  "id": "US4642872000",
+  "isin": "US4642872000",
+  "isins": ["US4642872000"],
+  "name": "iShares Core S&P 500 ETF",
+  "ticker": "IVV",
+  "issuer": "iShares Trust",
+  "source": "nport",
+  "source_url": "https://www.sec.gov/Archives/edgar/data/1100663/...",
+  "credit": "Holdings from SEC Form N-PORT filings, U.S. Securities and Exchange Commission",
+  "as_of": "2026-06-30",
+  "matched_via": "nport_lei",
   "note": null,
   "status": "ok",
   "reported_total_pct": 100.00011,
@@ -159,19 +159,19 @@ public build never carries iShares rows: there the same fund is a
     "asset_class": [["equity", 99.86422], ["Unresolved", 0.13578]],
     "country": [["US", 99.1], ["IE", 0.42], ["Unknown", 0.34422], ["Unresolved", 0.13578]],
     "sector": [["Information Technology", 34.2], ["Financials", 13.1], ["Unresolved", 0.13578]],
-    "source": [["ishares", 99.86422], ["Unresolved", 0.13578]],
+    "source": [["nport", 99.86422], ["Unresolved", 0.13578]],
     "top10_pct": 38.9
   },
   "fields": ["isin", "name", "weight_pct", "asset_class", "source", "as_of", "depth", "via", "country", "sector"],
   "constituents": [
-    ["US0378331005", "APPLE", 7.59332, "equity", "ishares", "2026-11-02", 0, "iShares Core S&P 500 UCITS ETF", "US", "Information Technology"]
+    ["US0000000001", "EXAMPLE CORP", 6.5, "equity", "nport", "2026-06-30", 0, "iShares Core S&P 500 ETF", "US", "Information Technology"]
   ],
   "unresolved": {
     "weight_pct": 0.13578,
     "note": "0.15% is in lines with no ISIN (cash, futures, FX, swaps or pools).",
-    "source": "ishares",
-    "source_url": "https://www.ishares.com/uk/individual/en/products/253743/...",
-    "as_of": "2026-11-02"
+    "source": "nport",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1100663/...",
+    "as_of": "2026-06-30"
   },
   "full_data_url": "https://github.com/omaxim/openbasket/releases/download/2026-11/openbasket-lookthrough.parquet"
 }
@@ -281,7 +281,7 @@ Funds with no holdings
 
 ```json
 {
-  "id": "IE0001JK8FV4", "name": "iShares Broad Global Govt Bond UCITS ETF", "issuer": "iShares",
+  "id": "IE0001JK8FV4", "name": "iShares Broad Global Govt Bond UCITS ETF", "issuer": "iShares Trust",
   "source": "issuer_list", "source_url": "https://www.ishares.com/",
   "credit": "Fund listed by the issuer's public fund list; its holdings are available from iShares when you run openbasket yourself",
   "as_of": "2026-11-03", "matched_via": "issuer_list", "status": "local_only",
@@ -300,7 +300,7 @@ Funds with no holdings
 A share-class ISIN that is not a fund file's `id` gets a small alias file:
 
 ```json
-{"alias_of": "IE00B5BMR087"}
+{"alias_of": "US4642872000"}
 ```
 
 ## Release assets

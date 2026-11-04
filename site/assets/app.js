@@ -688,8 +688,8 @@
     const id = f.isin || f.id;
     const commands = [
       `git clone ${REPO} && cd openbasket`,
-      "uv venv --python 3.12 .venv && uv pip install --python .venv -e .",
-      `.venv/bin/kedro run --params=isin=${id}`,
+      "uv venv --python 3.12 .venv && source .venv/bin/activate && uv pip install -e '.[docs]' && cp .env.example .env",
+      "kedro run --pipeline=full && python scripts/serve.py",
     ].join("\n");
     const code = h("code", {}, commands);
     const copyBtn = h("button", { class: "copy", type: "button", "aria-label": "Copy the commands" }, "Copy");

@@ -73,7 +73,9 @@ logger = logging.getLogger(__name__)
 #: Vanguard's terms restrict republication: read only for the person running openbasket.
 REDISTRIBUTION = "local_only"
 #: On by default; switch it off with ``issuers.disabled: [vanguard]``.
-ENABLED_BY_DEFAULT = True
+# Vanguard's UK terms forbid repeated automated access, so this stays off unless you
+# switch it on yourself in conf/local (issuers.enabled: [vanguard]).
+ENABLED_BY_DEFAULT = False
 
 GPX_URL = "https://www.vanguard.co.uk/gpx/graphql"
 GPX_HEADERS = {"content-type": "application/json", "x-consumer-id": "uk0"}

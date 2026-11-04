@@ -77,7 +77,11 @@ def web(monkeypatch):
     monkeypatch.setattr(throttle, "time", clock)
     monkeypatch.setattr(http, "_intervals", {})
     # Use prefetch's own robots.txt reader, so robots requests go through the fake web.
+    import openbasket.sources as _sources
+
     monkeypatch.setitem(__import__("sys").modules, "openbasket.sources.robots", None)
+    if hasattr(_sources, "robots"):  # imported earlier by another test: hide it from prefetch too
+        monkeypatch.delattr(_sources, "robots")
     w = Web(clock)
     monkeypatch.setattr(requests.Session, "send", w.send)
     return w

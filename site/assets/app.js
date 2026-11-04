@@ -717,8 +717,67 @@
         "The first run downloads SEC N-PORT data and each issuer's files, so it takes a while. ",
         h("a", { href: `${DOCS}${RUN_LOCALLY}` }, "How to run openbasket locally"),
         ", including the local site with every source switched on."));
-    show(fundHead(f, requested), h("div", { class: "local-grid" }, local, panel));
+    show(fundHead(f, requested), renderAggregates(f), h("div", { class: "local-grid" }, local, panel));
     announce(`${f.name}: holdings available from ${issuer} when you run openbasket yourself.`);
+  }
+
+  /** Dimensions of openbasket's own coarse splits (aggregates.py): no holdings behind them on this site. */
+  const AGG_DIMS = [
+    { key: "sector", title: "By sector", label: (v) => (unknown(v) ? NOT_STATED : v) },
+    { key: "region", title: "By region", label: (v) => (unknown(v) ? NOT_STATED : v) },
+    { key: "country", title: "By country", label: (v) => (unknown(v) ? NOT_STATED : countryName(v)) },
+    { key: "asset_class", title: "By asset class", label: (v) => (unknown(v) ? NOT_STATED : v) },
+  ];
+
+  /** Blocks only (no company tiles): a squarified map of one coarse split, unresolved in grey. */
+  function aggregateBlocks(list, dim) {
+    const W = 960, H = 420;
+    const items = (list || []).filter((p) => p[1] > 0).map(([label, value]) => ({ label, value }));
+    let i = 0;
+    const colour = (it) => (it.label === UNRESOLVED ? TM.unresolved : unknown(it.label) || it.label === "Other" ? TM.unknown
+      : PALETTE[i++ % PALETTE.length]);
+    const coloured = items.map((it) => ({ ...it, fill: colour(it) }));
+    const rects = tm.squarify(coloured, 0, 0, W, H);
+    return s("svg", { class: "agg-map", viewBox: `0 0 ${W} ${H}`, role: "img",
+      "aria-label": `${dim.title}: ${items.map((it) => `${dim.label(it.label)} ${it.value}%`).join(", ")}` },
+      rects.map((r) => {
+        const big = r.w > 90 && r.h > 46;
+        const dark = r.item.label === UNRESOLVED;
+        return s("g", {},
+          s("rect", { x: r.x + 1, y: r.y + 1, width: Math.max(r.w - 2, 0), height: Math.max(r.h - 2, 0), fill: r.item.fill }),
+          big ? s("text", { x: r.x + 10, y: r.y + 26, class: "agg-label", fill: dark ? TM.ink2 : "#fff" }, dim.label(r.item.label)) : null,
+          big ? s("text", { x: r.x + 10, y: r.y + 52, class: "agg-value", fill: dark ? TM.ink2 : "#fff" }, `${r.item.value}%`) : null,
+          s("title", {}, `${dim.label(r.item.label)}: ${r.item.value}%`));
+      }));
+  }
+
+  /** A local_only fund's coarse splits, computed by openbasket from holdings this site does not carry. */
+  function renderAggregates(f) {
+    const b = f.breakdowns || {};
+    if (b.basis !== "openbasket_aggregate") return null;
+    const dims = AGG_DIMS.filter((d) => (b[d.key] || []).length);
+    if (!dims.length) return null;
+    let current = dims[0];
+    const mapHost = h("div", { class: "agg-map-host" }, aggregateBlocks(b[current.key], current));
+    const switches = h("div", { class: "tm-switch", role: "group", "aria-label": "Split by" },
+      dims.map((d) => {
+        const btn = h("button", { type: "button", class: "tm-opt-btn", "aria-pressed": d === current ? "true" : "false" }, d.title.replace(/^By /, ""));
+        btn.addEventListener("click", () => {
+          current = d;
+          mapHost.replaceChildren(aggregateBlocks(b[d.key], d));
+          switches.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === btn ? "true" : "false"));
+        });
+        return btn;
+      }));
+    const tables = dims.map((d) => altTable(`${d.title.toLowerCase()}, whole percent of net assets`,
+      [d.title.replace(/^By /, ""), "%"], (b[d.key] || []).map(([label, v]) => ({ cells: [d.label(label), `${v}`], unresolved: label === UNRESOLVED }))));
+    return h("section", { class: "dist agg", "aria-labelledby": "agg-title" },
+      h("p", { class: "eyebrow" }, "Shape of the fund"),
+      h("h3", { id: "agg-title" }, "Where the ", h("em", {}, "money"), " is, in broad strokes"),
+      h("p", { class: "dist-intro" }, b.note || "Computed by openbasket from the issuer's published holdings; holdings not shown.",
+        " Whole percent of net assets; small groups are folded into Other."),
+      switches, mapHost,
+      h("details", { class: "agg-tables" }, h("summary", {}, "The same splits as tables"), tables));
   }
 
   function renderFund(f, requested) {

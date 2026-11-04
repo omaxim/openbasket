@@ -1,0 +1,3 @@
+aggregates:
+  # Set by the run when empty.
+  computed_at: null

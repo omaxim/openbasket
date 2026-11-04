@@ -110,6 +110,10 @@ publish:
   # fetched or written; their funds are listed by name and ISIN only, with
   # status local_only. See docs/source/publishing.md.
   mode: full
+  # openbasket's own coarse splits of local_only funds (sector, country,
+  # region, asset class; whole percent, no holdings), written by a local full
+  # run (pipeline "aggregates") and shown for those funds in the public build.
+  aggregates_path: public_aggregates/aggregates.json
   # Where a local_only fund's note sends readers who want its holdings.
   run_locally_url: https://openbasket.leithresearch.org/docs/running-locally.html
   # Public build only: where a local_only issuer's funds get their identity

@@ -34,6 +34,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
+from ... import aggregates
 from ...datasets import connection
 from ...sources import FULL_MODE, PUBLIC_MODE, is_public, publish_mode, redistribution
 from ..lookthrough.nodes import issuer_adapters
@@ -299,10 +300,13 @@ def _finish_breakdowns(sums: dict, unresolved_pct: object) -> dict:
 
 
 def _write_fund_files(funds: dict[str, dict], rel, cap: int, out: Path, full_data_url: str,
-                      only: set[str] | None = None, public: bool = False) -> tuple[dict[str, int], dict[str, int]]:
+                      only: set[str] | None = None, public: bool = False,
+                      aggregates: dict | None = None) -> tuple[dict[str, int], dict[str, int]]:
     """Write fund files; returns bytes per file and constituent rows per fund.
 
     With ``public`` each file is checked to name public sources only before it is written.
+    A fund with no rows that has an entry in ``aggregates`` (see
+    :mod:`openbasket.aggregates`) gets those coarse splits as its breakdowns.
     """
     sizes, n_rows = {}, {}
     for fid, n, rows, sums in _stream_constituents(rel, cap, only if only is not None else set(funds)):
@@ -315,7 +319,7 @@ def _write_fund_files(funds: dict[str, dict], rel, cap: int, out: Path, full_dat
             (out / f"{fid}.json").write_bytes(data)
             sizes[fid], n_rows[fid] = len(data), n
     for fid in (only if only is not None else funds.keys()) - sizes.keys():
-        bd = _finish_breakdowns({}, funds[fid].get("unresolved_pct"))
+        bd = _aggregate_breakdowns(funds[fid], aggregates) or _finish_breakdowns({}, funds[fid].get("unresolved_pct"))
         doc = fund_document(funds[fid], [], 0, full_data_url, bd)
         if public:
             _check_document(doc)
@@ -323,6 +327,39 @@ def _write_fund_files(funds: dict[str, dict], rel, cap: int, out: Path, full_dat
         (out / f"{fid}.json").write_bytes(data)
         sizes[fid], n_rows[fid] = len(data), 0
     return sizes, n_rows
+
+
+def load_aggregates(path: str | None) -> dict | None:
+    """The validated aggregates file, indexed by fund id and every ISIN it lists; ``None`` if absent."""
+    if not path or not Path(path).is_file():
+        return None
+    doc = json.loads(Path(path).read_text())
+    aggregates.validate(doc)
+    index = {}
+    for fid, entry in doc["funds"].items():
+        e = {**entry, "computed_at": doc.get("computed_at")}
+        for key in [fid, *entry.get("isins", [])]:
+            index.setdefault(key, e)
+    return index
+
+
+def _aggregate_breakdowns(fund: dict, index: dict | None) -> dict | None:
+    """Breakdowns for a fund without rows, from openbasket's own aggregates of its holdings."""
+    if not index or fund.get("status") != "local_only":
+        return None
+    entry = next((index[k] for k in [fund.get("id"), *_isins(fund.get("isins"))] if k in index), None)
+    if entry is None:
+        return None
+    issuer = _clean(fund.get("issuer")) or "the issuer"
+    return {
+        "basis": "openbasket_aggregate",
+        "note": (f"Computed by openbasket from {issuer}'s published holdings as of {entry.get('as_of')}; "
+                 "whole percent, holdings not shown. Run openbasket yourself to see the companies."),
+        "as_of": entry.get("as_of"),
+        "computed_at": entry.get("computed_at"),
+        **{d: entry[d] for d in aggregates.DIMENSIONS if d in entry},
+        "top10_pct": None,
+    }
 
 
 def _source_entries(sources_cfg: dict, rel, funds: pd.DataFrame) -> list[dict]:
@@ -432,7 +469,8 @@ def publish(
 
     cap = int(params.get("max_constituents", 1000))
     requested_cap = cap
-    sizes, n_rows = _write_fund_files(funds, rel, cap, api / "funds", full_data_url, public=public)
+    agg = load_aggregates(params.get("aggregates_path")) if public else None
+    sizes, n_rows = _write_fund_files(funds, rel, cap, api / "funds", full_data_url, public=public, aggregates=agg)
 
     aliases: dict[str, str] = {}
     for fid, f in funds.items():
@@ -486,7 +524,8 @@ def publish(
             total / 1e6, budget / 1e6, cap, new_cap, len(affected),
         )
         cap = new_cap
-        new_sizes, _ = _write_fund_files(funds, rel, cap, api / "funds", full_data_url, only=affected, public=public)
+        new_sizes, _ = _write_fund_files(funds, rel, cap, api / "funds", full_data_url, only=affected, public=public,
+                                         aggregates=agg)
         sizes.update(new_sizes)
         total = _dir_bytes(api)
         cuts.append({"max_constituents": cap, "funds_rewritten": len(affected), "api_mb": round(total / 1e6, 1)})

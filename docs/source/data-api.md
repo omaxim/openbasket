@@ -295,6 +295,33 @@ Funds with no holdings
   (Keys abridged.) A fund in the public build that holds a `local_only`
   fund keeps it as an unexpanded `fund` row with the same note.
 
+## Coarse splits for `local_only` funds
+
+In the public build, a `local_only` fund has no constituents, but its
+`breakdowns` may carry openbasket's own coarse splits, computed in a local
+full run from the issuer's holdings and published without them:
+
+```json
+"breakdowns": {
+  "basis": "openbasket_aggregate",
+  "note": "Computed by openbasket from iShares's published holdings as of 2026-11-02; whole percent, holdings not shown. Run openbasket yourself to see the companies.",
+  "as_of": "2026-11-02",
+  "computed_at": "2026-11-04T09:00:00Z",
+  "sector": [["Information Technology", 30], ["Financials", 14], ["Other", 56], ["Unresolved", 0]],
+  "region": [["North America", 99], ["Other", 1], ["Unresolved", 0]],
+  "country": [["US", 99], ["Other", 1], ["Unresolved", 0]],
+  "asset_class": [["Equity", 100], ["Unresolved", 0]],
+  "top10_pct": null
+}
+```
+
+Values are whole percent of net assets. Labels come only from fixed lists:
+openbasket's sector list (the eleven GICS sector names plus Government Bonds
+and Corporate Bonds), ISO country codes, five regions, six asset classes, and
+`Other`, `Unknown`, `Unresolved`. There is no `source` split and no
+`top10_pct`, because both would describe the holdings. Without such splits
+(`basis` absent), `breakdowns` is computed from the fund's own rows as above.
+
 ## `api/v1/funds/{isin}.json` for other share classes
 
 A share-class ISIN that is not a fund file's `id` gets a small alias file:

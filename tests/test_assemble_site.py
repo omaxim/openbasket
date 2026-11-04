@@ -287,8 +287,14 @@ def test_fixture_rows_are_unique_per_isin_source_as_of_and_via():
         assert len(keys) == len(set(keys)), fund["id"]
 
 
+def _aggregate(fund) -> bool:
+    return (fund.get("breakdowns") or {}).get("basis") == "openbasket_aggregate"
+
+
 def test_fixture_breakdowns_cover_the_full_holdings():
     for fund in _funds():
+        if _aggregate(fund):
+            continue  # a local_only fund's coarse splits: test_fixture_aggregate_splits
         b = fund["breakdowns"]
         assert list(b) == [*BREAKDOWNS, "top10_pct"], fund["id"]
         for key in BREAKDOWNS:
@@ -334,7 +340,8 @@ def test_fixture_funds_without_rows():
         assert f["as_of"] and f["note"]
         assert f["unresolved"] == {"weight_pct": 100, "note": f["note"], "source": f["source"], "source_url": f["source_url"],
                                    "as_of": f["as_of"]}
-        assert all(f["breakdowns"][k] == [["Unresolved", 100]] for k in BREAKDOWNS)
+        if not _aggregate(f):
+            assert all(f["breakdowns"][k] == [["Unresolved", 100]] for k in BREAKDOWNS)
 
 
 def test_fixture_local_only_funds_say_how_to_see_their_holdings():
@@ -353,7 +360,7 @@ def test_fixture_local_only_funds_say_how_to_see_their_holdings():
 def test_fixtures_hold_nothing_from_local_only_sources():
     """The repository is public: no row, breakdown or fund may come from a local_only source."""
     for f in _funds():
-        named = {c[4] for c in f["constituents"]} | {k for k, _ in f["breakdowns"]["source"] if k not in ("Unresolved", "Unknown")}
+        named = {c[4] for c in f["constituents"]} | {k for k, _ in f["breakdowns"].get("source", []) if k not in ("Unresolved", "Unknown")}
         if f["status"] != "local_only":
             named |= {f["source"], f["unresolved"]["source"]}
         assert all(redistribution(s) == "public" for s in named - {SYNTHETIC}), (f["id"], named)
@@ -652,3 +659,16 @@ def test_treemap_text_colour_and_fit():
 def test_page_scripts_parse():
     for name in ("core.js", "treemap.js", "app.js"):
         subprocess.run([NODE, "--check", str(SITE / "assets" / name)], check=True, timeout=30)
+
+
+def test_fixture_aggregate_splits():
+    """A local_only fund may carry openbasket's coarse splits, and nothing behind them."""
+    from openbasket import aggregates
+
+    agg = [f for f in _funds() if _aggregate(f)]
+    assert agg
+    for f in agg:
+        assert f["status"] == "local_only" and f["constituents"] == [] and f["n_rows"] == 0
+        b = f["breakdowns"]
+        aggregates.validate({"version": 1, "funds": {f["id"]: {d: b[d] for d in aggregates.DIMENSIONS if d in b}}})
+        assert "holdings not shown" in b["note"]

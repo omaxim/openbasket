@@ -216,3 +216,16 @@ first run looks up a few hundred thousand ISINs on OpenFIGI (faster with
 `publish.site_budget_mb` (800 MB). Later runs on the same day reuse the
 cached issuer files, and the OpenFIGI cache is kept between runs.
 [](publishing.md) has per-fund timings.
+
+
+## Publishing coarse splits of local-only funds
+
+The full run also writes `public_aggregates/aggregates.json`: for every fund
+whose holdings came from a `local_only` source, openbasket's own sector,
+region, country and asset-class splits in whole percent, and nothing else.
+The public site shows these as blocks for such funds, labelled as computed
+by openbasket, with no companies behind them.
+
+To publish them (maintainers only), commit that one file and push; the next
+public build picks it up. `openbasket.aggregates.validate` refuses a file
+that holds anything but coarse splits, and so does the build's CI gate.

@@ -362,3 +362,14 @@ footer .wordmark { margin-bottom: .8rem; }
   .cards { grid-template-columns: 1fr; }
   .code pre { padding-right: 1.1rem; padding-top: 2.6rem; }
 }
+
+/* local_only funds: openbasket's own coarse splits, blocks only */
+.agg .tm-switch { margin: .8rem 0; }
+.tm-opt-btn { font: 500 .82rem/1.2 var(--sans); color: var(--ink-2); padding: .38rem .7rem; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); cursor: pointer; }
+.tm-opt-btn[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.tm-opt-btn:focus-visible { outline: 2px solid var(--wine); outline-offset: 2px; }
+.agg-map { display: block; width: 100%; height: auto; background: var(--paper); }
+.agg-label { font: 700 22px var(--display); }
+.agg-value { font: 400 22px var(--sans); }
+.agg-tables { margin-top: .8rem; }
+.agg-tables summary { cursor: pointer; color: var(--ink-2); }

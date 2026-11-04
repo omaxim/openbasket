@@ -1,0 +1,8 @@
+# Coarse splits of local_only funds, written by a local full run and committed
+# so the public build can show them. Holds no holdings (see openbasket.aggregates).
+public_aggregates:
+  type: json.JSONDataset
+  filepath: public_aggregates/aggregates.json
+  save_args:
+    indent: 1
+    sort_keys: true

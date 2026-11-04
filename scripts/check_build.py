@@ -236,6 +236,17 @@ def scan_api(api_v1: Path, known: set[str], found: Findings, max_examples: int =
             check_class(unresolved["source"], f"funds/{path.name} unresolved")
             if not doc.get("constituents") and _blank(unresolved.get("source_url")):
                 no_unresolved_url.append(fid)
+        bd = doc.get("breakdowns") or {}
+        if isinstance(bd, dict) and bd.get("basis") == "openbasket_aggregate":
+            stats["aggregate_splits"] = stats.get("aggregate_splits", 0) + 1
+            if doc.get("constituents") or doc.get("status") != "local_only":
+                found.error(f"funds/{path.name}: aggregate splits are only for local_only funds with no rows.")
+            try:
+                from openbasket import aggregates as _agg
+
+                _agg.validate({"version": 1, "funds": {fid: {d: bd[d] for d in _agg.DIMENSIONS if d in bd}}})
+            except Exception as exc:  # noqa: BLE001 - any problem is a build error
+                found.error(f"funds/{path.name}: aggregate splits are not coarse splits only: {exc}")
         fields = doc.get("fields") or []
         c_src, c_asof = _col(fields, "source"), _col(fields, "as_of")
         rows = doc.get("constituents") or []

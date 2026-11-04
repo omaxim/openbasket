@@ -1,0 +1,19 @@
+# etfdb ------------------------------------------------------------------------
+# albertored/etfdb has no licence: every table here is local_only, kept in
+# data/ (never committed) and never published. The raw etfs.json is cached
+# under params:etfdb.root.
+etfdb_meta:
+  type: pandas.ParquetDataset
+  filepath: data/03_primary/etfdb_meta.parquet
+
+etfdb_stand_in_candidates:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/etfdb_stand_in_candidates.csv
+
+etfdb_summary:
+  type: json.JSONDataset
+  filepath: data/08_reporting/etfdb_summary.json
+
+etfdb_overlap:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/etfdb_overlap.csv

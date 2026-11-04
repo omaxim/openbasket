@@ -11,6 +11,8 @@ weights. `openbasket.aggregates.validate` refuses anything else, and the
 public build and its CI gate run the same check.
 
 It is written by a local full run (`kedro run --pipeline=full`, or
-`kedro run --pipeline=aggregates` after one) and committed by the maintainer
-so the public site can show these funds' shape. See
-`docs/source/running-locally.md`.
+`kedro run --pipelines=sectors,aggregates` after one), merged with
+the earlier file so a fund whose scraper failed keeps its last splits for up
+to 180 days, and committed on its own, by hand or by the run itself
+(`aggregates.share` in `conf/local/parameters.yml`), so the public site can
+show these funds' shape. See `docs/source/running-locally.md`.

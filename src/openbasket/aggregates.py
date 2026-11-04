@@ -16,8 +16,14 @@ issuer labels. The public build checks the file with the same function.
 
 from __future__ import annotations
 
+import json
+import logging
+import os
 import re
+import subprocess
+import tempfile
 from datetime import datetime, timezone
+from pathlib import Path
 
 import duckdb
 import pandas as pd
@@ -25,6 +31,8 @@ import pandas as pd
 from .countries import country_code
 from .datasets import connection
 from .sources import redistribution
+
+logger = logging.getLogger(__name__)
 
 VERSION = 1
 DIMENSIONS = ("sector", "country", "region", "asset_class")
@@ -135,12 +143,16 @@ def fund_aggregates(rows: pd.DataFrame, unresolved_pct: float | None) -> dict[st
 
 
 def build(universe_funds: pd.DataFrame, universe_constituents: duckdb.DuckDBPyRelation, params: dict,
-          sector_map: pd.DataFrame | None = None) -> dict:
+          sector_map: pd.DataFrame | None = None, publish_params: dict | None = None) -> dict:
     """The aggregates document for every fund whose holdings come from a ``local_only`` source.
 
     A row whose issuer file gives no sector takes its company's sector from
     ``sector_map`` (company ISIN -> GICS sector, see
     :func:`openbasket.sources.financedatabase.sector_map`), as the public build does.
+
+    The file already at ``publish_params.aggregates_path`` is merged in (see
+    :func:`merge`): a fund this run has no holdings for, for example because
+    its issuer's site failed, keeps its earlier splits and their date.
     """
     funds = universe_funds[universe_funds["source"].map(lambda s: bool(s) and redistribution(str(s)) == "local_only")]
     funds = funds[funds["n_constituents"].fillna(0) > 0]
@@ -161,6 +173,7 @@ def build(universe_funds: pd.DataFrame, universe_constituents: duckdb.DuckDBPyRe
         if has_map:
             con.unregister("_agg_sectors")
     by_fund = dict(tuple(rows.groupby("fund_id"))) if len(rows) else {}
+    computed_at = params.get("computed_at") or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     out = {}
     for f in funds.to_dict("records"):
         r = by_fund.get(f["id"])
@@ -170,20 +183,65 @@ def build(universe_funds: pd.DataFrame, universe_constituents: duckdb.DuckDBPyRe
             "isins": [i for i in (f.get("isins") if f.get("isins") is not None else []) if i],
             "as_of": f.get("as_of"),
             "holdings_source": f.get("source"),
+            "computed_at": computed_at,
             **fund_aggregates(r, f.get("unresolved_pct")),
         }
+    previous = _read_previous((publish_params or {}).get("aggregates_path")) if params.get("keep_previous", True) else None
+    out, kept = merge(out, previous, computed_at, params.get("keep_days", 180))
+    if kept:
+        logger.info("Kept the earlier splits of %d funds this run has no holdings for", kept)
     doc = {
         "version": VERSION,
-        "computed_at": params.get("computed_at") or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "computed_at": computed_at,
         "method": ("openbasket's own aggregates over the fund's full holdings: shares of net assets by "
                    "openbasket's sector list, ISO country, region and asset class, rounded to whole percent; "
                    "labels under 1% are folded into Other. Rows whose issuer gives no sector take their "
                    "company's GICS sector from FinanceDatabase (MIT) by ISIN. No holdings are included."),
         "n_funds": len(out),
-        "funds": out,
+        "n_kept": kept,
+        "funds": dict(sorted(out.items())),
     }
     validate(doc)
     return doc
+
+
+def _read_previous(path: str | None) -> dict | None:
+    if not path or not Path(path).is_file():
+        return None
+    try:
+        doc = json.loads(Path(path).read_text())
+        validate(doc)
+    except (ValueError, OSError) as exc:  # a broken earlier file is not kept, and not a reason to stop
+        logger.warning("Not keeping the earlier splits in %s: %s", path, exc)
+        return None
+    return doc
+
+
+def merge(new: dict, previous: dict | None, computed_at: str, keep_days: int | None) -> tuple[dict, int]:
+    """``new`` plus each fund of ``previous`` that ``new`` lacks, if computed within ``keep_days``; and how many were kept.
+
+    A kept entry keeps its own ``computed_at`` (the file's, for files written
+    before entries had one), so the site shows how old it is.
+    """
+    out = dict(new)
+    if not previous:
+        return out, 0
+    now = datetime.fromisoformat(computed_at.replace("Z", "+00:00"))
+    taken = {i for e in new.values() for i in e.get("isins") or []} | set(new)
+    kept = 0
+    for fid, entry in (previous.get("funds") or {}).items():
+        if fid in taken or any(i in taken for i in entry.get("isins") or []):
+            continue
+        when = entry.get("computed_at") or previous.get("computed_at")
+        try:
+            age = (now - datetime.fromisoformat(str(when).replace("Z", "+00:00"))).days
+        except ValueError:
+            continue
+        if keep_days is not None and age > keep_days:
+            continue
+        out[fid] = {**entry, "computed_at": when}
+        kept += 1
+    return out, kept
 
 
 class AggregatesError(ValueError):
@@ -192,8 +250,9 @@ class AggregatesError(ValueError):
 
 def validate(doc: dict) -> None:
     """Raise :class:`AggregatesError` unless ``doc`` holds only coarse splits from fixed vocabularies."""
-    if set(doc) - {"version", "computed_at", "method", "n_funds", "funds"}:
-        raise AggregatesError(f"unexpected top-level keys {sorted(set(doc) - {'version', 'computed_at', 'method', 'n_funds', 'funds'})}")
+    top = {"version", "computed_at", "method", "n_funds", "n_kept", "funds"}
+    if set(doc) - top:
+        raise AggregatesError(f"unexpected top-level keys {sorted(set(doc) - top)}")
     allowed = {
         "sector": set(SECTORS),
         "region": set(REGIONS),
@@ -201,8 +260,11 @@ def validate(doc: dict) -> None:
     }
     specials = {OTHER, UNKNOWN, UNRESOLVED}
     for fid, entry in (doc.get("funds") or {}).items():
-        if set(entry) - {"isins", "as_of", "holdings_source", *DIMENSIONS}:
-            raise AggregatesError(f"{fid}: unexpected keys {sorted(set(entry) - {'isins', 'as_of', 'holdings_source', *DIMENSIONS})}")
+        keys = {"isins", "as_of", "holdings_source", "computed_at", *DIMENSIONS}
+        if set(entry) - keys:
+            raise AggregatesError(f"{fid}: unexpected keys {sorted(set(entry) - keys)}")
+        if entry.get("computed_at") is not None and not re.fullmatch(r"\d{4}-\d\d-\d\dT[\d:]{8}Z", str(entry["computed_at"])):
+            raise AggregatesError(f"{fid}: computed_at must be a UTC timestamp")
         for d in DIMENSIONS:
             for item in entry.get(d) or []:
                 if not (isinstance(item, list) and len(item) == 2 and isinstance(item[1], int)):
@@ -220,3 +282,58 @@ def validate(doc: dict) -> None:
         str(item[0]) for e in (doc.get("funds") or {}).values() for d in DIMENSIONS for item in (e.get(d) or []))
     if _ISIN_LIKE.search(text):
         raise AggregatesError("an ISIN-like string appears in the splits")
+
+
+def _git(args: list[str], cwd: Path, env: dict | None = None, input_text: str | None = None) -> str:
+    return subprocess.run(["git", *args], cwd=cwd, env=env, input=input_text, capture_output=True, text=True,
+                          check=True, timeout=300).stdout.strip()
+
+
+def share(doc: dict, params: dict, path: str) -> dict:
+    """Commit the aggregates file at ``path``, and only that file, to ``params.share.branch`` of the repository.
+
+    Off unless ``params.share.enabled``. The file is checked with
+    :func:`validate` first, so only coarse splits can be committed. The
+    commit is made on top of the remote branch as it is now, with a private
+    index: the working tree, the checked-out branch and anything staged are
+    left alone, and no other path changes. Nothing is committed when the
+    file is what the branch already holds. With ``share.push`` the commit is
+    pushed; a refused push (someone else pushed first) is retried once.
+    """
+    cfg = params.get("share") or {}
+    if not cfg.get("enabled"):
+        return {"shared": False, "reason": "aggregates.share.enabled is false"}
+    validate(doc)
+    file = Path(path).resolve()
+    repo = Path(_git(["rev-parse", "--show-toplevel"], file.parent))
+    rel_path = file.relative_to(repo).as_posix()
+    remote, branch = cfg.get("remote", "origin"), cfg.get("branch", "main")
+    for attempt in (1, 2):
+        _git(["fetch", "-q", remote, branch], repo)
+        base = _git(["rev-parse", "FETCH_HEAD"], repo)
+        blob = _git(["hash-object", "-w", "--", str(file)], repo)
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "GIT_INDEX_FILE": str(Path(tmp) / "index")}
+            _git(["read-tree", base], repo, env)
+            _git(["update-index", "--add", "--cacheinfo", f"100644,{blob},{rel_path}"], repo, env)
+            tree = _git(["write-tree"], repo, env)
+        if tree == _git(["rev-parse", f"{base}^{{tree}}"], repo):
+            return {"shared": False, "reason": f"{rel_path} is unchanged on {remote}/{branch}", "base": base}
+        message = cfg.get("message", "Update coarse splits of local_only funds ({n_funds} funds)").format(
+            n_funds=doc.get("n_funds"), computed_at=doc.get("computed_at"))
+        commit = _git(["commit-tree", tree, "-p", base, "-F", "-"], repo, input_text=message + "\n")
+        changed = _git(["diff-tree", "--no-commit-id", "--name-only", "-r", base, commit], repo).splitlines()
+        if changed != [rel_path]:  # cannot happen with one update-index above; refuse rather than push anything else
+            raise AggregatesError(f"the commit would change {changed}, not only {rel_path}")
+        if not cfg.get("push", False):
+            return {"shared": False, "reason": "aggregates.share.push is false", "commit": commit, "base": base}
+        try:
+            _git(["push", "-q", remote, f"{commit}:refs/heads/{branch}"], repo)
+        except subprocess.CalledProcessError as exc:
+            if attempt == 2:
+                raise
+            logger.warning("Push of %s refused (%s); fetching %s/%s again", rel_path, exc.stderr.strip(), remote, branch)
+            continue
+        logger.info("Committed %s (%d funds) to %s/%s as %s", rel_path, doc.get("n_funds") or 0, remote, branch, commit[:7])
+        return {"shared": True, "commit": commit, "base": base, "branch": branch, "path": rel_path}
+    return {"shared": False, "reason": "push refused twice"}

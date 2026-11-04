@@ -365,7 +365,9 @@ def load_aggregates(path: str | None) -> dict | None:
     updated_at = committed_at(path) or doc.get("computed_at")
     index = {}
     for fid, entry in doc["funds"].items():
-        e = {**entry, "computed_at": doc.get("computed_at"), "updated_at": updated_at}
+        # An entry kept from an earlier run shows when it was computed, not when the file was last committed.
+        when = entry.get("computed_at") or doc.get("computed_at")
+        e = {**entry, "computed_at": when, "updated_at": updated_at if when == doc.get("computed_at") else when}
         for key in [fid, *entry.get("isins", [])]:
             index.setdefault(key, e)
     return index

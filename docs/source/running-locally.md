@@ -226,6 +226,29 @@ region, country and asset-class splits in whole percent, and nothing else.
 The public site shows these as blocks for such funds, labelled as computed
 by openbasket, with no companies behind them.
 
-To publish them (maintainers only), commit that one file and push; the next
-public build picks it up. `openbasket.aggregates.validate` refuses a file
-that holds anything but coarse splits, and so does the build's CI gate.
+Each run merges into the file already there. A fund the run has no holdings
+for, for example because its issuer's site failed or changed, keeps its
+earlier splits and their own date (`computed_at`) until they are older than
+`aggregates.keep_days` (180 days); the site shows that date. Rows whose
+issuer gives no sector take their company's GICS sector from FinanceDatabase
+by ISIN.
+
+To publish them (maintainers only), the file is committed and pushed, and
+the next public build picks it up. The run can do that itself: set
+
+```yaml
+# conf/local/parameters.yml (not committed)
+aggregates:
+  share:
+    enabled: true
+    push: true
+```
+
+and after writing the file the `aggregates` pipeline validates it and
+commits that one file on top of `origin/main` as it is then, with a private
+git index: your working tree, checked-out branch and anything you have
+staged are left alone, no other path changes, and nothing is committed when
+the file is unchanged. A refused push (someone pushed first) is retried once.
+The site's "last updated" date is the time of that commit.
+`openbasket.aggregates.validate` refuses a file that holds anything but
+coarse splits, and so does the build's CI gate.

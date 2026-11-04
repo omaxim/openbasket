@@ -1,3 +1,20 @@
 aggregates:
   # Set by the run when empty.
   computed_at: null
+  # Merge into the file already there: a fund this run has no holdings for
+  # (its issuer's site failed, say) keeps its earlier splits and their date,
+  # until they are older than keep_days (null keeps them however old).
+  keep_previous: true
+  keep_days: 180
+  # Commit public_aggregates/aggregates.json, and only that file, after it is
+  # written: a commit on top of <remote>/<branch> as it is now, made without
+  # touching your working tree or checked-out branch, and only when the file
+  # changed. The file is validated first (coarse splits only, no holdings).
+  # Off here; turn it on in conf/local/parameters.yml on the machine whose
+  # local runs feed the public site.
+  share:
+    enabled: false
+    push: false
+    remote: origin
+    branch: main
+    message: "Update coarse splits of local_only funds ({n_funds} funds)"

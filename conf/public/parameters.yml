@@ -31,3 +31,8 @@ universe:
 directory:
   public_only: true
   required_sources: [esma_firds_funds]
+
+# The public build never commits anything.
+aggregates:
+  share:
+    enabled: false

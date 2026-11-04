@@ -117,3 +117,80 @@ def test_splits_are_dated_by_their_last_commit(tmp_path):
         subprocess.run(cmd, cwd=tmp_path, env=env, check=True)
     assert committed_at(path) == "2026-11-05T09:00:00Z"
     assert load_aggregates(str(path))["IE00B5BMR087"]["updated_at"] == "2026-11-05T09:00:00Z"
+
+
+def _entry(isin, computed_at=None, it=50):
+    e = {"isins": [isin], "as_of": "2026-10-01", "holdings_source": "ishares",
+         "sector": [["Information Technology", it], ["Unresolved", 0]]}
+    if computed_at:
+        e["computed_at"] = computed_at
+    return e
+
+
+def test_merge_keeps_funds_a_run_missed_until_they_are_too_old():
+    new = {"IE00B5BMR087": _entry("IE00B5BMR087", "2026-11-04T00:00:00Z", it=60)}
+    previous = {"computed_at": "2026-10-01T00:00:00Z", "funds": {
+        "IE00B5BMR087": _entry("IE00B5BMR087", it=40),                         # recomputed: the new one wins
+        "IE00B4L5Y983": _entry("IE00B4L5Y983"),                                # its scraper failed: kept
+        "IE00B6YX5C33": _entry("IE00B6YX5C33", "2026-01-01T00:00:00Z"),        # older than keep_days: dropped
+    }}
+    out, kept = aggregates.merge(new, previous, "2026-11-04T00:00:00Z", 180)
+    assert kept == 1 and sorted(out) == ["IE00B4L5Y983", "IE00B5BMR087"]
+    assert out["IE00B5BMR087"]["sector"][0] == ["Information Technology", 60]
+    assert out["IE00B4L5Y983"]["computed_at"] == "2026-10-01T00:00:00Z"  # the file's date, for an entry without one
+
+
+def test_build_keeps_earlier_splits_and_the_site_shows_their_own_date(tmp_path):
+    prev = tmp_path / "aggregates.json"
+    prev.write_text(json.dumps({"version": 1, "computed_at": "2026-10-01T00:00:00Z", "method": "m", "n_funds": 1,
+                                "funds": {"IE00B4L5Y983": _entry("IE00B4L5Y983")}}))
+    funds = pd.DataFrame([{"id": "IE00B5BMR087", "isins": ["IE00B5BMR087"], "source": "ishares", "as_of": "2026-11-02",
+                           "unresolved_pct": 0.0, "n_constituents": 1}])
+    rel = connection().from_df(_rows(("IE00B5BMR087", 100.0, "Information Technology", "US", "equity")))
+    doc = aggregates.build(funds, rel, {"computed_at": "2026-11-04T00:00:00Z"}, None, {"aggregates_path": str(prev)})
+    assert doc["n_kept"] == 1 and sorted(doc["funds"]) == ["IE00B4L5Y983", "IE00B5BMR087"]
+    prev.write_text(json.dumps(doc))
+    index = load_aggregates(str(prev))
+    assert index["IE00B5BMR087"]["updated_at"] in ("2026-11-04T00:00:00Z",)  # not in git here: the computed date
+    assert index["IE00B4L5Y983"]["updated_at"] == "2026-10-01T00:00:00Z"
+
+
+def _git(cwd, *args):
+    import subprocess
+
+    env = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.org", "GIT_COMMITTER_NAME": "t",
+           "GIT_COMMITTER_EMAIL": "t@example.org", "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin",
+           "HOME": str(cwd)}
+    return subprocess.run(["git", *args], cwd=cwd, env=env, check=True, capture_output=True, text=True).stdout.strip()
+
+
+def test_share_commits_only_the_splits_file(tmp_path, monkeypatch):
+    remote, work = tmp_path / "remote.git", tmp_path / "work"
+    _git(tmp_path, "init", "-q", "--bare", "-b", "main", str(remote))
+    _git(tmp_path, "clone", "-q", str(remote), str(work))
+    (work / "README.md").write_text("hi\n")
+    (work / "public_aggregates").mkdir()
+    _git(work, "add", "README.md")
+    _git(work, "commit", "-q", "-m", "init")
+    _git(work, "push", "-q", "origin", "HEAD:main")
+    for k, v in {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.org", "GIT_COMMITTER_NAME": "t",
+                 "GIT_COMMITTER_EMAIL": "t@example.org", "HOME": str(tmp_path)}.items():
+        monkeypatch.setenv(k, v)
+    # Something else is changed and staged in the working tree: it must not be committed.
+    (work / "README.md").write_text("local edit\n")
+    _git(work, "add", "README.md")
+    doc = {"version": 1, "computed_at": "2026-11-04T00:00:00Z", "method": "m", "n_funds": 1,
+           "funds": {"IE00B5BMR087": _entry("IE00B5BMR087", "2026-11-04T00:00:00Z")}}
+    path = work / "public_aggregates" / "aggregates.json"
+    path.write_text(json.dumps(doc))
+    cfg = {"share": {"enabled": True, "push": True}}
+    got = aggregates.share(doc, cfg, str(path))
+    assert got["shared"] and got["path"] == "public_aggregates/aggregates.json"
+    assert _git(remote, "show", "--name-only", "--format=", "main") == "public_aggregates/aggregates.json"
+    assert _git(remote, "show", "main:README.md") == "hi"
+    assert _git(work, "diff", "--cached", "--name-only") == "README.md"  # the user's staged edit is untouched
+    assert aggregates.share(doc, cfg, str(path))["reason"].endswith("is unchanged on origin/main")
+    assert aggregates.share(doc, {"share": {"enabled": False}}, str(path)) == {
+        "shared": False, "reason": "aggregates.share.enabled is false"}
+    with pytest.raises(aggregates.AggregatesError):
+        aggregates.share({**doc, "funds": {"IE00B5BMR087": {"rows": [["US0378331005", 7]]}}}, cfg, str(path))

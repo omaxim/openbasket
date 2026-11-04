@@ -330,9 +330,11 @@ and Corporate Bonds), ISO country codes, five regions, six asset classes, and
 `top10_pct`, because both would describe the holdings. Without such splits
 (`basis` absent), `breakdowns` is computed from the fund's own rows as above.
 
-`computed_at` is when the local run computed the splits; `updated_at` is when
-`public_aggregates/aggregates.json` was last committed to the repository (the
-public build reads it from git; outside git it repeats `computed_at`). Rows
+`computed_at` is when a local run computed this fund's splits; `updated_at`
+is when `public_aggregates/aggregates.json` was last committed to the
+repository (the public build reads it from git; outside git it repeats
+`computed_at`). Splits kept from an earlier run, because the latest run had
+no holdings for the fund, have `updated_at` equal to their own `computed_at`. Rows
 whose issuer file gives no sector take their company's GICS sector from
 FinanceDatabase by ISIN, as in the public build.
 

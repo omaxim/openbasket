@@ -26,6 +26,7 @@ import logging
 import math
 import re
 import shutil
+import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +37,7 @@ import pandas as pd
 
 from ... import aggregates
 from ...datasets import connection
+from ...sources import financedatabase as findb
 from ...sources import FULL_MODE, PUBLIC_MODE, is_public, publish_mode, redistribution
 from ..lookthrough.nodes import issuer_adapters
 from ..universe.nodes import source_catalogue
@@ -260,6 +262,9 @@ def _stream_constituents(rel: duckdb.DuckDBPyRelation, cap: int, ids: set[str], 
                 with r as (select * from _publish_rel where constituent_isin is not null and fund_id between ? and ?)
                 {dims}
                 union all
+                select fund_id, 'sector_filled_pct', null, sum(weight_pct) from r
+                where sector_source is not null group by 1
+                union all
                 select fund_id, 'top10_pct', null, sum(w) from (
                     select fund_id, constituent_isin, sum(weight_pct) w,
                            row_number() over (partition by fund_id order by abs(sum(weight_pct)) desc, constituent_isin) rn
@@ -273,8 +278,8 @@ def _stream_constituents(rel: duckdb.DuckDBPyRelation, cap: int, ids: set[str], 
         sums: dict[str, dict] = {}
         for f, dim, label, w in sums_rows:
             d = sums.setdefault(f, {})
-            if dim == "top10_pct":
-                d["top10_pct"] = w
+            if dim in ("top10_pct", "sector_filled_pct"):
+                d[dim] = w
             else:
                 bucket = d.setdefault(dim, {})
                 key = label or UNKNOWN_LABEL
@@ -296,6 +301,10 @@ def _finish_breakdowns(sums: dict, unresolved_pct: object) -> dict:
     u = _num(unresolved_pct)
     out = {d: _ordered(sums.get(d, {}), u) for d in BREAKDOWNS}
     out["top10_pct"] = _num(sums.get("top10_pct")) or 0.0
+    filled = _num(sums.get("sector_filled_pct"))
+    if filled:
+        # Rows whose holdings source gave no sector, labelled from FinanceDatabase by company ISIN.
+        out["sector_from"] = [[SECTOR_SOURCE, filled]]
     return out
 
 
@@ -329,15 +338,34 @@ def _write_fund_files(funds: dict[str, dict], rel, cap: int, out: Path, full_dat
     return sizes, n_rows
 
 
+def committed_at(path: str | Path) -> str | None:
+    """When the last git commit that changed ``path`` was made (UTC, ISO 8601), or ``None`` outside git.
+
+    A shallow clone knows only its newest commit, so the publish workflow checks out the full history.
+    """
+    try:
+        out = subprocess.run(["git", "log", "-1", "--format=%cI", "--", Path(path).name], cwd=Path(path).parent,
+                             capture_output=True, text=True, timeout=30, check=True).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if not out:
+        return None
+    return datetime.fromisoformat(out).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def load_aggregates(path: str | None) -> dict | None:
-    """The validated aggregates file, indexed by fund id and every ISIN it lists; ``None`` if absent."""
+    """The validated aggregates file, indexed by fund id and every ISIN it lists; ``None`` if absent.
+
+    Each entry carries ``updated_at``: when the file was last committed, else when it was computed.
+    """
     if not path or not Path(path).is_file():
         return None
     doc = json.loads(Path(path).read_text())
     aggregates.validate(doc)
+    updated_at = committed_at(path) or doc.get("computed_at")
     index = {}
     for fid, entry in doc["funds"].items():
-        e = {**entry, "computed_at": doc.get("computed_at")}
+        e = {**entry, "computed_at": doc.get("computed_at"), "updated_at": updated_at}
         for key in [fid, *entry.get("isins", [])]:
             index.setdefault(key, e)
     return index
@@ -357,6 +385,7 @@ def _aggregate_breakdowns(fund: dict, index: dict | None) -> dict | None:
                  "whole percent, holdings not shown. Run openbasket yourself to see the companies."),
         "as_of": entry.get("as_of"),
         "computed_at": entry.get("computed_at"),
+        "updated_at": entry.get("updated_at"),
         **{d: entry[d] for d in aggregates.DIMENSIONS if d in entry},
         "top10_pct": None,
     }
@@ -381,6 +410,9 @@ def _source_entries(sources_cfg: dict, rel, funds: pd.DataFrame) -> list[dict]:
             select 'openfigi', count(distinct fund_id), null, null from r
             where name_source = 'openfigi'
             having count(*) > 0
+            union all
+            select sector_source, count(distinct fund_id), null, null from r
+            where sector_source is not null group by 1
             """
         ).fetchall()
     finally:
@@ -417,6 +449,52 @@ def _dir_bytes(path: Path) -> int:
     return sum(p.stat().st_size for p in path.rglob("*") if p.is_file())
 
 
+#: Where a row's sector came from when its holdings source gave none.
+SECTOR_SOURCE = findb.SOURCE_ID
+
+
+def build_sector_map(params: dict) -> pd.DataFrame:
+    """Company ISIN -> GICS sector from FinanceDatabase's equities file (MIT), with the file's date.
+
+    Empty when ``params.enabled`` is false or the file cannot be fetched: the
+    build then goes on with the sectors the holdings sources give.
+    """
+    empty = pd.DataFrame({c: pd.Series(dtype=object) for c in [*findb.SECTOR_MAP_COLUMNS, "as_of"]})
+    if not params.get("enabled", True):
+        return empty
+    try:
+        got = findb.fetch_equities(params["root"], overwrite=params.get("overwrite", False))
+        out, stats = findb.sector_map(pd.read_parquet(got["path"], columns=["isin", "sector"]))
+    except Exception as exc:  # noqa: BLE001 - sector labels are an extra, not a reason to stop the build
+        logger.warning("FinanceDatabase sectors unavailable (%s); rows keep their source's sectors", exc)
+        return empty
+    logger.info("FinanceDatabase sectors: %d company ISINs (%d with conflicting sectors dropped)",
+                stats["isins"], stats["conflicting_isins"])
+    out["as_of"] = got["as_of"]
+    return out
+
+
+def fill_sectors(rel: duckdb.DuckDBPyRelation, sectors: pd.DataFrame | None) -> duckdb.DuckDBPyRelation:
+    """``rel`` with each row that has no sector given its company's sector from ``sectors``.
+
+    A row's own sector always wins. Rows filled this way say
+    ``sector_source = 'financedatabase'``; every other row has it null.
+    """
+    con = connection()
+    con.register("_sector_base", rel)
+    if sectors is None or not len(sectors):
+        return con.sql("select *, cast(null as varchar) as sector_source from _sector_base")
+    con.register("_sector_map", sectors[findb.SECTOR_MAP_COLUMNS])
+    return con.sql(
+        f"""
+        select b.* replace (coalesce(nullif(trim(b.sector), ''), m.sector) as sector),
+               case when nullif(trim(b.sector), '') is null and m.sector is not null then '{SECTOR_SOURCE}' end
+                   as sector_source
+        from _sector_base b left join _sector_map m on b.constituent_isin = m.isin
+        """
+    )
+
+
 def publish(
     universe: pd.DataFrame,
     universe_funds: pd.DataFrame,
@@ -424,6 +502,7 @@ def publish(
     universe_run: dict,
     params: dict,
     issuers_params: dict | None = None,
+    sector_map: pd.DataFrame | None = None,
 ) -> dict:
     """Write ``api/v1`` under ``site_dir`` and the release files under ``release_dir``; return the quality report.
 
@@ -447,7 +526,7 @@ def publish(
 
     release = Path(params["release_dir"])
     release.mkdir(parents=True, exist_ok=True)
-    rel = universe_constituents
+    rel = fill_sectors(universe_constituents, sector_map)
     rel.order("fund_id, constituent_isin is null, abs(weight_pct) desc").write_parquet(
         str(release / LOOKTHROUGH_FILE), compression="zstd"
     )

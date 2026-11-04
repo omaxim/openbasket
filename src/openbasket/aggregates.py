@@ -134,19 +134,32 @@ def fund_aggregates(rows: pd.DataFrame, unresolved_pct: float | None) -> dict[st
     return {d: _split(sums[d], unresolved_pct or 0.0) for d in DIMENSIONS}
 
 
-def build(universe_funds: pd.DataFrame, universe_constituents: duckdb.DuckDBPyRelation, params: dict) -> dict:
-    """The aggregates document for every fund whose holdings come from a ``local_only`` source."""
+def build(universe_funds: pd.DataFrame, universe_constituents: duckdb.DuckDBPyRelation, params: dict,
+          sector_map: pd.DataFrame | None = None) -> dict:
+    """The aggregates document for every fund whose holdings come from a ``local_only`` source.
+
+    A row whose issuer file gives no sector takes its company's sector from
+    ``sector_map`` (company ISIN -> GICS sector, see
+    :func:`openbasket.sources.financedatabase.sector_map`), as the public build does.
+    """
     funds = universe_funds[universe_funds["source"].map(lambda s: bool(s) and redistribution(str(s)) == "local_only")]
     funds = funds[funds["n_constituents"].fillna(0) > 0]
     con = connection()
     con.register("_agg_rel", universe_constituents)
+    has_map = sector_map is not None and len(sector_map) > 0
+    if has_map:
+        con.register("_agg_sectors", sector_map[["isin", "sector"]])
+    sector = "coalesce(nullif(trim(r.sector), ''), m.sector)" if has_map else "r.sector"
+    join = "left join _agg_sectors m on r.constituent_isin = m.isin" if has_map else ""
     try:
         rows = con.execute(
-            "select fund_id, weight_pct, sector, country, asset_class from _agg_rel where fund_id in "
-            "(select unnest(?))", [funds["id"].tolist()]
+            f"select r.fund_id, r.weight_pct, {sector} as sector, r.country, r.asset_class from _agg_rel r {join} "
+            "where r.fund_id in (select unnest(?))", [funds["id"].tolist()]
         ).df()
     finally:
         con.unregister("_agg_rel")
+        if has_map:
+            con.unregister("_agg_sectors")
     by_fund = dict(tuple(rows.groupby("fund_id"))) if len(rows) else {}
     out = {}
     for f in funds.to_dict("records"):
@@ -164,7 +177,8 @@ def build(universe_funds: pd.DataFrame, universe_constituents: duckdb.DuckDBPyRe
         "computed_at": params.get("computed_at") or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "method": ("openbasket's own aggregates over the fund's full holdings: shares of net assets by "
                    "openbasket's sector list, ISO country, region and asset class, rounded to whole percent; "
-                   "labels under 1% are folded into Other. No holdings are included."),
+                   "labels under 1% are folded into Other. Rows whose issuer gives no sector take their "
+                   "company's GICS sector from FinanceDatabase (MIT) by ISIN. No holdings are included."),
         "n_funds": len(out),
         "funds": out,
     }

@@ -198,9 +198,23 @@ publish:
       url: https://registers.esma.europa.eu/publication/searchRegister?core=esma_registers_firds
       licence: ESMA register data, free to reuse with credit
       credit: Instrument reference data from ESMA FIRDS
+    financedatabase:
+      name: FinanceDatabase by Jeroen Bouma
+      url: https://github.com/JerBouma/FinanceDatabase
+      licence: MIT (https://github.com/JerBouma/FinanceDatabase/blob/main/LICENSE)
+      credit: "Sector labels from FinanceDatabase by Jeroen Bouma (https://github.com/JerBouma/FinanceDatabase), MIT License; used by openbasket only for rows whose holdings source gives no sector, matched by company ISIN"
       listed_by: ESMA FIRDS
     openfigi:
       name: OpenFIGI
       url: https://www.openfigi.com/
       licence: OpenFIGI API terms; terms not reviewed
       credit: Names and security types from OpenFIGI (https://www.openfigi.com/)
+
+# Sector labels for rows whose holdings source gives none (SEC N-PORT gives
+# none): each company's GICS sector from FinanceDatabase's equities file
+# (MIT, about 13 MB, reused when fetched today), matched by ISIN. A row's own
+# sector always wins. false leaves sectors as the sources give them.
+sectors:
+  enabled: true
+  root: data/01_raw/financedatabase
+  overwrite: false

@@ -239,6 +239,13 @@ Breakdowns
   `"Unresolved"`, so each breakdown adds up to 100.
 : `top10_pct` is the weight of the ten largest constituent ISINs, each summed
   over its rows.
+: `sector_from`, when present, is a list of `[source id, pct]`: the weight of
+  rows whose holdings source gives no sector (SEC Form N-PORT gives none) and
+  whose sector openbasket took from that source instead, matched by the
+  company's ISIN. Today the only such source is `financedatabase`, the GICS
+  sector of each company in FinanceDatabase's equities file (MIT). A row's
+  own sector always wins, and the source is listed in `meta.sources`. In the
+  release Parquet file these rows say `sector_source = "financedatabase"`.
 
 Source and matching
 : `source`, `source_url`, `as_of` and `credit` describe the fund's own
@@ -307,6 +314,7 @@ full run from the issuer's holdings and published without them:
   "note": "Computed by openbasket from iShares's published holdings as of 2026-11-02; whole percent, holdings not shown. Run openbasket yourself to see the companies.",
   "as_of": "2026-11-02",
   "computed_at": "2026-11-04T09:00:00Z",
+  "updated_at": "2026-11-04T10:12:00Z",
   "sector": [["Information Technology", 30], ["Financials", 14], ["Other", 56], ["Unresolved", 0]],
   "region": [["North America", 99], ["Other", 1], ["Unresolved", 0]],
   "country": [["US", 99], ["Other", 1], ["Unresolved", 0]],
@@ -321,6 +329,12 @@ and Corporate Bonds), ISO country codes, five regions, six asset classes, and
 `Other`, `Unknown`, `Unresolved`. There is no `source` split and no
 `top10_pct`, because both would describe the holdings. Without such splits
 (`basis` absent), `breakdowns` is computed from the fund's own rows as above.
+
+`computed_at` is when the local run computed the splits; `updated_at` is when
+`public_aggregates/aggregates.json` was last committed to the repository (the
+public build reads it from git; outside git it repeats `computed_at`). Rows
+whose issuer file gives no sector take their company's GICS sector from
+FinanceDatabase by ISIN, as in the public build.
 
 ## `api/v1/funds/{isin}.json` for other share classes
 

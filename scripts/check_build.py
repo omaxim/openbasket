@@ -237,6 +237,15 @@ def scan_api(api_v1: Path, known: set[str], found: Findings, max_examples: int =
             if not doc.get("constituents") and _blank(unresolved.get("source_url")):
                 no_unresolved_url.append(fid)
         bd = doc.get("breakdowns") or {}
+        # Sector labels taken from another source than the holdings name it, and it must be listed and public.
+        for item in (bd.get("sector_from") or []) if isinstance(bd, dict) else []:
+            sid = item[0] if isinstance(item, list) and item else None
+            if _blank(sid):
+                found.error(f"funds/{path.name}: breakdowns.sector_from names no source.")
+                continue
+            if sid not in known:
+                note_unknown(sid, f"funds/{path.name} sector_from")
+            check_class(sid, f"funds/{path.name} sector_from")
         if isinstance(bd, dict) and bd.get("basis") == "openbasket_aggregate":
             stats["aggregate_splits"] = stats.get("aggregate_splits", 0) + 1
             if doc.get("constituents") or doc.get("status") != "local_only":

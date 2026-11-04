@@ -55,6 +55,10 @@ jobs:
       MIN_FUNDS: ${{ inputs.min_funds || (inputs.sample && '1') || vars.OPENBASKET_MIN_FUNDS || '10000' }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history, so the coarse splits of local_only funds are dated by
+          # the commit that last changed public_aggregates/aggregates.json.
+          fetch-depth: 0
 
       - uses: astral-sh/setup-uv@v10.3.3
         with:
@@ -144,6 +148,10 @@ jobs:
         with:
           path: data/03_primary/openfigi_cache.parquet
           key: openfigi-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Sector labels
+        # Company ISIN -> GICS sector from FinanceDatabase (MIT), for rows whose source gives none.
+        run: kedro run --env public --pipeline=sectors
 
       - name: Publish
         # Writes build/site/api/v1 and build/release (publish.site_dir, publish.release_dir).

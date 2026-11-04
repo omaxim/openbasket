@@ -102,3 +102,8 @@ universe_run:
 quality_report:
   type: json.JSONDataset
   filepath: data/08_reporting/quality_report.json
+
+# Company ISIN -> GICS sector from FinanceDatabase (MIT); fills rows without a sector.
+sector_map:
+  type: pandas.ParquetDataset
+  filepath: data/03_primary/sector_map.parquet

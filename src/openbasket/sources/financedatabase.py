@@ -162,6 +162,47 @@ def fetch(kind: str, root: str | Path, fmt: str = "parquet", overwrite: bool = F
     return {"kind": kind, "path": str(dest), "url": url, "as_of": as_of or today, "bytes": int(size)}
 
 
+#: The equities file: one row per company listing, with its GICS sector, industry group and industry.
+EQUITIES_FILE = "equities"
+#: The eleven GICS sector names FinanceDatabase uses (the same as openbasket's sector list).
+GICS_SECTORS = (
+    "Information Technology", "Health Care", "Financials", "Consumer Discretionary", "Consumer Staples",
+    "Communication Services", "Industrials", "Energy", "Materials", "Utilities", "Real Estate",
+)
+SECTOR_MAP_COLUMNS = ["isin", "sector"]
+
+
+def fetch_equities(root: str | Path, overwrite: bool = False) -> dict:
+    """Download ``compression/equities.parquet`` (about 13 MB) into ``root``, reused if fetched today."""
+    root = Path(root)
+    url = f"{RAW}compression/{EQUITIES_FILE}.parquet"
+    dest = root / f"{EQUITIES_FILE}.parquet"
+    today = date.today().isoformat()
+    if overwrite or not dest.exists() or date.fromtimestamp(dest.stat().st_mtime).isoformat() != today:
+        _download(url, dest)
+    as_of = last_commit_date(f"compression/{EQUITIES_FILE}.parquet")
+    return {"path": str(dest), "url": url, "as_of": as_of or today, "bytes": int(dest.stat().st_size)}
+
+
+def sector_map(equities: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """One row per company ISIN with its GICS sector, and counts.
+
+    Every listing of a company carries the company's ISIN, so the listings of
+    one ISIN are folded together. An ISIN whose listings name different
+    sectors is dropped rather than guessed, and so is one whose check digit
+    fails or whose sector is not one of the eleven GICS names.
+    """
+    df = pd.DataFrame({
+        "isin": equities["isin"].map(lambda v: (_text(v) or "").upper() or None),
+        "sector": equities["sector"].map(_text),
+    }).dropna()
+    df = df[df["isin"].map(is_valid_isin) & df["sector"].isin(GICS_SECTORS)].drop_duplicates()
+    n = df.groupby("isin")["sector"].transform("nunique")
+    out = df[n == 1].sort_values("isin").reset_index(drop=True)[SECTOR_MAP_COLUMNS]
+    stats = {"listings": int(len(equities)), "isins": int(len(out)), "conflicting_isins": int(df.loc[n > 1, "isin"].nunique())}
+    return out, stats
+
+
 def read(path: str | Path) -> pd.DataFrame:
     """One kind's rows from a Parquet file, a CSV file or a folder of CSV files."""
     path = Path(path)

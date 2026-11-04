@@ -8,7 +8,8 @@ def create_pipeline(**kwargs) -> Pipeline:
         [
             Node(
                 publish,
-                ["universe", "universe_funds", "universe_constituents", "universe_run", "params:publish", "params:issuers"],
+                ["universe", "universe_funds", "universe_constituents", "universe_run", "params:publish", "params:issuers",
+                 "sector_map"],
                 "quality_report",
                 name="publish",
             ),

@@ -85,3 +85,35 @@ def test_public_fund_file_gets_splits_but_no_holdings(tmp_path):
     assert "iShares" in bd["note"] and "holdings not shown" in bd["note"]
     assert _aggregate_breakdowns({**local, "status": "ok"}, index) is None  # a fund with real holdings keeps its own
     assert load_aggregates(str(tmp_path / "missing.json")) is None
+
+
+def test_build_fills_missing_sectors_from_the_sector_map():
+    funds = pd.DataFrame([{"id": "IE00B5BMR087", "isins": ["IE00B5BMR087"], "source": "ishares", "as_of": "2026-11-02",
+                           "unresolved_pct": 0.0, "n_constituents": 2}])
+    rel = connection().from_df(pd.DataFrame([
+        ("IE00B5BMR087", "US0378331005", 60.0, None, "US", "equity"),
+        ("IE00B5BMR087", "US5949181045", 40.0, "Health Care", "US", "equity"),  # the issuer's own label wins
+    ], columns=["fund_id", "constituent_isin", "weight_pct", "sector", "country", "asset_class"]))
+    sectors = pd.DataFrame({"isin": ["US0378331005", "US5949181045"], "sector": ["Information Technology", "Information Technology"]})
+    doc = aggregates.build(funds, rel, {"computed_at": "2026-11-04T00:00:00Z"}, sectors)
+    assert doc["funds"]["IE00B5BMR087"]["sector"][:2] == [["Information Technology", 60], ["Health Care", 40]]
+
+
+def test_splits_are_dated_by_their_last_commit(tmp_path):
+    import subprocess
+
+    from openbasket.pipelines.publish.nodes import committed_at
+
+    doc = {"version": 1, "computed_at": "2026-11-01T00:00:00Z", "method": "m", "n_funds": 1, "funds": {
+        "IE00B5BMR087": {"isins": ["IE00B5BMR087"], "as_of": "2026-11-02", "holdings_source": "ishares",
+                         "sector": [["Unresolved", 0]]}}}
+    path = tmp_path / "aggregates.json"
+    path.write_text(json.dumps(doc))
+    assert committed_at(path) is None or load_aggregates(str(path))  # outside a repository: the computed date
+    assert load_aggregates(str(path))["IE00B5BMR087"]["updated_at"] in ("2026-11-01T00:00:00Z", committed_at(path))
+    env = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.org", "GIT_COMMITTER_NAME": "t",
+           "GIT_COMMITTER_EMAIL": "t@example.org", "GIT_COMMITTER_DATE": "2026-11-05T10:00:00+01:00", "PATH": "/usr/bin:/bin"}
+    for cmd in (["git", "init", "-q"], ["git", "add", "aggregates.json"], ["git", "commit", "-q", "-m", "splits"]):
+        subprocess.run(cmd, cwd=tmp_path, env=env, check=True)
+    assert committed_at(path) == "2026-11-05T09:00:00Z"
+    assert load_aggregates(str(path))["IE00B5BMR087"]["updated_at"] == "2026-11-05T09:00:00Z"

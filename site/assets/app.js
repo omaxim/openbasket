@@ -34,6 +34,45 @@
      Unknown labels are stone; Unresolved is a pale grey of its own. */
   const PALETTE = ["#9c3848", "#2e6b9e", "#d08a1e", "#3f8a4a", "#6d4a9c", "#1d8a87", "#c4572b", "#b8417a",
     "#43599e", "#7f8f22", "#8a5a3c", "#3b8fbf"];
+  /* Fixed colours, so a sector, region, asset class or main country looks the same in every fund.
+     Other labels (smaller countries, sources, routes) take a palette colour picked from the label itself. */
+  const FIXED_COLOURS = {
+    sector: {
+      "Information Technology": "#9c3848", Financials: "#2e6b9e", "Health Care": "#d08a1e",
+      "Consumer Discretionary": "#3f8a4a", "Communication Services": "#6d4a9c", Industrials: "#1d8a87",
+      "Consumer Staples": "#c4572b", Energy: "#b8417a", Utilities: "#43599e", "Real Estate": "#7f8f22",
+      Materials: "#8a5a3c", "Government Bonds": "#3b8fbf", "Corporate Bonds": "#5c6f82",
+    },
+    region: {
+      "North America": "#9c3848", Europe: "#2e6b9e", "Asia-Pacific": "#d08a1e", "Latin America": "#3f8a4a",
+      "Middle East & Africa": "#6d4a9c", "Other regions": "#8a5a3c",
+    },
+    country: {
+      US: "#9c3848", GB: "#2e6b9e", JP: "#d08a1e", CN: "#3f8a4a", FR: "#43599e", DE: "#1d8a87", CH: "#c4572b",
+      CA: "#6d4a9c", IN: "#b8417a", TW: "#7f8f22", KR: "#8a5a3c", AU: "#3b8fbf", NL: "#5c6f82", IE: "#4f8f6a",
+    },
+    asset: { Equity: "#9c3848", Bonds: "#2e6b9e", Cash: "#d08a1e", Derivatives: "#6d4a9c", Funds: "#1d8a87", "Other assets": "#8a5a3c" },
+  };
+  /** The asset-class group of a row's asset class (equity, debt, short-term investment vehicle, ...). */
+  function assetGroup(key) {
+    const k = String(key || "").toLowerCase();
+    if (/deriv|future|swap|forward|option/.test(k)) return "Derivatives";
+    if (/^equity|^preferred|stock|share/.test(k)) return "Equity";
+    if (/debt|bond|loan|asset-backed|mortgage|structured|fixed income|note/.test(k)) return "Bonds";
+    if (/cash|money market|short-term|repurchase/.test(k)) return "Cash";
+    if (/fund/.test(k)) return "Funds";
+    return k ? "Other assets" : null;
+  }
+  /** The colour of label `key` in grouping `dim`: fixed where openbasket has one, else picked from the label. */
+  function colourOf(dim, key) {
+    const d = dim === "asset_class" ? "asset" : dim;
+    const fixed = FIXED_COLOURS[d] || {};
+    const k = d === "asset" ? (fixed[key] ? key : assetGroup(key)) : key;
+    if (fixed[k]) return fixed[k];
+    let hsh = 0;
+    for (const ch of String(key)) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0;
+    return PALETTE[hsh % PALETTE.length];
+  }
   const TM = { unknown: "#b8aea3", unresolved: "#dcd5ca", paper: "#f6f2ec", ink: "#1b1a19", ink2: "#4a4744", muted: "#7d7873" };
   const TM_DIMS = [
     { id: "sector", label: "Sector", short: "Sector", all: "All sectors" },
@@ -734,20 +773,22 @@
   function aggregateBlocks(list, dim) {
     const W = 960, H = 420;
     const items = (list || []).filter((p) => p[1] > 0).map(([label, value]) => ({ label, value }));
-    let i = 0;
     const colour = (it) => (it.label === UNRESOLVED ? TM.unresolved : unknown(it.label) || it.label === "Other" ? TM.unknown
-      : PALETTE[i++ % PALETTE.length]);
+      : colourOf(dim.key, it.label));
     const coloured = items.map((it) => ({ ...it, fill: colour(it) }));
     const rects = tm.squarify(coloured, 0, 0, W, H);
     return s("svg", { class: "agg-map", viewBox: `0 0 ${W} ${H}`, role: "img",
       "aria-label": `${dim.title}: ${items.map((it) => `${dim.label(it.label)} ${it.value}%`).join(", ")}` },
       rects.map((r) => {
-        const big = r.w > 90 && r.h > 46;
+        const fs = Math.max(13, Math.min(24, Math.sqrt(r.w * r.h) / 8));
+        const big = r.w > 60 && r.h > fs * 2.6;
         const dark = r.item.label === UNRESOLVED;
+        const fill = dark ? TM.ink2 : tm.textOn(r.item.fill, TM.ink, "#ffffff");
+        const name = big ? fitText(dim.label(r.item.label), r.w - 20, `700 ${fs}px Sora, Inter, system-ui, sans-serif`) : "";
         return s("g", {},
           s("rect", { x: r.x + 1, y: r.y + 1, width: Math.max(r.w - 2, 0), height: Math.max(r.h - 2, 0), fill: r.item.fill }),
-          big ? s("text", { x: r.x + 10, y: r.y + 26, class: "agg-label", fill: dark ? TM.ink2 : "#fff" }, dim.label(r.item.label)) : null,
-          big ? s("text", { x: r.x + 10, y: r.y + 52, class: "agg-value", fill: dark ? TM.ink2 : "#fff" }, `${r.item.value}%`) : null,
+          name ? s("text", { x: r.x + 10, y: r.y + 8 + fs, class: "agg-label", fill, style: `font-size:${fs.toFixed(1)}px` }, name) : null,
+          name ? s("text", { x: r.x + 10, y: r.y + 12 + fs * 2.1, class: "agg-value", fill, style: `font-size:${(fs * 0.9).toFixed(1)}px` }, `${r.item.value}%`) : null,
           s("title", {}, `${dim.label(r.item.label)}: ${r.item.value}%`));
       }));
   }
@@ -776,7 +817,8 @@
       h("p", { class: "eyebrow" }, "Shape of the fund"),
       h("h3", { id: "agg-title" }, "Where the ", h("em", {}, "money"), " is, in broad strokes"),
       h("p", { class: "dist-intro" }, b.note || "Computed by openbasket from the issuer's published holdings; holdings not shown.",
-        " Whole percent of net assets; small groups are folded into Other."),
+        " Whole percent of net assets; small groups are folded into Other.",
+        b.updated_at || b.computed_at ? h("span", { class: "agg-updated" }, ` Splits last updated ${fmtDate(String(b.updated_at || b.computed_at).slice(0, 10))}.`) : null),
       switches, mapHost,
       h("details", { class: "agg-tables" }, h("summary", {}, "The same splits as tables"), tables));
   }
@@ -943,7 +985,10 @@
       srcIds.map((id, i) => [i ? ", " : null,
         id === f.source && safeUrl(f.source_url) ? ext(f.source_url, sourceName(id))
           : safeUrl((state.sources[id] || {}).url) ? ext(state.sources[id].url, sourceName(id)) : sourceName(id)]),
-      ` · as of ${fmtRange(lo, hi)}`);
+      ` · as of ${fmtRange(lo, hi)}`,
+      ((f.breakdowns && f.breakdowns.sector_from) || []).map(([id, w]) => [" · Sectors for ", `${fmtPct(w)}%`,
+        " of net assets, where the source gives none: ",
+        safeUrl((state.sources[id] || {}).url) ? ext(state.sources[id].url, sourceName(id)) : sourceName(id), ", by company ISIN"]));
   }
 
   function renderDistribution(f, rows, t) {
@@ -998,13 +1043,12 @@
     return key;
   }
 
-  /** Block colours by rank, so a block keeps its colour when zoomed into. */
-  function blockColours(blocks) {
+  /** Block colours: the same label has the same colour in every fund (see colourOf). */
+  function blockColours(blocks, dim) {
     const out = new Map();
-    let i = 0;
     for (const b of blocks) {
       if (unknown(b.key) || b.key === tm.NOT_LISTED) out.set(b.key, TM.unknown);
-      else out.set(b.key, PALETTE[i++ % PALETTE.length]);
+      else out.set(b.key, colourOf(dim, b.key));
     }
     return out;
   }
@@ -1258,7 +1302,7 @@
       const scope = zoomBlock ? zoomBlock.value : rough.total;
       const m = tm.model(f, rows, t, st.dim, { minValue: scope > 0 ? (scope * 10) / area : 0 });
       st.model = m;
-      const colours = blockColours(m.blocks);
+      const colours = blockColours(m.blocks, st.dim);
       zoomBlock = st.zoom != null ? m.blocks.find((b) => b.key === st.zoom) : null;
 
       const svg = s("svg", { class: "tm-svg", viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "group",

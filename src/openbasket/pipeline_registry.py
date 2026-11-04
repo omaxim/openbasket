@@ -9,7 +9,7 @@ from kedro.pipeline import Pipeline
 #: exchange and regulator lists and ``reference`` queries ESMA FIRDS.
 #: ``full`` (every pipeline but ``lookthrough``, see
 #: :mod:`openbasket.pipelines.full`) holds the ones it needs.
-BATCH_PIPELINES = ("universe", "publish", "full", "directory", "reference", "aggregates")
+BATCH_PIPELINES = ("universe", "publish", "full", "directory", "reference", "aggregates", "sectors")
 
 
 def register_pipelines() -> dict[str, Pipeline]:

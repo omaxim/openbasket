@@ -50,9 +50,10 @@ def robots_for(url: str) -> Protego:
         r = http.get(origin + "/robots.txt", timeout=30, retries=2)
         if r.status_code == 200:
             text = r.text
-        elif r.status_code in (404, 410):
+        elif 400 <= r.status_code < 500 and r.status_code != 429:
+            # RFC 9309 2.3.1.3: an "unavailable" robots.txt (4xx) means no rules apply.
             text = ""
-        else:
+        else:  # 429 or 5xx: the site is unreachable for now, so do not crawl
             text = "User-agent: *\nDisallow: /\n"
     except Exception as exc:  # unreachable robots.txt: do not crawl
         logger.warning("robots.txt of %s unreadable (%s); treating the site as disallowed", origin, exc)

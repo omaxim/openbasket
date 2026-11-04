@@ -163,3 +163,20 @@ def test_network_six_and_finma(tmp_path):
     assert len(six) > 1000 and as_of
     ch, foreign = reg.finma_lists(tmp_path)
     assert len(ch) > 1000 and len(foreign) > 1000
+
+
+@pytest.mark.parametrize("status, allowed", [(400, True), (403, True), (404, True), (429, False), (503, False)])
+def test_robots_status_follows_rfc_9309(monkeypatch, status, allowed):
+    import requests
+
+    from openbasket import http
+    from openbasket.sources import swiss_fetch
+
+    def fake_get(url, **kw):
+        r = requests.Response()
+        r.status_code, r._content = status, b""
+        return r
+
+    monkeypatch.setattr(http, "get", fake_get)
+    monkeypatch.setattr(swiss_fetch, "_robots", {})
+    assert swiss_fetch.allowed(f"https://robots-{status}.example/data/file.zip") is allowed

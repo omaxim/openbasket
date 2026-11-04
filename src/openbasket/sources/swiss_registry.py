@@ -484,8 +484,12 @@ def build_registry(cache_dir: str | Path | None = None, sources: Iterable[str] =
                 logger.warning("GLEIF managed funds of %s: %s", lei, exc)
     fund_leis = {f["fund_lei"] for f in funds}
     isin_lei = gleif_isin_lei(fund_leis, cache_dir) if "gleif" in sources and fund_leis else pd.DataFrame(columns=["fund_lei", "isin"])
-    firds, firds_as_of = (firds_funds(fund_leis, cache_dir) if "firds" in sources and fund_leis
-                          else (pd.DataFrame(columns=["isin", "firds_name", "cfi", "currency", "fund_lei"]), None))
+    firds, firds_as_of = pd.DataFrame(columns=["isin", "firds_name", "cfi", "currency", "fund_lei"]), None
+    if "firds" in sources and fund_leis:
+        try:
+            firds, firds_as_of = firds_funds(fund_leis, cache_dir)
+        except Exception as exc:  # one registry source failing must not stop the others
+            logger.warning("FIRDS fund instruments skipped: %s", exc)
     gleif = gleif_rows(funds, isin_lei, firds, today, firds_as_of)
     six = six_rows(*six_funds(cache_dir)) if "six" in sources else _frame([])
     finma = finma_rows(*finma_lists(cache_dir), today) if "finma" in sources else _frame([])

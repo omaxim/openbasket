@@ -1,0 +1,10 @@
+{"protocolVersion":"fqs.json#17x","delayedDateTime":"20261103T17:20:48.418","copyRight":"synthetic test fixture",
+"colNames":["ISIN","ShortName","IssuerNameFull","SecTypeDesc","TradingBaseCurrency","ProductLine"],
+"rowData":[
+["CH0012005267","NOVARTIS N","Novartis AG","Registered Share","CHF","DS"],
+["CH0038863350","NESTLE N","Nestlé AG","Registered Share","CHF","DS"],
+["CH0012032113","ROCHE I","Roche Holding AG","Bearer Share","CHF","DS"],
+["CH0012032048","ROCHE GS","Roche Holding AG","Participation Certificate","CHF","BC"],
+["CH0102484968","JULIUS BAER N","Julius Bär Gruppe AG","Registered Share","CHF","DS"],
+["CA0084741085","AGNICO EAGLE MINES LTD.","Sponsor SIX Swiss Exchange - Sponsored Segment","Sponsored Foreign Shares","CHF","PS"]
+]}

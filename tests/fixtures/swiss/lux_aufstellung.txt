@@ -1,0 +1,21 @@
+Example (Lux) Fonds 30
+Halbjahresbericht per 31. Dezember 2025 9
+Der Anhang ist integraler Bestandteil des Berichtes.
+Aufstellung der Wertpapierbestände und anderer Nettovermögenswerte per 31. Dezember 2025
+ Bezeichnung Anzahl/ Bewertung in CHF in % des
+  Nominal NR Kursgewinn Netto-
+Wertpapiere und Geldmarktinstrumente, die an einer offiziellen Börse gehandelt werden
+Aktien
+Österreich
+EUR ERSTE GROUP BK AG NPV 607.00 58 116.69 0.03
+EUR ANHEUSER-BUSCH IN NPV 1 000.00 51 082.14 0.02
+Total Österreich  109 198.83 0.05
+Total Wertpapiere und Geldmarktinstrumente, die an einer offiziellen Börse gehandelt werden  109 198.83 0.05
+=====PAGE=====
+ Example (Lux) Fonds 30
+10 Halbjahresbericht per 31. Dezember 2025
+Investmentfonds, open end
+Irland
+USD EXAMPLE MSCI USA UCITS ETF-ACC 12 500.00 1 234 567.89 4.10
+Total des Wertpapierbestandes  1 343 766.72 4.15
+Bankguthaben, Sicht- und Fristgelder  19 776.58 0.07

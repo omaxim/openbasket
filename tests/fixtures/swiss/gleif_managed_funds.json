@@ -1,0 +1,6 @@
+{"meta":{"goldenCopy":{"publishDate":"2026-11-03T08:00:00Z"},"pagination":{"currentPage":1,"perPage":200,"from":1,"to":3,"total":3,"lastPage":1}},
+"data":[
+{"type":"lei-records","id":"549300TESTFUND000A01","attributes":{"lei":"549300TESTFUND000A01","entity":{"legalName":{"name":"MTX EMERGING MARKETS LEADERS"},"jurisdiction":"LU","category":"FUND","legalForm":{"id":"9999","other":"Sub-Fund"},"status":"ACTIVE"}}},
+{"type":"lei-records","id":"549300TESTFUND000B02","attributes":{"lei":"549300TESTFUND000B02","entity":{"legalName":{"name":"EINKOMMEN (CHF)"},"jurisdiction":"CH","category":"FUND","legalForm":{"id":"9999","other":"Sub-Fund"},"status":"ACTIVE"}}},
+{"type":"lei-records","id":"549300TESTFUND000C03","attributes":{"lei":"549300TESTFUND000C03","entity":{"legalName":{"name":"OLD FUND"},"jurisdiction":"CH","category":"FUND","legalForm":{"id":"9999","other":"Sub-Fund"},"status":"INACTIVE"}}}
+]}

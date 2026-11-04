@@ -218,6 +218,16 @@ cached issuer files, and the OpenFIGI cache is kept between runs.
 [](publishing.md) has per-fund timings.
 
 
+## When a site is down
+
+A full run reads dozens of sites and registers, and any of them can be down
+for an hour. The optional downloads (the ESMA, FCA and GLEIF registers, the
+regulator stores, FinanceDatabase, the Swiss sources; `SOFT_NODES` in
+`openbasket/pipeline_registry.py`) do not stop the run when they fail: the
+run goes on with the copy the last successful run saved, and the log says
+so. On a first run with no saved copy, the two ESMA registers are left out
+and the others still stop the run.
+
 ## Publishing coarse splits of local-only funds
 
 The full run also writes `public_aggregates/aggregates.json`: for every fund

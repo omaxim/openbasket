@@ -8,6 +8,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from openbasket.resilience import CatalogHook
+
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
 CONFIG_LOADER_ARGS = {
@@ -16,3 +18,6 @@ CONFIG_LOADER_ARGS = {
     # Environments (e.g. conf/public) override single nested keys, not whole sections.
     "merge_strategy": {"parameters": "soft"},
 }
+
+# Lets an optional download that fails fall back to its last saved copy (openbasket.resilience).
+HOOKS = (CatalogHook(),)

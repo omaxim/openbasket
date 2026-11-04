@@ -35,6 +35,16 @@ def fetch_firds(params: dict) -> pd.DataFrame:
     return _with_meta(df, files[0]["publication_date"][:10], " ".join(f["download_link"] for f in files))
 
 
+def empty_firds() -> pd.DataFrame:
+    """What :func:`fetch_firds` returns with the source turned off."""
+    return _with_meta(pd.DataFrame(columns=reg.FIRDS_COLUMNS), None, "")
+
+
+def empty_esma_funds() -> pd.DataFrame:
+    """What :func:`fetch_esma_funds` returns with the source turned off."""
+    return _with_meta(pd.DataFrame(columns=reg.ESMA_COLUMNS), None, "")
+
+
 def fetch_relationships(params: dict) -> pd.DataFrame:
     """GLEIF Level 2 relationships: fund manager, umbrella, master, parents."""
     gc = reg.latest_golden_copy()

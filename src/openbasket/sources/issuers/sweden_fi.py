@@ -50,6 +50,7 @@ ADAPTER = register(
         homepage=fi.PAGE_URL,
         credit=fi.CREDIT,
         licence=fi.LICENCE,
+        redistribution="public",  # Finansinspektionen publishes fondinnehav as open data
         regions=("SE",),
         products=products,
         holdings=holdings,

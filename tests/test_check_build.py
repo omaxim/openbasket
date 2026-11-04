@@ -63,7 +63,7 @@ def build(tmp_path):
         (v1 / "funds" / f"{f['id']}.json").write_text(json.dumps(f))
     (v1 / "funds" / "IE00B5BMR088.json").write_text(json.dumps({"alias_of": "IE00B5BMR087"}))
     index = {
-        "fields": ["id", "isin", "name", "ticker", "issuer", "kind", "source", "as_of", "resolved_pct", "n_constituents"],
+        "fields": ["id", "isin", "name", "ticker", "issuer", "kind", "source", "as_of", "resolved_pct", "n_constituents", "status"],
         "rows": [[f["id"], f["id"], "Fund", None, None, "fund", f["source"], f["as_of"], 100.0, 2] for f in funds],
         "aliases": {},
     }

@@ -64,7 +64,7 @@ def test_meta_matches_contract(built):
 def test_index_and_aliases(built):
     _, api, _ = built()
     meta, index = _json(api / "meta.json"), _json(api / "index.json")
-    assert index["fields"] == ["id", "isin", "name", "ticker", "issuer", "kind", "source", "as_of", "resolved_pct", "n_constituents"]
+    assert index["fields"] == ["id", "isin", "name", "ticker", "issuer", "kind", "source", "as_of", "resolved_pct", "n_constituents", "status"]
     ids = [r[0] for r in index["rows"]]
     assert "US4642872265" not in ids  # its run failed
     assert "S000000003" in ids and "IE00B5BMR087" in ids

@@ -274,7 +274,7 @@ def build(api_in: Path, data: Path) -> None:
     status_rank = {"local_only": 2}
     order = sorted(docs.values(), key=lambda d: (status_rank.get(d["status"], d["source"] == SYNTHETIC), d["id"]))
     index = {
-        "fields": [*INDEX_FIELDS, "status"],
+        "fields": INDEX_FIELDS,
         "rows": [[d["id"], d["isin"], d["name"], d["ticker"], d["issuer"], "fund", d["source"], d["as_of"],
                   None if d["status"] == "local_only" else round(d["resolved_pct"], 2),
                   None if d["status"] == "local_only" else d["n_constituents"], d["status"]] for d in order],

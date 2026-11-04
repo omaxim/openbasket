@@ -53,7 +53,7 @@ CONSTITUENT_FIELDS = ["isin", "name", "weight_pct", "asset_class", "source", "as
 BREAKDOWNS = ("asset_class", "country", "sector", "source")
 UNRESOLVED_LABEL = "Unresolved"
 UNKNOWN_LABEL = "Unknown"
-INDEX_FIELDS = ["id", "isin", "name", "ticker", "issuer", "kind", "source", "as_of", "resolved_pct", "n_constituents"]
+INDEX_FIELDS = ["id", "isin", "name", "ticker", "issuer", "kind", "source", "as_of", "resolved_pct", "n_constituents", "status"]
 #: Fund-file keys taken from the funds table, in contract order.
 FUND_KEYS = [
     "id", "isin", "isins", "name", "ticker", "issuer", "source", "source_url", "credit", "as_of", "matched_via",
@@ -449,7 +449,7 @@ def publish(
         "rows": [
             [fid, _clean(f.get("isin")), _clean(f.get("name")), _clean(f.get("ticker")), _clean(f.get("issuer")), "fund",
              _clean(f.get("source")), _clean(f.get("as_of")), _num(f.get("resolved_pct"), 2),
-             int(_clean(f.get("n_constituents")) or 0)]
+             int(_clean(f.get("n_constituents")) or 0), _clean(f.get("status"))]
             for fid, f in sorted(funds.items())
         ],
         "aliases": dict(sorted(aliases.items())),

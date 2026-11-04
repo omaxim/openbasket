@@ -99,13 +99,13 @@ changed: tickers mapped to ISINs and names taken from N-PORT, under
 ## `api/v1/index.json`
 
 Every fund the build covers, as a table, so the search box can load it once
-(gzip on the wire, about 1 MB). Unchanged in 1.1:
+(gzip on the wire, about 1 MB). In 1.1 each row ends with the fund's `status` (`ok`, `partial`, `over_100`, `leveraged`, `no_holdings`, `local_only`, `error`), so search can mark funds whose holdings need a local run:
 
 ```json
 {
-  "fields": ["id", "isin", "name", "ticker", "issuer", "kind", "source", "as_of", "resolved_pct", "n_constituents"],
+  "fields": ["id", "isin", "name", "ticker", "issuer", "kind", "source", "as_of", "resolved_pct", "n_constituents", "status"],
   "rows": [
-    ["US4642872000", "US4642872000", "iShares Core S&P 500 ETF", "IVV", "iShares Trust", "fund", "nport", "2026-06-30", 99.8, 503]
+    ["US4642872000", "US4642872000", "iShares Core S&P 500 ETF", "IVV", "iShares Trust", "fund", "nport", "2026-06-30", 99.8, 503, "ok"]
   ],
   "aliases": {"US4642872000": "US4642872000"}
 }

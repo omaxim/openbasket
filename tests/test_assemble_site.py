@@ -214,7 +214,7 @@ def test_docs_templates_find_the_landing_page_from_any_depth():
 # The fixtures stand in for the real build, so they must keep to data-api.md v1.1.
 
 #: The fixture index adds a status after the contract's fields, so search can mark local_only funds.
-FIXTURE_INDEX_FIELDS = [*INDEX_FIELDS, "status"]
+FIXTURE_INDEX_FIELDS = INDEX_FIELDS  # the contract index now ends with status
 #: Statuses a fund file can carry: the engine's, and local_only for a fund only a local_only source covers.
 FUND_STATUSES = {*STATUSES, "local_only"}
 #: The made-up fund's source; the only fixture source that is not public.

@@ -1,0 +1,30 @@
+financedatabase:
+  # FinanceDatabase by Jeroen Bouma (MIT). The compressed Parquet files the
+  # financedatabase package reads: etfs about 1.2 MB, funds 2.1 MB, money
+  # markets 28 KB. A file fetched today is reused.
+  root: data/01_raw/financedatabase
+  kinds: [etf, fund, moneymarket]
+  # "parquet" (three files) or "csv" (database/<kind>/*.csv, one request per exchange).
+  fmt: parquet
+  overwrite: false
+  # Funds and money markets carry no ISIN column. true also takes a fund's
+  # ISIN when its name or summary names exactly one valid ISIN.
+  isin_from_text: false
+  # Tables to count the ISINs against; a missing file is skipped.
+  # `holdings: true` means every row has a holdings source; a column name
+  # means rows where that column is set (minus `none_values`).
+  compare:
+    issuer_products:
+      path: data/01_raw/issuers/issuer_products.parquet
+      holdings: true
+    security_master:
+      path: data/03_primary/security_master.parquet
+    fund_registry:
+      path: data/03_primary/fund_registry.parquet
+      holdings: open_holdings_source
+    fund_directory:
+      path: data/03_primary/fund_directory.parquet
+      holdings: holdings_route
+      none_values: [no_holdings_source]
+    etfdb_meta:
+      path: data/03_primary/etfdb_meta.parquet

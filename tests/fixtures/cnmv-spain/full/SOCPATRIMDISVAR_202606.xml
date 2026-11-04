@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<SocPatrimDisVar xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="SocPatrimDisVar.xsd">
+  <FechaDatos>202606</FechaDatos>
+  <Entidad>
+    <Tipo>SICAV</Tipo>
+    <NumeroRegistro>201</NumeroRegistro>
+    <CodigoDivisaIIC>EUR</CodigoDivisaIIC>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <CarteraInterior>1000000.00</CarteraInterior>
+      <CarteraExterior>1900000.00</CarteraExterior>
+      <InteresesCartera>0.00</InteresesCartera>
+      <InversionesDudosas>0.00</InversionesDudosas>
+      <Liquidez>100000.00</Liquidez>
+      <Resto>0.00</Resto>
+      <TotalPatrimonio>3000000.00</TotalPatrimonio>
+    </Compartimento>
+  </Entidad>
+</SocPatrimDisVar>

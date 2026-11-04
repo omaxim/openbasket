@@ -8,7 +8,15 @@ contributed a row, with its licence and credit, from ``publish.sources``.
 Fund files are cut to ``max_constituents`` rows, and if the API still comes
 out larger than ``site_budget_mb`` the cut is lowered and the large funds are
 rewritten. Each cut is logged and recorded in the quality report; the full
-lists are always in the release file.
+lists are always in the release file, and each fund file's ``n_rows``,
+``listed_pct`` and ``breakdowns`` are computed over the full list.
+
+In the public build (``publish.mode: public``) only sources whose licence
+allows republication may appear (see :func:`openbasket.sources.redistribution`).
+Before anything is written, every constituent row's source and every fund's
+source are checked, and a ``local_only`` one stops the build with
+:class:`LocalOnlyInPublicBuild`; each fund file is checked again as it is
+written, and ``meta.sources`` lists public sources only.
 """
 
 from __future__ import annotations
@@ -27,22 +35,72 @@ import numpy as np
 import pandas as pd
 
 from ...datasets import connection
+from ...sources import FULL_MODE, PUBLIC_MODE, is_public, publish_mode, redistribution
+from ..lookthrough.nodes import issuer_adapters
+from ..universe.nodes import source_catalogue
 
 logger = logging.getLogger(__name__)
 
 API_VERSION = 1
+#: The version of ``docs/source/data-api.md`` the files follow.
+CONTRACT = "1.1"
 LOOKTHROUGH_FILE = "openbasket-lookthrough.parquet"
 FUNDS_FILE = "openbasket-funds.parquet"
 QUALITY_FILE = "quality-report.json"
 
-CONSTITUENT_FIELDS = ["isin", "name", "weight_pct", "asset_class", "source", "as_of", "depth", "via"]
-INDEX_FIELDS = ["id", "isin", "name", "ticker", "issuer", "kind", "source", "as_of", "resolved_pct", "n_constituents"]
-#: Fund-file keys in contract order.
+CONSTITUENT_FIELDS = ["isin", "name", "weight_pct", "asset_class", "source", "as_of", "depth", "via", "country", "sector"]
+#: Breakdowns in fund files, each over the fund's full list of rows.
+BREAKDOWNS = ("asset_class", "country", "sector", "source")
+UNRESOLVED_LABEL = "Unresolved"
+UNKNOWN_LABEL = "Unknown"
+INDEX_FIELDS = ["id", "isin", "name", "ticker", "issuer", "kind", "source", "as_of", "resolved_pct", "n_constituents", "status"]
+#: Fund-file keys taken from the funds table, in contract order.
 FUND_KEYS = [
     "id", "isin", "isins", "name", "ticker", "issuer", "source", "source_url", "credit", "as_of", "matched_via",
-    "note", "reported_total_pct", "resolved_pct", "unresolved_pct", "unidentified_lines_pct", "n_constituents",
+    "note", "status", "reported_total_pct", "resolved_pct", "unexpanded_fund_pct", "unresolved_pct",
+    "unidentified_lines_pct", "n_constituents",
 ]
+#: Every fund-file key, in the order the file is written (docs/source/data-api.md).
+FUND_FILE_KEYS = FUND_KEYS + [
+    "n_rows", "truncated", "listed_pct", "breakdowns", "fields", "constituents", "unresolved", "full_data_url",
+]
+_PCT_KEYS = ("reported_total_pct", "resolved_pct", "unexpanded_fund_pct", "unresolved_pct", "unidentified_lines_pct")
 _ID_RE = re.compile(r"^[A-Z0-9]{9,12}$")
+
+
+class LocalOnlyInPublicBuild(RuntimeError):
+    """The public build was handed rows or funds from a source it may not republish."""
+
+
+def check_public(funds: pd.DataFrame, rel: duckdb.DuckDBPyRelation) -> dict[str, int]:
+    """Raise :class:`LocalOnlyInPublicBuild` if any row or fund comes from a ``local_only`` source.
+
+    Returns the number of rows per source. A local run's universe outputs
+    (``kedro run`` without ``--env public``) hold issuer rows; publishing them
+    in the public build would republish them, so it fails here instead.
+    """
+    r = rel  # noqa: F841 - read by DuckDB below
+    rows = dict(connection().sql("select coalesce(source, ''), count(*) from r group by 1").fetchall())
+    fund_sources = funds["source"].fillna("").value_counts().to_dict() if "source" in funds else {}
+    bad_rows = {s: int(n) for s, n in rows.items() if s and not is_public(s)}
+    bad_funds = {s: int(n) for s, n in fund_sources.items() if s and not is_public(s)}
+    if bad_rows or bad_funds:
+        raise LocalOnlyInPublicBuild(
+            "The public build may only publish sources whose licence allows it, but these local_only sources are "
+            f"in its input: rows {bad_rows or 'none'}, funds {bad_funds or 'none'}. Run the universe with "
+            "`kedro run --env public --pipeline=universe` (publish.mode: public) before publishing."
+        )
+    return {s: int(n) for s, n in rows.items()}
+
+
+def _check_document(doc: dict) -> None:
+    """A fund file in the public build: its source, its unresolved entry's and every row's must be public."""
+    srcs = {doc.get("source"), (doc.get("unresolved") or {}).get("source")}
+    i = CONSTITUENT_FIELDS.index("source")
+    srcs |= {row[i] for row in doc.get("constituents") or []}
+    bad = sorted(s for s in srcs if s and not is_public(s))
+    if bad:
+        raise LocalOnlyInPublicBuild(f"funds/{doc.get('id')}.json would publish local_only sources {bad}")
 
 
 def release_urls(repo: str, tag: str) -> tuple[str, str]:
@@ -77,26 +135,96 @@ def _dumps(doc: object) -> bytes:
     return json.dumps(doc, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode()
 
 
-def fund_document(fund: dict, rows: list[tuple], n_rows: int, full_data_url: str) -> dict:
-    """One ``funds/{id}.json``. ``rows`` are the kept constituent rows, ``n_rows`` how many there are in all."""
+def fund_document(fund: dict, rows: list[tuple], n_rows: int, full_data_url: str, breakdowns: dict | None = None) -> dict:
+    """One ``funds/{id}.json``.
+
+    ``rows`` are the kept constituent rows in :data:`CONSTITUENT_FIELDS`
+    order, ``n_rows`` how many there are in the full list, and
+    ``breakdowns`` the fund's breakdowns over that full list (see
+    :func:`fund_breakdowns`); without them they are built from ``rows``.
+    """
     doc = {k: _clean(fund.get(k)) for k in FUND_KEYS}
     doc["isins"] = _isins(fund.get("isins"))
-    for k in ("reported_total_pct", "resolved_pct", "unresolved_pct", "unidentified_lines_pct"):
+    for k in _PCT_KEYS:
         doc[k] = _num(fund.get(k))
     doc["n_constituents"] = int(_clean(fund.get("n_constituents")) or 0)
-    doc["truncated"] = n_rows > len(rows)
-    doc["fields"] = CONSTITUENT_FIELDS
-    doc["constituents"] = [
-        [isin, name, _num(w), ac, src, as_of, int(depth) if depth is not None else None, via]
-        for isin, name, w, ac, src, as_of, depth, via in rows
+    constituents = [
+        [isin, name, _num(w), ac, src, as_of, int(depth) if depth is not None else None, via, country, sector]
+        for isin, name, w, ac, src, as_of, depth, via, country, sector in rows
     ]
-    doc["unresolved"] = {"weight_pct": doc["unresolved_pct"], "note": doc["note"]}
+    if breakdowns is None:
+        breakdowns = fund_breakdowns(
+            [(r[2], {"asset_class": r[3], "country": r[8], "sector": r[9], "source": r[4]}, r[0]) for r in constituents],
+            doc["unresolved_pct"],
+        )
+    doc["n_rows"] = int(n_rows)
+    doc["truncated"] = n_rows > len(rows)
+    doc["listed_pct"] = _num(sum(r[2] or 0.0 for r in constituents))
+    doc["breakdowns"] = breakdowns
+    doc["fields"] = CONSTITUENT_FIELDS
+    doc["constituents"] = constituents
+    doc["unresolved"] = unresolved_entry(doc, n_rows)
     doc["full_data_url"] = full_data_url
     return doc
 
 
+def unresolved_entry(doc: dict, n_rows: int) -> dict:
+    """The fund file's ``unresolved`` entry: the weight, why, and where it was read.
+
+    It carries the fund's own source, link and as-of date, so even a fund
+    with no holdings says where its (empty) list came from. ``note`` is the
+    fund's note when there are no rows, otherwise a sentence on the lines
+    the source gave without an ISIN, or ``None``.
+    """
+    unidentified = doc.get("unidentified_lines_pct")
+    if n_rows == 0:
+        note = doc.get("note")
+    elif unidentified is not None and abs(unidentified) >= 0.005:
+        note = f"{unidentified:.2f}% is in lines with no ISIN (cash, futures, FX, swaps or pools)."
+    else:
+        note = None
+    return {
+        "weight_pct": doc.get("unresolved_pct"),
+        "note": note,
+        "source": doc.get("source"),
+        "source_url": doc.get("source_url"),
+        "as_of": doc.get("as_of"),
+    }
+
+
+def fund_breakdowns(rows: list[tuple[float, dict, str | None]], unresolved_pct: float | None) -> dict:
+    """``{"asset_class": [[label, pct], ...], ..., "top10_pct": x}`` from ``(weight, labels, isin)`` rows.
+
+    Each breakdown sums the rows' weights by label, largest first, with rows
+    that have no label under "Unknown", and ends with the fund's unresolved
+    weight labelled "Unresolved". ``top10_pct`` is the weight of the ten
+    largest constituent ISINs, each summed over its rows.
+    """
+    out: dict = {}
+    for dim in BREAKDOWNS:
+        sums: dict[str, float] = {}
+        for w, labels, _ in rows:
+            label = labels.get(dim) or UNKNOWN_LABEL
+            sums[label] = sums.get(label, 0.0) + float(w or 0.0)
+        out[dim] = _ordered(sums, unresolved_pct)
+    by_isin: dict[str, float] = {}
+    for w, _, isin in rows:
+        if isin:
+            by_isin[isin] = by_isin.get(isin, 0.0) + float(w or 0.0)
+    out["top10_pct"] = _num(sum(sorted(by_isin.values(), key=abs, reverse=True)[:10]))
+    return out
+
+
+def _ordered(sums: dict[str, float], unresolved_pct: float | None) -> list[list]:
+    items = sorted(sums.items(), key=lambda kv: (-kv[1], kv[0]))
+    return [[k, _num(v)] for k, v in items] + [[UNRESOLVED_LABEL, _num(unresolved_pct) if unresolved_pct is not None else 0.0]]
+
+
 def _stream_constituents(rel: duckdb.DuckDBPyRelation, cap: int, ids: set[str], chunk: int = 500):
-    """Yield ``(fund_id, n_rows, rows)`` with each fund's heaviest ``cap`` rows, largest absolute weight first.
+    """Yield ``(fund_id, n_rows, rows, sums)`` with each fund's heaviest ``cap`` rows, largest absolute weight first.
+
+    ``sums`` holds the fund's breakdown sums over its full list:
+    ``{dimension: {label: pct}, "top10_pct": pct}``.
 
     Funds are read a few hundred at a time by id range, which the Parquet
     file's sort order lets DuckDB prune, so no query result stays open while
@@ -106,11 +234,13 @@ def _stream_constituents(rel: duckdb.DuckDBPyRelation, cap: int, ids: set[str], 
     ordered = sorted(ids)
     for start in range(0, len(ordered), chunk):
         part = ordered[start : start + chunk]
+        rng = [part[0], part[-1]]
         con.register("_publish_rel", rel)
         try:
             found = con.execute(
                 f"""
-                select fund_id, n, constituent_isin, name, weight_pct, asset_class, source, as_of, depth, via_fund
+                select fund_id, n, constituent_isin, name, weight_pct, asset_class, source, as_of, depth, via_fund,
+                       country, sector
                 from (
                     select *, row_number() over (partition by fund_id order by abs(weight_pct) desc, constituent_isin) rn,
                            count(*) over (partition by fund_id) n
@@ -119,40 +249,89 @@ def _stream_constituents(rel: duckdb.DuckDBPyRelation, cap: int, ids: set[str], 
                 where rn <= {int(cap)}
                 order by fund_id, rn
                 """,
-                [part[0], part[-1]],
+                rng,
+            ).fetchall()
+            dims = " union all ".join(
+                f"select fund_id, '{d}' dim, {d} label, sum(weight_pct) w from r group by all" for d in BREAKDOWNS
+            )
+            sums_rows = con.execute(
+                f"""
+                with r as (select * from _publish_rel where constituent_isin is not null and fund_id between ? and ?)
+                {dims}
+                union all
+                select fund_id, 'top10_pct', null, sum(w) from (
+                    select fund_id, constituent_isin, sum(weight_pct) w,
+                           row_number() over (partition by fund_id order by abs(sum(weight_pct)) desc, constituent_isin) rn
+                    from r group by 1, 2
+                ) where rn <= 10 group by 1
+                """,
+                rng,
             ).fetchall()
         finally:
             con.unregister("_publish_rel")
+        sums: dict[str, dict] = {}
+        for f, dim, label, w in sums_rows:
+            d = sums.setdefault(f, {})
+            if dim == "top10_pct":
+                d["top10_pct"] = w
+            else:
+                bucket = d.setdefault(dim, {})
+                key = label or UNKNOWN_LABEL
+                bucket[key] = bucket.get(key, 0.0) + float(w or 0.0)
         wanted = set(part)
         fid, n, rows = None, 0, []
         for f, count, *row in found:
             if f != fid:
                 if fid in wanted:
-                    yield fid, n, rows
+                    yield fid, n, rows, sums.get(fid, {})
                 fid, n, rows = f, count, []
             rows.append(tuple(row))
         if fid in wanted:
-            yield fid, n, rows
+            yield fid, n, rows, sums.get(fid, {})
+
+
+def _finish_breakdowns(sums: dict, unresolved_pct: object) -> dict:
+    """Breakdown sums of one fund in the published shape, its unresolved weight last."""
+    u = _num(unresolved_pct)
+    out = {d: _ordered(sums.get(d, {}), u) for d in BREAKDOWNS}
+    out["top10_pct"] = _num(sums.get("top10_pct")) or 0.0
+    return out
 
 
 def _write_fund_files(funds: dict[str, dict], rel, cap: int, out: Path, full_data_url: str,
-                      only: set[str] | None = None) -> tuple[dict[str, int], dict[str, int]]:
-    """Write fund files; returns bytes per file and constituent rows per fund."""
+                      only: set[str] | None = None, public: bool = False) -> tuple[dict[str, int], dict[str, int]]:
+    """Write fund files; returns bytes per file and constituent rows per fund.
+
+    With ``public`` each file is checked to name public sources only before it is written.
+    """
     sizes, n_rows = {}, {}
-    for fid, n, rows in _stream_constituents(rel, cap, only if only is not None else set(funds)):
+    for fid, n, rows, sums in _stream_constituents(rel, cap, only if only is not None else set(funds)):
         if fid in funds:
-            data = _dumps(fund_document(funds[fid], rows, n, full_data_url))
+            bd = _finish_breakdowns(sums, funds[fid].get("unresolved_pct"))
+            doc = fund_document(funds[fid], rows, n, full_data_url, bd)
+            if public:
+                _check_document(doc)
+            data = _dumps(doc)
             (out / f"{fid}.json").write_bytes(data)
             sizes[fid], n_rows[fid] = len(data), n
     for fid in (only if only is not None else funds.keys()) - sizes.keys():
-        data = _dumps(fund_document(funds[fid], [], 0, full_data_url))
+        bd = _finish_breakdowns({}, funds[fid].get("unresolved_pct"))
+        doc = fund_document(funds[fid], [], 0, full_data_url, bd)
+        if public:
+            _check_document(doc)
+        data = _dumps(doc)
         (out / f"{fid}.json").write_bytes(data)
         sizes[fid], n_rows[fid] = len(data), 0
     return sizes, n_rows
 
 
 def _source_entries(sources_cfg: dict, rel, funds: pd.DataFrame) -> list[dict]:
-    """``meta.sources``: every source that contributed a row or a fund, with its credit and dates."""
+    """``meta.sources``: every source that contributed a row, a name or a fund, with its credit and dates.
+
+    Row sources include each fund's unresolved row, which carries the fund's
+    own source, so a fund with no holdings still lists the source that
+    listed it. OpenFIGI is listed when it supplied a name or matched a fund.
+    """
     con = connection()
     con.register("_publish_rel", rel)
     con.register("_publish_ids", pd.DataFrame({"fund_id": funds["id"].astype(object)}))
@@ -163,7 +342,7 @@ def _source_entries(sources_cfg: dict, rel, funds: pd.DataFrame) -> list[dict]:
             select source, count(distinct fund_id), min(as_of), max(as_of) from r where source is not null group by 1
             union all
             select 'openfigi', count(distinct fund_id), null, null from r
-            where name_source = 'openfigi' or composite_figi is not null
+            where name_source = 'openfigi'
             having count(*) > 0
             """
         ).fetchall()
@@ -171,19 +350,24 @@ def _source_entries(sources_cfg: dict, rel, funds: pd.DataFrame) -> list[dict]:
         con.unregister("_publish_rel")
         con.unregister("_publish_ids")
     found = {s: {"n_funds": n, "as_of_min": lo, "as_of_max": hi} for s, n, lo, hi in stats}
-    # Funds with no holdings are still credited to the list they came from.
+    # Funds without rows are still credited to their source.
     for src, g in funds[~funds["id"].isin(_ids_with_sources(rel))].groupby("source"):
         e = found.setdefault(src, {"n_funds": 0, "as_of_min": None, "as_of_max": None})
         e["n_funds"] += len(g)
+    figi_matched = funds[funds["matched_via"] == "openfigi_ticker"] if "matched_via" in funds else funds.iloc[:0]
+    if len(figi_matched):
+        e = found.setdefault("openfigi", {"n_funds": 0, "as_of_min": None, "as_of_max": None})
+        e["n_funds"] += len(figi_matched)
     entries = []
     for sid in list(sources_cfg) + sorted(set(found) - set(sources_cfg)):
         if sid not in found:
             continue
         cfg = sources_cfg.get(sid)
         if cfg is None:
-            logger.warning("Source %r contributed rows but has no entry in publish.sources", sid)
+            logger.warning("Source %r contributed rows but has no entry in publish.sources or the issuer adapters", sid)
             cfg = {"name": sid, "url": None, "licence": None, "credit": sid}
-        entries.append({"id": sid, **{k: cfg.get(k) for k in ("name", "url", "licence", "credit")}, **found[sid]})
+        entries.append({"id": sid, **{k: cfg.get(k) for k in ("name", "url", "licence", "credit")},
+                        "redistribution": redistribution(sid), **found[sid]})
     return entries
 
 
@@ -202,14 +386,27 @@ def publish(
     universe_constituents: duckdb.DuckDBPyRelation,
     universe_run: dict,
     params: dict,
+    issuers_params: dict | None = None,
 ) -> dict:
-    """Write ``api/v1`` under ``site_dir`` and the release files under ``release_dir``; return the quality report."""
+    """Write ``api/v1`` under ``site_dir`` and the release files under ``release_dir``; return the quality report.
+
+    In the public build (``mode: public``) nothing is written unless every
+    row and fund comes from a public source (:func:`check_public`).
+    """
     t0 = time.perf_counter()
     now = datetime.now(timezone.utc)
     built_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     tag = str(params.get("release_tag") or now.strftime("%Y-%m"))
     release_url, full_data_url = release_urls(params["repo"], tag)
-    sources_cfg = params["sources"]
+    mode = publish_mode(params)
+    public = mode == PUBLIC_MODE
+    sources_cfg = source_catalogue(params["sources"], issuer_adapters(issuers_params))
+    withheld = sorted(sid for sid in sources_cfg if not is_public(sid))
+    if public:
+        rows_by_source = check_public(universe_funds, universe_constituents)
+        sources_cfg = {sid: cfg for sid, cfg in sources_cfg.items() if is_public(sid)}
+    else:
+        rows_by_source = None
 
     release = Path(params["release_dir"])
     release.mkdir(parents=True, exist_ok=True)
@@ -235,7 +432,7 @@ def publish(
 
     cap = int(params.get("max_constituents", 1000))
     requested_cap = cap
-    sizes, n_rows = _write_fund_files(funds, rel, cap, api / "funds", full_data_url)
+    sizes, n_rows = _write_fund_files(funds, rel, cap, api / "funds", full_data_url, public=public)
 
     aliases: dict[str, str] = {}
     for fid, f in funds.items():
@@ -252,21 +449,28 @@ def publish(
         "rows": [
             [fid, _clean(f.get("isin")), _clean(f.get("name")), _clean(f.get("ticker")), _clean(f.get("issuer")), "fund",
              _clean(f.get("source")), _clean(f.get("as_of")), _num(f.get("resolved_pct"), 2),
-             int(_clean(f.get("n_constituents")) or 0)]
+             int(_clean(f.get("n_constituents")) or 0), _clean(f.get("status"))]
             for fid, f in sorted(funds.items())
         ],
         "aliases": dict(sorted(aliases.items())),
     }
     (api / "index.json").write_bytes(_dumps(index))
+    meta_sources = _source_entries(sources_cfg, rel, ok)
+    if public:
+        bad = [e["id"] for e in meta_sources if e["redistribution"] != "public"]
+        if bad:
+            raise LocalOnlyInPublicBuild(f"meta.sources would list local_only sources {bad}")
     meta = {
         "api_version": API_VERSION,
+        "contract": CONTRACT,
+        "mode": mode,
         "built_at": built_at,
         "release_tag": tag,
         "release_url": release_url,
         "full_data_url": full_data_url,
         "n_funds": len(funds),
         "n_isins": len(aliases),
-        "sources": _source_entries(sources_cfg, rel, ok),
+        "sources": meta_sources,
     }
     (api / "meta.json").write_bytes(_dumps(meta))
 
@@ -282,7 +486,7 @@ def publish(
             total / 1e6, budget / 1e6, cap, new_cap, len(affected),
         )
         cap = new_cap
-        new_sizes, _ = _write_fund_files(funds, rel, cap, api / "funds", full_data_url, only=affected)
+        new_sizes, _ = _write_fund_files(funds, rel, cap, api / "funds", full_data_url, only=affected, public=public)
         sizes.update(new_sizes)
         total = _dir_bytes(api)
         cuts.append({"max_constituents": cap, "funds_rewritten": len(affected), "api_mb": round(total / 1e6, 1)})
@@ -296,6 +500,8 @@ def publish(
             len(truncated), cap, sum(truncated.values()), LOOKTHROUGH_FILE,
         )
     report = quality_report(universe, universe_funds, universe_run, funds)
+    report["shared_constituent_isins"] = shared_isins(rel, int(params.get("shared_isin_issuers", 20)))
+    report["publishing"] = publishing_report(mode, universe_funds, funds, meta_sources, withheld, rows_by_source)
     report.update(
         release_tag=tag,
         built_at=built_at,
@@ -320,6 +526,50 @@ def publish(
     return report
 
 
+def publishing_report(mode: str, funds: pd.DataFrame, published: dict, meta_sources: list[dict], withheld: list[str],
+                      rows_by_source: dict[str, int] | None) -> dict:
+    """The build mode, the sources published and withheld, and the funds listed as ``local_only``.
+
+    ``local_only_by_issuer`` counts the published funds listed without
+    holdings because only a ``local_only`` source has them, by issuer.
+    """
+    pub = funds[funds["id"].isin(list(published))]
+    lo = pub[pub["status"] == "local_only"] if "status" in pub else pub.iloc[:0]
+    return {
+        "mode": mode,
+        "sources_published": [e["id"] for e in meta_sources],
+        # In a full build nothing is withheld; the list says what a public build would leave out.
+        "sources_local_only": withheld,
+        "withheld": withheld if mode != FULL_MODE else [],
+        "rows_by_source": rows_by_source,
+        "n_local_only": len(lo),
+        "local_only_by_issuer": {k: int(v) for k, v in lo["issuer"].fillna("unknown").value_counts().items()},
+    }
+
+
+def shared_isins(rel: duckdb.DuckDBPyRelation, min_issuers: int = 20, top: int = 20) -> dict:
+    """Constituent ISINs that rows attribute to more than ``min_issuers`` different issuer names.
+
+    One security has one issuer, so such an ISIN is almost always a
+    placeholder or an ISIN spread to lines it does not belong to.
+    """
+    r = rel  # noqa: F841 - read by DuckDB below
+    rows = connection().sql(
+        f"""
+        select constituent_isin, count(distinct issuer_name) n_issuers, count(distinct fund_id) n_funds,
+               sum(weight_pct) / nullif(count(distinct fund_id), 0) mean_weight
+        from r where constituent_isin is not null and issuer_name is not null
+        group by 1 having count(distinct issuer_name) > {int(min_issuers)}
+        order by n_issuers desc
+        """
+    ).fetchall()
+    return {
+        "min_issuers": min_issuers,
+        "n_isins": len(rows),
+        "isins": [{"isin": i, "n_issuer_names": int(n), "n_funds": int(f)} for i, n, f, _ in rows[:top]],
+    }
+
+
 def message_kind(message: str) -> str:
     """A message with its numbers blanked, so the same failure on many funds counts as one kind."""
     return re.sub(r"\d+", "#", str(message))[:160]
@@ -338,7 +588,12 @@ def quality_report(universe: pd.DataFrame, funds: pd.DataFrame, run: dict, publi
     f = funds.copy()
     f["ok"] = f["error"].isna()
     f["published"] = f["id"].isin(list(published))
-    f["no_holdings"] = f["ok"] & f["sources_tried"].isna()
+    if "status" in f:
+        f["no_holdings"] = f["ok"] & (f["status"] == "no_holdings")
+    else:
+        f["no_holdings"] = f["ok"] & f["sources_tried"].isna()
+    if "status" not in f:
+        f["status"] = None
     by_source = {}
     listed = universe["universe_source"].value_counts().to_dict() if len(universe) else {}
     for src in sorted(set(listed) | set(f["universe_source"].dropna())):
@@ -347,6 +602,7 @@ def quality_report(universe: pd.DataFrame, funds: pd.DataFrame, run: dict, publi
             "listed": int(listed.get(src, 0)), "attempted": len(g), "ok": int(g["ok"].sum()),
             "failed": int((~g["ok"]).sum()), "no_holdings": int(g["no_holdings"].sum()),
             "published": int(g["published"].sum()),
+            "status": {k: int(v) for k, v in g["status"].value_counts().items()},
         }
     done = f[f["ok"] & ~f["no_holdings"]]
     resolved = done["resolved_pct"].astype(float)
@@ -375,6 +631,17 @@ def quality_report(universe: pd.DataFrame, funds: pd.DataFrame, run: dict, publi
             "by_holdings_source": {k: int(v) for k, v in done["source"].value_counts().items()},
             "matched_via": {k: int(v) for k, v in f["matched_via"].value_counts().items()},
             "series_match": {k: int(v) for k, v in f["series_match"].value_counts().items()},
+            "status": {k: int(v) for k, v in f["status"].value_counts().items()},
+            "published_by_status": {k: int(v) for k, v in f.loc[f["published"], "status"].value_counts().items()},
+        },
+        "unexpanded_funds": {
+            "n_funds": int((done.get("unexpanded_fund_pct", pd.Series(dtype=float)).astype(float) > 0).sum()),
+            "n_depth_capped": int(done.get("max_depth_reached", pd.Series(dtype=bool)).fillna(False).astype(bool).sum()),
+            "largest": [
+                {"id": r.id, "name": r.name, "unexpanded_fund_pct": round(float(r.unexpanded_fund_pct), 3)}
+                for r in done.sort_values("unexpanded_fund_pct", ascending=False).head(20).itertuples()
+                if float(r.unexpanded_fund_pct or 0) > 0
+            ] if "unexpanded_fund_pct" in done else [],
         },
         "resolution": {
             "n_funds": len(done),

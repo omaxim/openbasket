@@ -8,7 +8,8 @@ publishing) is shared.
 
 Adding a source means adding one module here, one test file and one docs page
 under ``docs/source/sources/``. Nothing else needs editing:
-:func:`discover` imports every module in the package.
+:func:`safe_discover` imports every module in the package, and a module that
+fails to import is logged and skipped, so one broken adapter cannot stop a run.
 
 Contracts
 ---------
@@ -21,18 +22,41 @@ of one portfolio share it.
 :class:`IssuerHoldings` whose frame has :data:`HOLDING_COLUMNS`. ``weight_pct``
 is percent of the fund's net assets as the issuer reports it: never rescale.
 Identifiers that fail their check digit must be ``None``.
+
+``redistribution`` says whether the source's terms allow its holdings to be
+republished: ``"public"`` (an open licence, e.g. a regulator's open data) or
+``"local_only"`` (the default: an issuer site whose terms restrict reuse,
+which openbasket reads only for the person running it). The public build is
+meant never to fetch or publish holdings from a ``local_only`` adapter.
+
+``enabled_by_default`` is ``False`` for a source whose terms forbid automated
+access even for private use; such an adapter runs only when it is named in
+``issuers.enabled`` (for example in ``conf/local``).
+
+``stand_in`` is ``True`` for an adapter whose holdings are not the fund's own
+but a peer's (another ETF on the same index). ``ingest`` lists stand-ins after
+every direct adapter, so a fund a direct adapter lists keeps that adapter.
 """
 
 from __future__ import annotations
 
 import importlib
+import logging
 import pkgutil
+import sys
 from dataclasses import dataclass, field
 from typing import Callable
 
 import pandas as pd
 
 from ...identifiers import is_valid_cusip, is_valid_isin
+
+logger = logging.getLogger(__name__)
+
+#: Redistribution classes: may the holdings be republished, or only read locally?
+PUBLIC = "public"
+LOCAL_ONLY = "local_only"
+REDISTRIBUTION_CLASSES = (PUBLIC, LOCAL_ONLY)
 
 PRODUCT_COLUMNS = [
     "issuer",            # adapter name, e.g. "xtrackers"
@@ -56,9 +80,22 @@ HOLDING_COLUMNS = [
     "ticker",
     "name",
     "weight_pct",    # percent of net assets, as reported
-    "asset_class",   # normalised: equity, debt, cash, derivative (...), fund, other
+    "asset_class",   # normalised: equity, debt, cash, derivative (...), fund, other,
+                     # or SUBSTITUTE_BASKET for a swap-based fund's collateral
     "currency",
     "country",
+]
+
+#: ``asset_class`` for the securities a swap-based fund holds as its substitute
+#: basket (the collateral behind its total return swap). They are what the
+#: fund owns, not what it tracks: the index exposure comes through the swap.
+SUBSTITUTE_BASKET = "collateral (substitute basket)"
+
+#: Columns a holdings frame may add; the pipeline uses them when present and
+#: nothing requires them. ``sector`` is the issuer's own sector label.
+OPTIONAL_HOLDING_COLUMNS = [
+    "sector",
+    "issuer_name",
 ]
 
 
@@ -81,6 +118,16 @@ class IssuerAdapter:
     products: Callable[[], pd.DataFrame]
     holdings: Callable[[dict, "FetchContext"], IssuerHoldings]
     frequency: str = "daily"   # how often the issuer updates holdings
+    redistribution: str = LOCAL_ONLY  # "public" or "local_only", see the module docs
+    enabled_by_default: bool = True   # False: runs only when named in issuers.enabled
+    stand_in: bool = False     # True: its holdings are another fund's (a peer on the same index)
+
+    def __post_init__(self):
+        if self.redistribution not in REDISTRIBUTION_CLASSES:
+            raise ValueError(
+                f"Issuer adapter {self.name!r}: redistribution must be one of {REDISTRIBUTION_CLASSES}, "
+                f"not {self.redistribution!r}"
+            )
 
 
 @dataclass
@@ -92,6 +139,9 @@ class FetchContext:
 
 _REGISTRY: dict[str, IssuerAdapter] = {}
 
+#: Adapter modules that failed to import, by module name, with the error.
+_FAILED: dict[str, str] = {}
+
 
 def register(adapter: IssuerAdapter) -> IssuerAdapter:
     if adapter.name in _REGISTRY:
@@ -101,11 +151,57 @@ def register(adapter: IssuerAdapter) -> IssuerAdapter:
 
 
 def discover() -> dict[str, IssuerAdapter]:
-    """Import every adapter module in this package and return the registry."""
+    """Import every adapter module in this package and return the registry.
+
+    Raises on the first module that fails to import; pipelines use
+    :func:`safe_discover` instead.
+    """
     for mod in pkgutil.iter_modules(__path__):
         if not mod.name.startswith("_"):
             importlib.import_module(f"{__name__}.{mod.name}")
     return dict(_REGISTRY)
+
+
+def safe_discover() -> dict[str, IssuerAdapter]:
+    """Like :func:`discover`, but each module is imported on its own.
+
+    A module that fails to import (a missing optional dependency, a syntax
+    error, a name registered twice) is logged, recorded in
+    :func:`failed_modules` and skipped; the other adapters are still returned.
+    A module that failed is not retried in the same process.
+    """
+    for mod in pkgutil.iter_modules(__path__):
+        name = f"{__name__}.{mod.name}"
+        if mod.name.startswith("_") or name in sys.modules or mod.name in _FAILED:
+            continue
+        try:
+            importlib.import_module(name)
+        except Exception as exc:  # one broken adapter must not stop the build
+            _FAILED[mod.name] = f"{type(exc).__name__}: {exc}"[:500]
+            sys.modules.pop(name, None)
+            logger.warning("Issuer adapter module %s failed to import and is skipped: %s", mod.name, _FAILED[mod.name])
+    return dict(_REGISTRY)
+
+
+def failed_modules() -> dict[str, str]:
+    """Adapter modules :func:`safe_discover` skipped, with their errors."""
+    return dict(_FAILED)
+
+
+def select(
+    adapters: dict[str, IssuerAdapter], enabled: list[str] | None = None, disabled: list[str] | None = None
+) -> dict[str, IssuerAdapter]:
+    """The adapters to use: those named in ``enabled``, or every adapter that is
+    ``enabled_by_default`` when ``enabled`` is ``None``; minus ``disabled``.
+
+    A name in ``enabled`` that no module registers is logged and skipped.
+    """
+    names = [n for n, a in adapters.items() if a.enabled_by_default] if enabled is None else list(enabled)
+    unknown = [n for n in names if n not in adapters]
+    if unknown:
+        logger.warning("issuers.enabled names unknown adapters %s; known: %s", unknown, sorted(adapters))
+    skip = set(disabled or ())
+    return {n: adapters[n] for n in names if n in adapters and n not in skip}
 
 
 def validate_products(df: pd.DataFrame) -> list[str]:
@@ -134,3 +230,14 @@ def validate_holdings(df: pd.DataFrame) -> list[str]:
     if "weight_pct" in df and not pd.api.types.is_numeric_dtype(df["weight_pct"]):
         problems.append("weight_pct is not numeric")
     return problems
+
+
+def mark_substitute_basket(df: pd.DataFrame) -> pd.DataFrame:
+    """A copy of a swap-based fund's holdings with its securities labelled
+    :data:`SUBSTITUTE_BASKET`; derivative, cash and money-market lines keep
+    their class."""
+    out = df.copy()
+    ac = out["asset_class"].fillna("").astype(str)
+    keep = ac.str.startswith("derivative") | ac.isin(["cash", "money market"])
+    out.loc[~keep, "asset_class"] = SUBSTITUTE_BASKET
+    return out

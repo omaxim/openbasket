@@ -16,6 +16,10 @@ from ..throttle import THROTTLE
 
 logger = logging.getLogger(__name__)
 
+#: Redistribution class (see :func:`openbasket.sources.redistribution`):
+#: CC BY 4.0: credit TickerInside and say the data was changed.
+REDISTRIBUTION = "public"
+
 
 @dataclass
 class TickerInsideFund:

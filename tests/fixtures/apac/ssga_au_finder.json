@@ -1,0 +1,31 @@
+{
+ "data": {
+  "funds": {
+   "etfs": {
+    "datas": [
+     {
+      "domicile": "AU",
+      "fundName": "State Street SPDR S&P/ASX 200 ETF",
+      "fundTicker": "STW",
+      "fundUri": "/au/en_gb/institutional/etfs/state-street-spdr-spasx-200-etf-stw",
+      "keywords": "SPDR S&P ASX 200 ETF, STW, Equity"
+     },
+     {
+      "domicile": "AU",
+      "fundName": "State Street Blackstone High Income (AUD Hedged) Active ETF",
+      "fundTicker": "SBHI",
+      "fundUri": "/au/en_gb/institutional/etfs/sbhi",
+      "keywords": "SBHI, Fixed Income, SBHI AU, AU0000477721"
+     },
+     {
+      "domicile": "US",
+      "fundName": "State Street SPDR S&P 500 ETF",
+      "fundTicker": "SPY",
+      "fundUri": "/au/en_gb/institutional/etfs/spy",
+      "keywords": "SPY, Equity"
+     }
+    ]
+   }
+  }
+ }
+}

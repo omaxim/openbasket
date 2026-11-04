@@ -34,6 +34,10 @@ import pandas as pd
 
 from .. import http
 
+#: Redistribution class (see :func:`openbasket.sources.redistribution`):
+#: Terms not yet reviewed for republication; treated as local only until they are.
+REDISTRIBUTION = "local_only"
+
 API = "https://api.edinet-fsa.go.jp/api/v2"
 LIST_URL = API + "/documents.json"
 DOC_URL = API + "/documents/{doc_id}"

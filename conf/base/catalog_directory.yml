@@ -1,0 +1,25 @@
+# directory ------------------------------------------------------------------
+# Parsed listings, one per source.
+"dir_{source}":
+  type: pandas.ParquetDataset
+  filepath: data/02_intermediate/directory/{source}.parquet
+
+fund_directory:
+  type: pandas.ParquetDataset
+  filepath: data/03_primary/fund_directory.parquet
+
+bond_directory:
+  type: pandas.ParquetDataset
+  filepath: data/03_primary/bond_directory.parquet
+
+directory_coverage:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/directory_coverage.csv
+  save_args:
+    index: false
+
+directory_sources:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/directory_sources.csv
+  save_args:
+    index: false

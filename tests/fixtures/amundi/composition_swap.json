@@ -1,0 +1,12 @@
+{"products": [
+  {"productId": "LU1681044993", "productType": "PRODUCT",
+   "characteristics": {"ISIN": "LU1681044993", "FUND_REPLICATION_METHODOLOGY": "Indirect(Swap Based)", "POSITION_AS_OF_DATE": "2026-10-30"},
+   "composition": {"totalNumberOfInstruments": 3, "compositionData": [
+     {"weight": 0.6, "compositionCharacteristics": {"date": "2026-10-30", "quantity": 100.0, "bbg": "AAPL UW", "name": "EXAMPLE TECH INC",
+       "weight": 0.6, "currency": "USD", "type": "EQUITY_ORDINARY", "sector": "Information Technology", "isin": "US0378331005", "countryOfRisk": "United States"}},
+     {"weight": 0.36, "compositionCharacteristics": {"date": "2026-10-29", "quantity": 50.0, "bbg": "AIR FP", "name": "EXAMPLE AEROSPACE SE",
+       "weight": 0.36, "currency": "EUR", "type": "EQUITY_ORDINARY", "sector": "Industrials", "isin": "NL0000235190", "countryOfRisk": "France"}},
+     {"weight": -0.001, "compositionCharacteristics": {"date": "2026-10-30", "quantity": 1.0, "bbg": null, "name": null,
+       "weight": -0.001, "currency": "EUR", "type": "CASH", "sector": null, "isin": null, "countryOfRisk": null}}
+   ]}}
+]}

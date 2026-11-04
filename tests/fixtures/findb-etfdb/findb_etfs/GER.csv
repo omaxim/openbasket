@@ -1,0 +1,4 @@
+symbol,name,currency,summary,category_group,category,family,exchange,mic,isin,delisted
+TSTA.DE,Test World Equity UCITS ETF,EUR,Invented summary.,Equities,Global Large-Cap Blend Equity,Test Asset Management,GER,XETR,ie00tstetf18,False
+TSTA2.DE,Test World Eq. ETF (old line),EUR,Invented summary.,,,Test Asset Management,GER,XETR,IE00TSTETF18,True
+TSTC.DE,Test US Equity ETF,EUR,Invented summary.,Equities,Large Blend,,GER,XETR,US00TSTETF32,False

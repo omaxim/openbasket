@@ -1,0 +1,6 @@
+americas_open:
+  # SFC Colombia Formato 351 (datos.gov.co, CC BY-SA 4.0): the latest monthly
+  # mandatory pension / cesantias cut-off and the latest semi-annual voluntary
+  # pension cut-off, about 65,000 lines, converted to Parquet without issuer
+  # tax ids or individuals' names.
+  root: data/01_raw/americas_open

@@ -1,0 +1,35 @@
+# Fund and bond directory (kedro run --pipeline=directory).
+# See docs/source/sources/directory.md for what each source covers.
+directory:
+  # Raw downloads, one file per source per day (per publication for FIRDS),
+  # written only after they parsed.
+  cache_dir: data/01_raw/directory
+  sources:
+    six_funds: true         # SIX Swiss Exchange funds and ETFs (~3,100 ISINs)
+    six_bonds: true         # SIX-listed bonds (~3,000, mostly CHF)
+    xetra: true             # Xetra ETFs, ETNs and ETCs (~3,600)
+    euronext_etfs: true     # Euronext ETF/ETP list (~3,400)
+    euronext_bonds: true    # Euronext bond list (~15,000)
+    ecb_eligible: true      # ECB eligible marketable assets (~31,000 EUR bonds)
+    esma_firds_funds: true  # ESMA FIRDS fund units traded on EU venues (~18,700)
+    esma_firds_debt: true   # ESMA FIRDS debt (4 files, ~70 MB zipped, a few minutes to parse)
+    # FCA FIRDS (UK venues, ~21,000 fund ISINs). Off: the FCA website terms
+    # restrict storing its material in other websites or data feeds without
+    # written permission. Switch on only for private use or with permission.
+    fca_firds_funds: false
+    gleif: true             # ISIN-LEI file, relationship file and LEI API (CC0)
+  # Upper bound on LEIs looked up by name in the GLEIF API (about 100 per request).
+  gleif_api_max_leis: 50000
+  # Adapter names to treat as available even if not registered in this checkout.
+  extra_adapters: []
+  # Adapters that read exchange-traded funds only: a mutual fund of the same
+  # brand is not routed to them, so it counts as "fund known, no holdings source".
+  etf_only_adapters: [ishares, spdr, xtrackers, amundi, vanguard, ubs, invesco, wisdomtree, vaneck, globalx,
+                      hsbc, jpmorgan, franklin, bnpparibas, first_trust, avantis]
+  # true: a failing source fails the run. false: it is logged and skipped.
+  strict: false
+  # Sources that must give rows, or the run fails (the public build sets this).
+  required_sources: []
+  # true: read only sources whose redistribution class is "public" (SIX,
+  # Xetra and Euronext lists are local_only). conf/public sets it.
+  public_only: false

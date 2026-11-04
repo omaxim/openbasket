@@ -1,8 +1,33 @@
 # Public build: only sources whose terms allow republication.
 # Used by the GitHub Action with `kedro run --env public`; local runs use
-# conf/base (plus conf/local) and can read every source for private use.
+# conf/base (plus conf/local) and read every enabled source for private use.
+publish:
+  # Never fetch or write holdings from a local_only source (issuer sites);
+  # their funds are listed by name and ISIN with status local_only.
+  mode: public
+
+issuers:
+  # Belt and braces: the iShares and SPDR lists are local_only and are not
+  # read in the public build whatever these say.
+  ishares_sites: []
+  spdr_regions: []
+
 lookthrough:
-  source_order: [tickerinside, nport]
+  # "issuer" reads public adapters (CVM, CNMV); local_only issuers answer
+  # local_only without a request.
+  source_order: [issuer, tickerinside, nport]
+  # Name matching serves the statutory-report adapters, which are local_only,
+  # and its peers are issuer files; the public build does not use it.
+  name_matching: false
+  name_matching_index_peers: false
 
 universe:
-  sources: [nport]
+  # Every list: N-PORT, the public adapters, and the local_only issuers'
+  # funds, which are listed without holdings.
+  sources: null
+
+# The fund and bond directory reads only openly licensed lists here (ESMA
+# FIRDS, ECB, GLEIF); SIX, Xetra and Euronext lists are local_only.
+directory:
+  public_only: true
+  required_sources: [esma_firds_funds]

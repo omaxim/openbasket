@@ -1,37 +1,70 @@
-/* openbasket landing page: fund search, fund view, release and API sections.
-   Reads the static JSON API described in docs/data-api.md; the API base comes
-   from <body data-api>, so the same page runs on fixtures locally. */
+/* openbasket landing page: fund search, fund view with its distribution
+   charts, coverage, release and API sections. Reads the static JSON API
+   described in docs/data-api.md (v1.1); the API base comes from
+   <body data-api>, so the same page runs on fixtures locally. */
 (() => {
   "use strict";
 
+  const core = window.OpenbasketCore;
+  const tm = window.OpenbasketTreemap;
+  const { UNRESOLVED, ISIN_RE, SERIES_RE, compact, sum, isValidIsin, rowsOf, totals, topHoldings } = core;
   const body = document.body;
   const API = (body.dataset.api || "api/v1").replace(/\/+$/, "");
   const DOCS = (body.dataset.docs || "docs/").replace(/\/?$/, "/");
   const FIRST_ROWS = 100;
   const MAX_SUGGESTIONS = 8;
-  const ISIN_RE = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
-  const SERIES_RE = /^S\d{9}$/;
+  const MAX_BARS = 8;
   const SOURCE_LABEL = {
     ishares: "iShares",
     spdr: "SPDR",
     tickerinside: "TickerInside",
     nport: "SEC N-PORT",
     security_master: "Security master",
+    openfigi: "OpenFIGI",
   };
-  const MATCHED_VIA = {
-    ishares: "the fund's ISIN in the iShares fund list",
-    spdr: "the fund's ISIN in the SPDR fund list",
-    nport: "an SEC N-PORT filing for the fund's series",
-    openfigi: "its US ticker (from OpenFIGI) in SEC's fund ticker list",
-    proxy: "a configured proxy fund on the same index",
-    security_master: "the security master: a single security, its own constituent",
+  /* Chart colours: the Leith Research tokens and the palette of its charts. */
+  const C = {
+    wine: "#9c3848", slate: "#5f7d8c", sand: "#c9a96e", moss: "#7a8c5c", stone: "#b8aea3",
+    other: "#e0d8cc", paper2: "#ede7de", muted: "#7d7873", line: "#d9d2c7",
   };
+  /* Shares in a strip: wine for the largest entry, then wine fading into paper. Bars are all
+     wine; "others" are stone and Unresolved is a dashed paper bar. */
+  const SERIES = [C.wine, "#b0606d", "#c48b94", "#d6b2b5", "#e4cdcc", "#ecdcd9"];
+  /* Treemap blocks: a calm categorical palette led by the Leith wine, muted to sit on paper.
+     Unknown labels are stone; Unresolved is a pale grey of its own. */
+  const PALETTE = ["#9c3848", "#4f6d7a", "#c9a96e", "#6f8455", "#7a5374", "#3f7f7b", "#b9803f", "#c98c92",
+    "#8a9fae", "#a39a5a", "#a65f4b", "#9fb39a"];
+  const TM = { unknown: "#b8aea3", unresolved: "#dcd5ca", paper: "#f6f2ec", ink: "#1b1a19", ink2: "#4a4744", muted: "#7d7873" };
+  const TM_DIMS = [
+    { id: "sector", label: "Sector", short: "Sector", all: "All sectors" },
+    { id: "country", label: "Country", short: "Country", all: "All countries" },
+    { id: "asset", label: "Asset class", short: "Asset class", all: "All asset classes" },
+    { id: "source", label: "Source", short: "Source", all: "All sources" },
+    { id: "route", label: "By route", short: "Route", all: "All routes" },
+  ];
+  /* Status flags (data-api.md, Status), in plain words. */
+  const STATUS = {
+    ok: ["OK", "The lines add up to about 100% of net assets and most of it resolves to securities with an ISIN."],
+    partial: ["Partial", "The source's lines are well under 100% of net assets, or less than 90% resolves to securities with an ISIN. The note says why."],
+    over_100: ["Over 100%", "The lines add up to more than 105% of net assets, for example with borrowing or trades not yet settled. Nothing is rescaled."],
+    leveraged: ["Leveraged", "A leveraged or inverse fund, or lines far from 100%: the weights are market values, not economic exposure."],
+    no_holdings: ["No holdings", "The source lists this fund, but no holdings could be read from it."],
+    local_only: ["Run locally", "The holdings come from a source whose terms do not allow republishing them. Run openbasket yourself to see them."],
+    error: ["Error", "The build could not read this fund's holdings. The note says what went wrong."],
+    no_match: ["Not matched", "No source could be matched to this fund."],
+  };
+  const RUN_LOCALLY = "running-locally.html";
+  const REPO = "https://github.com/omaxim/openbasket.git";
 
-  const state = { meta: null, sources: {}, index: null, indexPromise: null, fund: null, token: 0 };
+  const state = {
+    meta: null, sources: {}, index: null, indexPromise: null, fund: null, token: 0,
+    shownId: null, redrawTable: null,
+  };
 
   /* ---------- small helpers ---------- */
 
   const $ = (sel, el = document) => el.querySelector(sel);
+  const SVG_NS = "http://www.w3.org/2000/svg";
 
   function safeUrl(u) {
     if (!u || typeof u !== "string") return null;
@@ -63,25 +96,43 @@
     return el;
   }
 
+  /** An SVG element with attributes. */
+  function s(tag, attrs, ...children) {
+    const el = document.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs || {})) if (v != null) el.setAttribute(k, v);
+    for (const c of children.flat(Infinity)) if (c != null) el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+    return el;
+  }
+
   const ext = (href, text) => h("a", { href, rel: "noopener" }, text);
+
+  /** Plain text with its http(s) links made clickable (credit lines carry licence links). */
+  function linkify(text) {
+    return core.linkParts(text).map((p) => (p.url ? (safeUrl(p.url) ? ext(p.url, p.url) : p.url) : p.text));
+  }
 
   function fmtPct(v, dp) {
     if (v == null || Number.isNaN(v)) return "–";
     const a = Math.abs(v);
     const d = dp != null ? dp : a >= 0.1 || a === 0 ? 2 : a >= 0.001 ? 3 : 5;
-    const s = v.toLocaleString("en-GB", { minimumFractionDigits: d, maximumFractionDigits: d });
-    return /^-[0.]+$/.test(s) ? s.slice(1) : s;
+    const out = v.toLocaleString("en-GB", { minimumFractionDigits: d, maximumFractionDigits: d });
+    return /^-[0.]+$/.test(out) ? out.slice(1) : out;
   }
   const fmtInt = (n) => (n == null ? "–" : Number(n).toLocaleString("en-GB"));
 
-  function parseDate(s) {
-    if (!s) return null;
-    const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T00:00:00Z" : s);
+  function parseDate(x) {
+    if (!x) return null;
+    const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(x) ? x + "T00:00:00Z" : x);
     return Number.isNaN(d.getTime()) ? null : d;
   }
-  function fmtDate(s) {
-    const d = parseDate(s);
-    return d ? d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) : s || "–";
+  function fmtDate(x) {
+    const d = parseDate(x);
+    return d ? d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) : x || "–";
+  }
+  function fmtRange(lo, hi) {
+    if (!lo && !hi) return "–";
+    if (!lo || !hi || lo === hi) return fmtDate(lo || hi);
+    return `${fmtDate(lo)} to ${fmtDate(hi)}`;
   }
   function ageText(asOf) {
     const a = parseDate(asOf);
@@ -94,27 +145,33 @@
     return `about ${Math.round(days / 30.4)} months before this build`;
   }
 
-  function isValidIsin(s) {
-    if (!ISIN_RE.test(s)) return false;
-    const digits = s.replace(/[A-Z]/g, (c) => String(c.charCodeAt(0) - 55));
-    let sum = 0;
-    for (let i = 0; i < digits.length; i++) {
-      let n = Number(digits[digits.length - 1 - i]);
-      if (i % 2 === 1) {
-        n *= 2;
-        if (n > 9) n -= 9;
+  let regionNames = null;
+  try {
+    regionNames = new Intl.DisplayNames(["en-GB"], { type: "region" });
+  } catch (e) {
+    regionNames = null;
+  }
+  function countryName(code) {
+    if (!code) return null;
+    if (/^[A-Z]{2}$/.test(code) && regionNames) {
+      try {
+        const n = regionNames.of(code);
+        if (n && n !== code) return n;
+      } catch (e) {
+        /* not a region code: keep the source's label */
       }
-      sum += n;
     }
-    return sum % 10 === 0;
+    return code;
   }
 
   const LICENCE_URL = { "CC BY 4.0": "https://creativecommons.org/licenses/by/4.0/" };
-  const licence = (text) => (LICENCE_URL[text] ? ext(LICENCE_URL[text], text) : text || "–");
-  const sourceLabel = (id) => SOURCE_LABEL[id] || id || "unknown";
+  const licence = (text) => (LICENCE_URL[text] ? ext(LICENCE_URL[text], text) : text ? linkify(text) : "–");
+  const titleCase = (id) => String(id).replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const sourceLabel = (id) => SOURCE_LABEL[id] || (id ? titleCase(id) : "unknown");
   const sourceName = (id) => (state.sources[id] && state.sources[id].name) || sourceLabel(id);
   const badge = (id, main) => h("span", { class: main ? "badge badge-main" : "badge", title: sourceName(id) }, sourceLabel(id));
   const fundUrl = (id) => `${API}/funds/${encodeURIComponent(id)}.json`;
+  const matchedVia = (v) => core.matchedVia(v, sourceLabel);
 
   async function getJSON(path) {
     const res = await fetch(path, { headers: { Accept: "application/json" } });
@@ -123,21 +180,23 @@
     return res.json();
   }
 
-  /* ---------- meta, release and API sections ---------- */
+  /* ---------- meta: coverage, release and API sections ---------- */
 
   async function loadMeta() {
     const view = $("#release-view");
+    const cov = $("#coverage-view");
     try {
       const meta = await getJSON(`${API}/meta.json`);
       if (meta.__notFound) throw new Error("meta.json not found");
       state.meta = meta;
-      for (const s of meta.sources || []) state.sources[s.id] = s;
+      for (const src of meta.sources || []) state.sources[src.id] = src;
       view.replaceChildren(renderRelease(meta));
+      if (cov) cov.replaceChildren(renderCoverage(meta));
     } catch (e) {
-      view.replaceChildren(
-        h("p", { class: "notice" }, "The release information could not be loaded. The releases are listed on ",
-          ext("https://github.com/omaxim/openbasket/releases", "GitHub"), ".")
-      );
+      const fail = () => h("p", { class: "notice" }, "The release information could not be loaded. The releases are listed on ",
+        ext("https://github.com/omaxim/openbasket/releases", "GitHub"), ".");
+      view.replaceChildren(fail());
+      if (cov) cov.replaceChildren(fail());
     }
   }
 
@@ -162,18 +221,44 @@
 
   const stat = (value, label) => h("div", { class: "card" }, h("p", { class: "stat" }, value, h("span", {}, label)));
 
-  function sourceCard(s) {
-    const range = s.as_of_min && s.as_of_max
-      ? s.as_of_min === s.as_of_max ? fmtDate(s.as_of_min) : `${fmtDate(s.as_of_min)} to ${fmtDate(s.as_of_max)}`
-      : "–";
+  function sourceCard(src) {
     return h("article", { class: "card" },
-      h("h3", {}, safeUrl(s.url) ? ext(s.url, s.name || sourceLabel(s.id)) : s.name || sourceLabel(s.id)),
+      h("h3", {}, safeUrl(src.url) ? ext(src.url, src.name || sourceLabel(src.id)) : src.name || sourceLabel(src.id)),
       h("dl", { class: "kv" },
-        h("dt", {}, "Licence"), h("dd", {}, licence(s.licence)),
-        h("dt", {}, "Credit"), h("dd", {}, s.credit || "–"),
-        h("dt", {}, "Holdings as of"), h("dd", {}, range),
-        h("dt", {}, "Main source of"), h("dd", {}, `${fmtInt(s.n_funds)} funds`)),
-      h("p", { class: "tags" }, badge(s.id)));
+        h("dt", {}, "Licence"), h("dd", {}, licence(src.licence)),
+        h("dt", {}, "Credit"), h("dd", {}, src.credit ? linkify(src.credit) : "–"),
+        h("dt", {}, "Holdings as of"), h("dd", {}, fmtRange(src.as_of_min, src.as_of_max)),
+        h("dt", {}, "Funds"), h("dd", {}, `${fmtInt(src.n_funds)}`)),
+      h("p", { class: "tags" }, badge(src.id)));
+  }
+
+  /** Funds per source and as-of ranges, as a table with an inline bar in each row. */
+  function renderCoverage(m) {
+    const sources = (m.sources || []).slice().sort((a, b) => (b.n_funds || 0) - (a.n_funds || 0));
+    const max = Math.max(1, ...sources.map((x) => x.n_funds || 0));
+    const rows = sources.map((src) => {
+      const w = ((src.n_funds || 0) / max) * 100;
+      return h("tr", {},
+        h("th", { scope: "row" }, safeUrl(src.url) ? ext(src.url, sourceLabel(src.id)) : sourceLabel(src.id),
+          h("span", { class: "sub" }, src.name && src.name !== sourceLabel(src.id) ? src.name : null)),
+        h("td", { class: "num" }, fmtInt(src.n_funds)),
+        h("td", { class: "cov-bar", "aria-hidden": "true" },
+          s("svg", { viewBox: "0 0 100 6", preserveAspectRatio: "none", focusable: "false" },
+            s("rect", { x: 0, y: 0, width: 100, height: 6, fill: C.paper2 }),
+            s("rect", { x: 0, y: 0, width: w.toFixed(2), height: 6, fill: C.wine }))),
+        h("td", { class: "dim" }, fmtRange(src.as_of_min, src.as_of_max)));
+    });
+    return h("div", {},
+      h("div", { class: "table-wrap cov-wrap" },
+        h("table", { class: "cov" },
+          h("caption", { class: "sr-only" }, `Funds per source and as-of dates in release ${m.release_tag || ""}`),
+          h("thead", {}, h("tr", {},
+            h("th", { scope: "col" }, "Source"), h("th", { scope: "col", class: "num" }, "Funds"),
+            h("th", { scope: "col", class: "cov-bar" }, h("span", { class: "sr-only" }, "Share")),
+            h("th", { scope: "col" }, "Holdings as of"))),
+          h("tbody", {}, rows))),
+      h("p", { class: "table-foot" },
+        h("span", {}, `${fmtInt(m.n_funds)} funds in all, built ${fmtDate(m.built_at)}. A fund counts once for each source its rows come from; OpenFIGI supplies names, security types and ticker matches, not holdings.`)));
   }
 
   function setupApi() {
@@ -205,10 +290,9 @@
 
   /* ---------- index and fuzzy search ---------- */
 
-  const norm = (s) =>
-    (s || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[®™]/g, "")
+  const norm = (x) =>
+    (x || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[®™]/g, "")
       .replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
-  const compact = (s) => (s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
   function loadIndex() {
     if (state.indexPromise) return state.indexPromise;
@@ -222,7 +306,7 @@
         const e = {
           id: r[f.id], isin: r[f.isin], name: r[f.name] || "", ticker: r[f.ticker] || "", issuer: r[f.issuer] || "",
           kind: r[f.kind], source: r[f.source], as_of: r[f.as_of], resolved_pct: r[f.resolved_pct],
-          n_constituents: r[f.n_constituents],
+          n_constituents: r[f.n_constituents], status: f.status != null ? r[f.status] : null,
         };
         e.keys = new Set([e.id, e.isin].filter(Boolean));
         e.nName = norm(e.name);
@@ -245,11 +329,11 @@
     return state.indexPromise;
   }
 
-  /** Characters of q in order inside s; higher for tighter matches, 0 if absent. */
-  function subsequence(q, s) {
+  /** Characters of q in order inside x; higher for tighter matches, 0 if absent. */
+  function subsequence(q, x) {
     let qi = 0, start = -1, last = -1, runs = 0;
-    for (let i = 0; i < s.length && qi < q.length; i++) {
-      if (s[i] === q[qi]) {
+    for (let i = 0; i < x.length && qi < q.length; i++) {
+      if (x[i] === q[qi]) {
         if (start < 0) start = i;
         if (last !== i - 1) runs++;
         last = i;
@@ -271,8 +355,8 @@
     for (const k of e.keys) {
       if (k === c) return { s: 1000 + (k === e.id ? 5 : 0), via: k === e.id || k === e.isin ? null : k };
       if (looksLikeId && c.length >= 3 && k.startsWith(c)) {
-        const s = 900 + c.length - (k === e.id || k === e.isin ? 0 : 1);
-        if (s > best) { best = s; via = k === e.id || k === e.isin ? null : k; }
+        const sc = 900 + c.length - (k === e.id || k === e.isin ? 0 : 1);
+        if (sc > best) { best = sc; via = k === e.id || k === e.isin ? null : k; }
       }
     }
     if (e.tick) {
@@ -312,6 +396,7 @@
   let active = -1;
   let timer = 0;
 
+  /** The search box's live status line. The example links sit in their own element and are never touched. */
   function setStatus(text) {
     const el = $("#search-status");
     if (el) el.textContent = text;
@@ -349,7 +434,12 @@
       const e = r.e;
       const ids = [e.ticker, e.isin || e.id, e.issuer].filter(Boolean).join(" · ");
       const li = h("li", { role: "option", id: `opt-${i}`, "aria-selected": i === active ? "true" : "false" },
-        h("div", { class: "opt-main" }, h("span", { class: "opt-name" }, highlight(e.name, q)), badge(e.source)),
+        h("div", { class: "opt-main" }, h("span", { class: "opt-name" }, highlight(e.name, q)),
+          h("span", { class: "opt-badges" },
+            e.status === "local_only"
+              ? h("span", { class: "badge badge-local", title: "Holdings available when you run openbasket yourself" }, "run locally")
+              : null,
+            badge(e.source))),
         h("div", { class: "opt-meta" }, ids, r.via ? ` · share class ${r.via}` : null,
           e.as_of ? ` · as of ${e.as_of}` : null));
       li.addEventListener("mousedown", (ev) => ev.preventDefault());
@@ -373,7 +463,7 @@
     if (!r) return;
     input.value = r.e.name;
     closeList();
-    openFund(r.via || r.e.id);
+    openFund(r.via || r.e.id, { focus: true });
   }
 
   function update() {
@@ -392,7 +482,7 @@
     if (active >= 0) return choose(active);
     if (ISIN_RE.test(c) || SERIES_RE.test(c)) {
       closeList();
-      return openFund(c);
+      return openFund(c, { focus: true });
     }
     if (results.length) return choose(0);
     if (c) setStatus("No matching fund. Try a ticker, part of the name, or a full ISIN.");
@@ -433,26 +523,20 @@
       a.addEventListener("click", (ev) => {
         if (ev.metaKey || ev.ctrlKey || ev.shiftKey) return;
         ev.preventDefault();
-        openFund(a.dataset.isin);
+        openFund(a.dataset.isin, { focus: true });
       }));
   }
 
   /* ---------- routing ---------- */
 
-  function idFromLocation() {
-    const p = new URLSearchParams(location.search);
-    const q = compact(p.get("isin") || p.get("id") || "");
-    if (q) return q;
-    const hash = compact(decodeURIComponent(location.hash.slice(1)));
-    return ISIN_RE.test(hash) || SERIES_RE.test(hash) ? hash : null;
-  }
+  const idFromLocation = () => core.idFromUrl(location.search, location.hash);
 
-  function pushId(id) {
-    const url = new URL(location.href);
-    url.search = "";
-    url.searchParams.set("isin", id);
-    url.hash = "";
-    if (url.href !== location.href) history.pushState({ id }, "", url.href);
+  /** Put the fund in the address: a new history entry, or with ``replace`` the current one rewritten. */
+  function pushId(id, { replace = false } = {}) {
+    const href = core.fundHref(location.href, id);
+    if (href === location.href) return;
+    if (replace) history.replaceState({ id }, "", href);
+    else history.pushState({ id }, "", href);
   }
 
   /* ---------- fund view ---------- */
@@ -460,38 +544,66 @@
   const section = $("#fund");
   const view = $("#fund-view");
 
+  /** One short sentence for screen readers; the fund view itself is not a live region. */
+  function announce(text) {
+    const el = $("#fund-status");
+    if (!el) return;
+    el.textContent = "";
+    setTimeout(() => (el.textContent = text), 30);
+  }
+
   function show(...nodes) {
     section.hidden = false;
     view.replaceChildren(...nodes.flat(Infinity).filter(Boolean));
   }
 
+  function focusHeading() {
+    const hd = $("#fund-view h2");
+    if (hd) {
+      hd.setAttribute("tabindex", "-1");
+      hd.focus({ preventScroll: true });
+    }
+  }
+
   async function openFund(raw, opts = {}) {
     const requested = compact(raw);
     if (!requested) return;
-    if (opts.push !== false) pushId(requested);
+    // A fund opened from a #ISIN hash moves to ?isin= in place; otherwise in-page links
+    // (#api, #top) would replace the hash and lose it.
+    if (opts.replace) pushId(requested, { replace: true });
+    else if (opts.push !== false) pushId(requested);
     const token = ++state.token;
+    state.shownId = requested;
+    state.redrawTable = null;
     section.hidden = false;
     if (opts.scroll !== false) section.scrollIntoView({ behavior: "smooth", block: "start" });
 
     if (!ISIN_RE.test(requested) && !SERIES_RE.test(requested)) return renderInvalid(requested, "is not an ISIN or an SEC series ID");
     if (ISIN_RE.test(requested) && !isValidIsin(requested)) return renderInvalid(requested, "has a wrong check digit, so it is not a valid ISIN");
 
-    show(h("div", { class: "state", role: "status" }, h("p", { class: "eyebrow" }, "Looking through"), h("h2", {}, requested),
+    show(h("div", { class: "state" }, h("p", { class: "eyebrow" }, "Looking through"), h("h2", {}, requested),
       h("p", {}, "Loading holdings…")));
+    announce(`Loading ${requested}`);
+    // The index tells which holdings are funds with their own look-through; load it alongside.
+    const indexReady = loadIndex().catch(() => null);
     try {
       let id = requested;
       if (state.index && state.index.aliases[id]) id = state.index.aliases[id];
       let data = await getJSON(fundUrl(id));
-      if (data.__notFound && !state.index) {
-        const idx = await loadIndex().catch(() => null);
+      if (data.__notFound) {
+        const idx = await indexReady;
         if (idx && idx.aliases[requested] && idx.aliases[requested] !== id) data = await getJSON(fundUrl((id = idx.aliases[requested])));
       }
       if (data && data.alias_of) data = await getJSON(fundUrl((id = compact(data.alias_of))));
       if (token !== state.token) return;
-      if (data.__notFound) return renderNotCovered(requested);
+      if (data.__notFound) return renderNotCovered(requested, opts);
       if (!Array.isArray(data.constituents)) throw new Error("This file is not a fund file.");
       state.fund = data;
       renderFund(data, requested);
+      if (opts.focus) focusHeading();
+      indexReady.then((idx) => {
+        if (idx && token === state.token && state.redrawTable) state.redrawTable();
+      });
     } catch (err) {
       if (token !== state.token) return;
       renderError(requested, err);
@@ -502,119 +614,819 @@
     document.title = "openbasket";
     show(h("div", { class: "state" }, h("p", { class: "eyebrow" }, "Not an identifier"), h("h2", {}, id),
       h("p", {}, `“${id}” ${why}. Search by fund name or ticker instead, or check the ISIN: twelve characters, two letters, nine letters or digits and a check digit.`)));
+    announce(`${id} ${why}.`);
   }
 
-  function renderNotCovered(id) {
+  function renderNotCovered(id, opts) {
     document.title = `${id} not covered · openbasket`;
     show(h("div", { class: "state" }, h("p", { class: "eyebrow" }, "Not covered"), h("h2", {}, id),
       h("p", {}, "This build has no fund file for this identifier. It may be a single stock or bond (which is its own constituent), a fund that none of the sources covers yet, or a share class whose ISIN no source reports."),
-      h("p", {}, "The sources used are listed under ", h("a", { href: "#release" }, "Latest data release"), "; what is and is not covered is described in the ",
-        h("a", { href: `${DOCS}sources.html` }, "sources documentation"), ".")));
+      h("p", {}, "The sources used are listed under ", h("a", { href: "#coverage" }, "Coverage"), "; what is and is not covered is described in the ",
+        h("a", { href: `${DOCS}sources/` }, "sources documentation"), ".")));
+    announce(`${id} is not covered by this build.`);
+    if (opts && opts.focus) focusHeading();
   }
 
   function renderError(id, err) {
     document.title = "openbasket";
     const retry = h("button", { class: "btn btn-sm", type: "button" }, "Try again");
-    retry.addEventListener("click", () => openFund(id, { push: false }));
+    retry.addEventListener("click", () => openFund(id, { push: false, focus: true }));
     show(h("div", { class: "state" }, h("p", { class: "eyebrow" }, "Something went wrong"), h("h2", {}, id),
       h("p", {}, `The fund file could not be loaded (${err && err.message ? err.message : "network error"}).`), retry));
-  }
-
-  function rowsOf(f) {
-    const ix = Object.fromEntries((f.fields || []).map((n, i) => [n, i]));
-    return f.constituents.map((r, i) => ({
-      i, isin: r[ix.isin], name: r[ix.name] || "", weight: Number(r[ix.weight_pct]), asset: r[ix.asset_class] || "",
-      source: r[ix.source] || f.source, as_of: r[ix.as_of] || f.as_of, depth: Number(r[ix.depth] || 0), via: r[ix.via] || "",
-    }));
+    announce(`The fund file for ${id} could not be loaded.`);
   }
 
   function rowSourceSummary(rows) {
     const m = new Map();
     for (const r of rows) {
-      const s = m.get(r.source) || { id: r.source, weight: 0, n: 0, min: r.as_of, max: r.as_of };
-      s.weight += r.weight;
-      s.n++;
-      if (r.as_of && (!s.min || r.as_of < s.min)) s.min = r.as_of;
-      if (r.as_of && (!s.max || r.as_of > s.max)) s.max = r.as_of;
-      m.set(r.source, s);
+      const x = m.get(r.source) || { id: r.source, weight: 0, n: 0, min: r.as_of, max: r.as_of };
+      x.weight += r.weight;
+      x.n++;
+      if (r.as_of && (!x.min || r.as_of < x.min)) x.min = r.as_of;
+      if (r.as_of && (!x.max || r.as_of > x.max)) x.max = r.as_of;
+      m.set(r.source, x);
     }
     return [...m.values()].sort((a, b) => b.weight - a.weight);
   }
 
-  function renderFund(f, requested) {
-    const rows = rowsOf(f);
-    const fof = rows.some((r) => r.depth > 0);
-    const src = state.sources[f.source] || {};
+  /** The fund's name, identifiers, share classes and status: the same for every kind of fund file. */
+  function fundHead(f, requested) {
     const label = f.isin || f.id;
-    document.title = `${f.name} (${f.ticker || label}) · openbasket`;
-
     const otherIsins = (f.isins || []).filter((x) => x !== f.isin);
-    const head = h("div", { class: "fund-head" },
-      h("p", { class: "eyebrow" }, `Fund look-through${f.issuer ? ` · ${f.issuer}` : ""}`),
+    const issuerTitle = f.source === "nport" ? "Registrant named in the fund's SEC Form N-PORT filing" : null;
+    const local = f.status === "local_only";
+    return h("div", { class: "fund-head" },
+      h("p", { class: "eyebrow" }, `${local ? "Fund" : "Fund look-through"}${f.issuer ? ` · ${f.issuer}` : ""}`),
       h("h2", {}, f.name || label),
       h("ul", { class: "ids" },
         h("li", {}, h("b", {}, "ISIN"), f.isin ? h("code", {}, f.isin) : "not known"),
         f.ticker ? h("li", {}, h("b", {}, "Ticker"), f.ticker) : null,
-        f.issuer ? h("li", {}, h("b", {}, "Issuer"), f.issuer) : null,
+        f.issuer ? h("li", { title: issuerTitle }, h("b", {}, f.source === "nport" ? "Registrant" : "Issuer"), f.issuer) : null,
         f.id !== f.isin ? h("li", {}, h("b", {}, "SEC series"), h("code", {}, f.id)) : null),
       otherIsins.length ? h("p", { class: "also" }, `Also covers share classes: ${otherIsins.slice(0, 12).join(", ")}${otherIsins.length > 12 ? ` and ${otherIsins.length - 12} more` : ""}.`) : null,
       requested && requested !== f.id && requested !== f.isin
-        ? h("p", { class: "notice" }, "You looked up ", h("code", {}, requested), ", a share class of this fund. Share classes hold the same portfolio, so these are its holdings.")
-        : null);
+        ? h("p", { class: "notice" }, "You looked up ", h("code", {}, requested),
+          `, a share class of this fund. Share classes hold the same portfolio, so ${local ? "it has the same holdings" : "these are its holdings"}.`)
+        : null,
+      statusLine(f.status));
+  }
+
+  /** A status chip with its meaning in plain words (data-api.md, Status). */
+  function statusLine(status) {
+    if (!status) return null;
+    const [label, why] = STATUS[status] || [titleCase(status), "A status this page does not know; see the Data API documentation."];
+    return h("p", { class: "status-line" },
+      h("span", { class: `status status-${String(status).replace(/[^a-z0-9_]/gi, "")}` }, h("span", { class: "sr-only" }, "Status: "), label),
+      h("span", { class: "status-why" }, why));
+  }
+
+  /** A fund whose holdings come only from a local_only source: identity, the issuer, and how to run it yourself. */
+  function renderLocalOnly(f, requested) {
+    const issuer = f.issuer || sourceName(f.source);
+    const src = state.sources[f.source] || {};
+    document.title = `${f.name} (${f.ticker || f.isin || f.id}) · openbasket`;
+    const id = f.isin || f.id;
+    const commands = [
+      `git clone ${REPO} && cd openbasket`,
+      "uv venv --python 3.12 .venv && source .venv/bin/activate && uv pip install -e '.[docs]' && cp .env.example .env",
+      "kedro run --pipeline=full && python scripts/serve.py",
+    ].join("\n");
+    const code = h("code", {}, commands);
+    const copyBtn = h("button", { class: "copy", type: "button", "aria-label": "Copy the commands" }, "Copy");
+    copyBtn.addEventListener("click", () => copy(commands, copyBtn));
+    const panel = h("aside", { class: "source-panel", "aria-label": "Where this fund is listed" },
+      h("p", { class: "label" }, "Listed by"),
+      h("p", { class: "source-name" }, safeUrl(f.source_url) ? ext(f.source_url, issuer) : issuer),
+      f.credit ? h("p", { class: "credit" }, linkify(f.credit)) : null,
+      h("dl", { class: "kv" },
+        h("dt", {}, "Listed on"), h("dd", {}, fmtDate(f.as_of)),
+        h("dt", {}, "Matched via"), h("dd", {}, matchedVia(f.matched_via)),
+        src.licence ? [h("dt", {}, "Terms"), h("dd", {}, licence(src.licence))] : null),
+      h("p", { class: "links" },
+        safeUrl(f.source_url) ? ext(f.source_url, `See the fund at ${issuer} ↗`) : null));
+    const local = h("section", { class: "local-panel", "aria-labelledby": "local-title" },
+      h("p", { class: "eyebrow" }, "Run it yourself"),
+      h("h3", { id: "local-title" }, "The holdings stay ", h("em", {}, "on your computer")),
+      h("p", { class: "local-lede" },
+        `Holdings for this fund come from ${issuer}, whose terms do not allow us to republish them. `,
+        "Clone openbasket and run it yourself to see the full breakdown."),
+      h("div", { class: "code" },
+        h("p", { class: "code-title" }, "Three commands: get the code, install it, look this fund through"),
+        h("pre", {}, code, copyBtn)),
+      h("p", { class: "local-foot" },
+        "The first run downloads SEC N-PORT data and each issuer's files, so it takes a while. ",
+        h("a", { href: `${DOCS}${RUN_LOCALLY}` }, "How to run openbasket locally"),
+        ", including the local site with every source switched on."));
+    show(fundHead(f, requested), h("div", { class: "local-grid" }, local, panel));
+    announce(`${f.name}: holdings available from ${issuer} when you run openbasket yourself.`);
+  }
+
+  function renderFund(f, requested) {
+    if (f.status === "local_only") return renderLocalOnly(f, requested);
+    const rows = rowsOf(f);
+    const t = totals(f, rows);
+    const noHoldings = t.noHoldings;
+    const fof = rows.some((r) => r.depth > 0);
+    const src = state.sources[f.source] || {};
+    const label = f.isin || f.id;
+    document.title = `${f.name} (${f.ticker || label}) · openbasket`;
+    const head = fundHead(f, requested);
 
     const age = ageText(f.as_of);
     const rowSources = rowSourceSummary(rows);
     const panel = h("aside", { class: "source-panel", "aria-label": "Source of this fund's holdings" },
       h("p", { class: "label" }, "Source"),
       h("p", { class: "source-name" }, safeUrl(f.source_url) ? ext(f.source_url, src.name || sourceLabel(f.source)) : src.name || sourceLabel(f.source)),
-      f.credit ? h("p", { class: "credit" }, f.credit) : null,
+      f.credit ? h("p", { class: "credit" }, linkify(f.credit)) : null,
       h("dl", { class: "kv" },
-        h("dt", {}, "Holdings as of"), h("dd", {}, fmtDate(f.as_of), age ? h("span", { class: "muted" }, ` (${age})`) : null),
-        h("dt", {}, "Matched via"), h("dd", {}, MATCHED_VIA[f.matched_via] || f.matched_via || "–"),
+        h("dt", {}, noHoldings ? "Listed on" : "Holdings as of"),
+        h("dd", {}, fmtDate(f.as_of), age ? h("span", { class: "muted" }, ` (${age})`) : null),
+        h("dt", {}, "Matched via"), h("dd", {}, matchedVia(f.matched_via)),
+        f.unidentified_lines_pct != null
+          ? [h("dt", {}, "Lines without ISIN"), h("dd", {}, `${fmtPct(f.unidentified_lines_pct, 2)}% of net assets (cash, derivatives, pools), part of the unresolved weight`)]
+          : null,
         src.licence ? [h("dt", {}, "Licence"), h("dd", {}, licence(src.licence))] : null),
       f.note ? h("p", { class: "notice notice-warn" }, h("strong", {}, "Note: "), f.note) : null,
       h("p", { class: "links" },
         safeUrl(f.source_url) ? ext(f.source_url, "Check it at the source ↗") : null,
         safeUrl(src.url) ? ext(src.url, `${sourceLabel(f.source)} website ↗`) : null),
       rowSources.length
-        ? h("ul", { class: "row-sources" }, h("li", { class: "head" }, "Rows in this file by source"),
-          rowSources.map((s) => h("li", {}, badge(s.id, s.id === f.source), " ",
-            `${fmtPct(s.weight)}% of net assets in ${fmtInt(s.n)} rows, as of ${s.min === s.max ? s.min : `${s.min} to ${s.max}`}`,
-            s.id !== f.source && state.sources[s.id] ? ` · ${state.sources[s.id].credit}` : null)))
+        ? h("ul", { class: "row-sources" }, h("li", { class: "head" }, t.truncated ? "Listed rows by source" : "Rows in this file by source"),
+          rowSources.map((x) => h("li", {}, badge(x.id, x.id === f.source), " ",
+            `${fmtPct(x.weight)}% of net assets in ${fmtInt(x.n)} rows, as of ${x.min === x.max ? x.min : `${x.min} to ${x.max}`}`,
+            x.id !== f.source && state.sources[x.id] ? [" · ", linkify(state.sources[x.id].credit)] : null)))
         : null);
 
-    const unresolved = f.unresolved && f.unresolved.weight_pct != null ? f.unresolved.weight_pct : f.unresolved_pct;
     const chips = h("div", { class: "chips" },
-      chip(`${fmtPct(f.resolved_pct, 2)}%`, "resolved to ISINs"),
-      chip(`${fmtPct(unresolved, 2)}%`, "unresolved", unresolved < 0),
-      chip(`${fmtPct(f.reported_total_pct, 2)}%`, "reported total"),
-      chip(fmtInt(f.n_constituents), f.truncated ? `constituents, ${fmtInt(rows.length)} listed here` : "constituents"));
+      chip(`${fmtPct(t.resolved, 2)}%`, "resolved to ISINs"),
+      t.unexpanded ? chip(`${fmtPct(t.unexpanded, 2)}%`, "in funds not looked through") : null,
+      chip(`${fmtPct(t.unresolved, 2)}%`, "unresolved", t.unresolved < 0),
+      chip(f.reported_total_pct != null ? `${fmtPct(f.reported_total_pct, 2)}%` : "–", "reported total"),
+      chip(fmtInt(f.n_constituents), t.truncated ? `distinct ISINs, ${fmtInt(rows.length)} rows listed here` : "distinct ISINs"));
 
     const notices = [];
-    if (f.truncated) {
-      notices.push(h("p", { class: "notice notice-warn" }, h("strong", {}, "Shortened list. "),
-        `This fund has ${fmtInt(f.n_constituents)} constituents; this page lists the ${fmtInt(rows.length)} largest. Every row is in the `,
-        safeUrl(f.full_data_url) ? ext(f.full_data_url, "full Parquet file of this release") : "release Parquet file", "."));
+    if (noHoldings) {
+      notices.push(h("p", { class: "notice notice-warn" }, h("strong", {}, "No holdings available. "),
+        `${sourceLabel(f.source)} lists this fund, but no holdings could be read from it on ${fmtDate(f.as_of)}, so all of its weight is unresolved. `,
+        safeUrl(f.source_url) ? ext(f.source_url, "See what the source shows ↗") : null));
     }
-    if (unresolved < 0) {
+    if (t.truncated) {
+      notices.push(h("p", { class: "notice notice-warn" }, h("strong", {}, "Shortened list. "),
+        `This fund has ${fmtInt(t.nRows)} rows${f.n_constituents != null ? ` (${fmtInt(f.n_constituents)} distinct ISINs; an ISIN held through more than one source or sub-fund has a row for each)` : ""}. `,
+        `This page lists the ${fmtInt(rows.length)} largest, ${fmtPct(t.listed, 2)}% of net assets; the other ${fmtPct(t.notListed, 2)}% is in the `,
+        safeUrl(f.full_data_url) ? ext(f.full_data_url, "full Parquet file of this release") : "release Parquet file",
+        ". The distribution charts below cover every row."));
+    }
+    if (t.unresolved < 0) {
       notices.push(h("p", { class: "notice" }, h("strong", {}, "Negative unresolved weight. "),
-        "The listed positions add up to more than 100% of net assets, for example when the fund has liabilities or purchases not yet settled. Nothing is rescaled. ",
+        "The positions add up to more than 100% of net assets, for example when the fund has liabilities or purchases not yet settled. Nothing is rescaled. ",
         h("a", { href: `${DOCS}output.html#unresolved-weight` }, "More on unresolved weight"), "."));
     }
 
-    show(h("div", { class: "fund-grid" }, head, panel), chips, notices, renderTable(f, rows, fof, unresolved));
+    show(h("div", { class: "fund-grid" }, head, panel), chips, notices,
+      noHoldings ? null : renderDistribution(f, rows, t),
+      noHoldings ? null : renderTable(f, rows, fof, t));
+    announce(noHoldings
+      ? `${f.name}: no holdings available from ${sourceLabel(f.source)}.`
+      : `Loaded ${f.name}: ${fmtInt(f.n_constituents)} constituents, ${fmtPct(t.resolved, 2)}% resolved, as of ${fmtDate(f.as_of)}.`);
   }
 
   function chip(value, label, warn) {
     return h("div", { class: warn ? "chip chip-warn" : "chip" }, h("p", { class: "stat" }, value, h("span", {}, label)));
   }
 
-  function renderTable(f, rows, fof, unresolved) {
+  /* ---------- distribution charts ---------- */
+
+  const NOT_STATED = "Not stated by the source";
+  /* The publish pipeline labels rows without a value "Unknown"; older files may use null. */
+  const unknown = (v) => v == null || v === "" || v === "Unknown";
+  const DIMENSIONS = [
+    { key: "asset_class", title: "By asset class", label: (v) => (unknown(v) ? NOT_STATED : v.charAt(0).toUpperCase() + v.slice(1)) },
+    { key: "country", title: "By country", label: (v) => (unknown(v) ? NOT_STATED : countryName(v)) },
+    { key: "sector", title: "By sector", label: (v) => (unknown(v) ? NOT_STATED : v) },
+    { key: "source", title: "By source", label: (v) => (unknown(v) ? NOT_STATED : sourceName(v)) },
+  ];
+
+  /** Entries of one breakdown (core.chartEntries), coloured: wine fading to paper, others stone. */
+  function chartEntries(list, unresolved, label) {
+    const { all, shown } = core.chartEntries(list, unresolved, label, MAX_BARS);
+    let i = 0;
+    const paint = (e) => (e.unresolved ? e : { ...e, color: e.other ? C.stone : SERIES[Math.min(i++, SERIES.length - 1)] });
+    const painted = shown.map(paint);
+    return { all, shown: painted };
+  }
+
+  /** A horizontal composition strip of the entries' shares (only drawn when nothing is negative). */
+  function strip(entries, aria) {
+    if (entries.some((e) => e.value < 0)) return null;
+    const total = sum(entries.map((e) => e.value));
+    if (!(total > 0)) return null;
+    let x = 0;
+    const parts = entries.map((e) => {
+      const w = (e.value / total) * 100;
+      const r = e.unresolved
+        ? s("rect", { x: x.toFixed(3), y: 0.5, width: Math.max(w, 0).toFixed(3), height: 9, fill: C.paper2, stroke: C.muted,
+          "stroke-width": 1, "stroke-dasharray": "3 2", "vector-effect": "non-scaling-stroke" })
+        : s("rect", { x: x.toFixed(3), y: 0, width: Math.max(w, 0).toFixed(3), height: 10, fill: e.color });
+      x += w;
+      return r;
+    });
+    return s("svg", { class: "dist-strip", viewBox: "0 0 100 10", preserveAspectRatio: "none", role: "img", "aria-label": aria, focusable: "false" }, parts);
+  }
+
+  /** One bar row: label, value and an SVG bar drawn from zero (to the left for a negative value). */
+  function barRow(e, lo, hi) {
+    const span = hi - lo || 1;
+    const zero = ((0 - lo) / span) * 100;
+    const end = ((e.value - lo) / span) * 100;
+    const x = Math.min(zero, end);
+    const w = Math.max(Math.abs(end - zero), e.value === 0 ? 0 : 0.6);
+    const bar = e.unresolved
+      ? s("rect", { x: x.toFixed(3), y: 1, width: w.toFixed(3), height: 8, fill: C.paper2, stroke: C.muted, "stroke-width": 1,
+        "stroke-dasharray": "3 2", "vector-effect": "non-scaling-stroke" })
+      : s("rect", { x: x.toFixed(3), y: 0, width: w.toFixed(3), height: 10, fill: e.other ? C.stone : C.wine });
+    const svg = s("svg", { class: "bar", viewBox: "0 0 100 10", preserveAspectRatio: "none", focusable: "false" },
+      s("rect", { x: 0, y: 4.5, width: 100, height: 1, fill: C.line }),
+      bar,
+      lo < 0 ? s("rect", { x: (zero - 0.15).toFixed(3), y: 0, width: 0.3, height: 10, fill: C.muted }) : null);
+    return h("li", { class: e.unresolved ? "bar-row is-unresolved" : e.other ? "bar-row is-other" : "bar-row" },
+      h("span", { class: "bar-label" },
+        h("i", { class: "sw", style: e.unresolved ? null : `background:${e.color || C.wine}` }), e.label),
+      h("span", { class: `bar-val${e.value < 0 ? " neg" : ""}` }, `${fmtPct(e.value)}%`),
+      svg);
+  }
+
+  function bars(entries) {
+    const lo = Math.min(0, ...entries.map((e) => e.value));
+    const hi = Math.max(0, ...entries.map((e) => e.value));
+    return h("ol", { class: "bars", "aria-hidden": "true" }, entries.map((e) => barRow(e, lo, hi)));
+  }
+
+  function altTable(caption, head, rows) {
+    return h("details", { class: "dist-table" },
+      h("summary", {}, `Table: ${caption}`),
+      h("div", { class: "table-wrap" },
+        h("table", {},
+          h("caption", { class: "sr-only" }, caption),
+          h("thead", {}, h("tr", {}, head.map((x, i) => h("th", { scope: "col", class: i === head.length - 1 ? "num" : null }, x)))),
+          h("tbody", {}, rows.map((r) => h("tr", { class: r.unresolved ? "is-unresolved" : null },
+            r.cells.map((c, i) => (i === 0 ? h("th", { scope: "row" }, c) : h("td", { class: i === r.cells.length - 1 ? "num" : null }, c)))))))));
+  }
+
+  function provenance(f, rows) {
+    const ids = ((f.breakdowns && f.breakdowns.source) || []).map((p) => p[0]).filter((x) => x && x !== UNRESOLVED && x !== "Unknown");
+    const srcIds = ids.length ? [...new Set(ids)] : [f.source];
+    const dates = rows.map((r) => r.as_of).filter(Boolean).sort();
+    const lo = dates[0] || f.as_of;
+    const hi = dates[dates.length - 1] || f.as_of;
+    return h("p", { class: "dist-source" }, "Source: ",
+      srcIds.map((id, i) => [i ? ", " : null,
+        id === f.source && safeUrl(f.source_url) ? ext(f.source_url, sourceName(id))
+          : safeUrl((state.sources[id] || {}).url) ? ext(state.sources[id].url, sourceName(id)) : sourceName(id)]),
+      ` · as of ${fmtRange(lo, hi)}`);
+  }
+
+  function renderDistribution(f, rows, t) {
+    const b = f.breakdowns;
+    const nRows = t.nRows != null ? t.nRows : rows.length;
+    let fromListed = false;
+    let bd = b;
+    if (!bd) {
+      if (t.truncated) return null; // an older file without breakdowns: the listed rows are not the whole fund
+      fromListed = true;
+      bd = core.localBreakdowns(rows, t.unresolved);
+    }
+    const scope = fromListed ? `the ${fmtInt(rows.length)} rows of this file` : `all ${fmtInt(nRows)} rows of the fund${t.truncated ? ", not only those listed below" : ""}`;
+    const cards = DIMENSIONS.map((d) => {
+      const { all, shown } = chartEntries(bd[d.key], t.unresolved, d.label);
+      const top = shown.filter((e) => !e.unresolved).slice(0, 3).map((e) => `${e.label} ${fmtPct(e.value)}%`).join(", ");
+      const un = shown[shown.length - 1];
+      const aria = `${d.title}: ${top || "no resolved holdings"}; ${UNRESOLVED} ${fmtPct(un.value)}%.`;
+      const bar = strip(shown, aria);
+      const resolvedEntries = all.filter((e) => !e.unresolved);
+      const noLabels = resolvedEntries.length > 0 && resolvedEntries.every((e) => unknown(e.key));
+      return h("figure", { class: bar ? "dist-card" : "dist-card no-strip", role: bar ? null : "group", "aria-label": bar ? null : aria },
+        h("figcaption", {}, h("h4", {}, d.title),
+          noLabels ? h("p", { class: "dist-sub" }, `The source gives no ${d.title.replace(/^By /, "")} for these holdings.`) : null),
+        bar || h("p", { class: "dist-nostrip" }, "Some entries are negative, so no share bar is drawn; the bars start at zero."),
+        bars(shown),
+        altTable(`${d.title.toLowerCase()}, percent of net assets`, [d.title.replace(/^By /, "").replace(/^\w/, (c) => c.toUpperCase()), "% of net assets"],
+          all.map((e) => ({ cells: [e.label, fmtPct(e.value)], unresolved: e.unresolved }))),
+        provenance(f, rows));
+    });
+    cards.push(topTenCard(f, rows, t, bd));
+    return h("section", { class: "dist", "aria-labelledby": "dist-title" },
+      h("p", { class: "eyebrow" }, "Distribution"),
+      h("h3", { id: "dist-title" }, "Where the ", h("em", {}, "money"), " is"),
+      h("p", { class: "dist-intro" },
+        `Percent of the fund's net assets over ${scope}, as the source reports them and never rescaled. `,
+        "Each tile is one holding and its area is its weight; Unresolved, the weight the source does not tie to an ISIN, is always its own grey tile."),
+      renderTreemap(f, rows, t),
+      h("h4", { class: "dist-alt-title", id: "dist-alt" }, "The same weights as bars and tables"),
+      h("div", { class: "dist-grid" }, cards));
+  }
+
+  /* ---------- treemap ---------- */
+
+  function blockLabel(dim, key) {
+    if (key === tm.DIRECT) return "Held directly";
+    if (key === tm.NOT_LISTED) return "Not listed in this file";
+    if (unknown(key)) return NOT_STATED;
+    if (dim === "country") return countryName(key);
+    if (dim === "asset") return key.charAt(0).toUpperCase() + key.slice(1);
+    if (dim === "source") return sourceName(key);
+    return key;
+  }
+
+  /** Block colours by rank, so a block keeps its colour when zoomed into. */
+  function blockColours(blocks) {
+    const out = new Map();
+    let i = 0;
+    for (const b of blocks) {
+      if (unknown(b.key) || b.key === tm.NOT_LISTED) out.set(b.key, TM.unknown);
+      else out.set(b.key, PALETTE[i++ % PALETTE.length]);
+    }
+    return out;
+  }
+
+  /* Text widths for fitting tile labels, measured with the page fonts on a canvas. */
+  let measureCtx = null;
+  function textWidth(text, font) {
+    if (!measureCtx) {
+      try {
+        measureCtx = document.createElement("canvas").getContext("2d");
+      } catch (e) {
+        measureCtx = null;
+      }
+    }
+    if (!measureCtx) return String(text).length * (parseFloat(font.split(" ")[1]) || 12) * 0.6;
+    measureCtx.font = font;
+    return measureCtx.measureText(String(text)).width;
+  }
+
+  /** The longest start of `text` that fits in `width` pixels, with an ellipsis when cut. */
+  function fitText(text, width, font) {
+    const str = String(text || "");
+    if (width <= 0 || !str) return "";
+    if (textWidth(str, font) <= width) return str;
+    let lo = 0;
+    let hi = str.length;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (textWidth(`${str.slice(0, mid).trimEnd()}…`, font) <= width) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo >= 2 ? `${str.slice(0, lo).trimEnd()}…` : "";
+  }
+
+  /** Mix a #rrggbb colour with paper: 0 keeps it, 1 is paper. */
+  function tint(hex, amount) {
+    const a = /^#(..)(..)(..)$/.exec(hex);
+    const b = /^#(..)(..)(..)$/.exec(TM.paper);
+    if (!a) return hex;
+    return `#${[1, 2, 3].map((i) => Math.round(parseInt(a[i], 16) * (1 - amount) + parseInt(b[i], 16) * amount)
+      .toString(16).padStart(2, "0")).join("")}`;
+  }
+
+  /**
+   * The treemap: the fund's rows as tiles, area = weight, grouped into blocks by
+   * sector, country, asset class, source or route. Blocks zoom in on click or tap;
+   * negative weights are listed beside it, never drawn. The bars and tables below
+   * it are its text alternative.
+   */
+  function renderTreemap(f, rows, t) {
+    const dims = TM_DIMS.filter((d) => d.id !== "route" || tm.hasRoutes(rows));
+    const st = { dim: tm.defaultDimension(f, rows), zoom: null, pinned: null, width: 0 };
+    const uid = `tm${state.token}`;
+    const map = h("div", { class: "tm-map" });
+    const tip = h("div", { class: "tm-tip", role: "tooltip", id: `${uid}-tip`, hidden: true });
+    const crumbs = h("nav", { class: "tm-crumbs", "aria-label": "Treemap level" });
+    const side = h("div", { class: "tm-side" });
+    const detail = h("p", { class: "tm-detail", "aria-live": "polite" });
+    const hoverable = typeof matchMedia === "function" && matchMedia("(hover: hover)").matches;
+    let infos = [];
+
+    const radios = h("div", { class: "tm-switch", role: "radiogroup", "aria-label": "Group the holdings by" },
+      h("span", { class: "tm-switch-label", "aria-hidden": "true" }, "Group by"),
+      dims.map((d) => {
+        const input = h("input", { type: "radio", name: `${uid}-dim`, value: d.id, id: `${uid}-${d.id}` });
+        input.checked = d.id === st.dim;
+        input.addEventListener("change", () => {
+          if (!input.checked) return;
+          st.dim = d.id;
+          st.zoom = null;
+          draw();
+          announce(`Holdings grouped by ${d.short.toLowerCase()}.`);
+        });
+        return h("label", { class: "tm-opt", for: `${uid}-${d.id}` }, input, h("span", {}, d.label));
+      }));
+
+    const pct = (v) => `${fmtPct(v)}%`;
+    const dimInfo = () => dims.find((d) => d.id === st.dim) || TM_DIMS[0];
+    /** A block's label and size; with short positions in it, its long weight and its net weight. */
+    const blockSummary = (b, lbl) => (Math.abs(b.net - b.value) > 0.005
+      ? `${lbl} · ${pct(b.value)} long, ${pct(b.net)} net` : `${lbl} · ${pct(b.value)}`);
+
+    function rowInfo(r, block) {
+      return {
+        title: r.name || r.isin || "Unnamed holding",
+        lines: [
+          r.isin ? ["ISIN", r.isin] : null,
+          ["Weight", `${pct(r.weight)} of net assets`],
+          ["Source", sourceName(r.source)],
+          ["As of", r.as_of ? fmtDate(r.as_of) : "–"],
+          r.depth > 0 && r.via ? ["Via", r.via] : null,
+          r.asset === "fund" ? ["Note", "A fund no source has holdings for: not looked through"] : null,
+          [dimInfo().short, block],
+        ].filter(Boolean),
+        isin: r.isin,
+      };
+    }
+
+    function tileInfo(tile, block, blockKey) {
+      if (tile.kind === "row" || tile.kind === "unexpanded") return rowInfo(tile.row, block);
+      if (tile.kind === "small") {
+        return { title: `${fmtInt(tile.n)} smaller holdings`, lines: [["Weight", `${pct(tile.value)} of net assets together`],
+          [dimInfo().short, block], ["Note", "Too small to draw one by one; each is in the table below"]] };
+      }
+      if (blockKey === tm.NOT_LISTED) {
+        return { title: "Not listed in this file", lines: [["Weight", `${pct(tile.value)} of net assets`],
+          ["Note", `The other ${fmtInt(t.nRows - rows.length)} rows are in the full data of the release`]] };
+      }
+      return { title: `Others in ${block}`, lines: [["Weight", `${pct(tile.value)} of net assets`],
+        ["Note", "Rows this file does not list (in the full data of the release)"]] };
+    }
+
+    function unresolvedInfo(v) {
+      const un = f.unresolved || {};
+      return { title: UNRESOLVED, lines: [["Weight", `${pct(v)} of net assets`],
+        ["Note", un.note || "What the source does not tie to an ISIN: cash, derivatives, pools and lines without an identifier"],
+        ["Source", sourceName(un.source || f.source)], ["As of", fmtDate(un.as_of || f.as_of)]] };
+    }
+
+    const ariaOf = (info) => `${info.title}: ${info.lines.map(([k, v]) => `${k} ${v}`).join("; ")}`;
+
+    function showTip(info, x, y) {
+      tip.replaceChildren(h("strong", {}, info.title),
+        h("dl", {}, info.lines.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)])));
+      tip.hidden = false;
+      const mw = map.clientWidth;
+      const tw = tip.offsetWidth;
+      const th = tip.offsetHeight;
+      let left = x + 14;
+      if (left + tw > mw) left = Math.max(0, x - tw - 14);
+      let top = y + 14;
+      if (top + th > map.clientHeight + 40) top = Math.max(0, y - th - 14);
+      tip.style.left = `${left}px`;
+      tip.style.top = `${top}px`;
+    }
+    const hideTip = () => (tip.hidden = true);
+
+    function setDetail(info) {
+      if (!info) return detail.replaceChildren();
+      const fundIsin = info.isin && state.index && state.index.aliases[info.isin] && info.isin;
+      detail.replaceChildren(h("span", {}, h("strong", {}, info.title), " · ",
+        info.lines.map(([k, v], i) => [i ? " · " : null, `${k}: ${v}`]),
+        fundIsin ? [" · ", h("a", { href: `?isin=${encodeURIComponent(fundIsin)}`, onclick: (ev) => {
+          if (ev.metaKey || ev.ctrlKey) return;
+          ev.preventDefault();
+          openFund(fundIsin, { focus: true });
+        } }, "Open its look-through")] : null));
+    }
+
+    function zoomTo(key, focusFirst) {
+      st.zoom = key;
+      st.pinned = null;
+      hideTip();
+      draw();
+      const b = st.model.blocks.find((x) => x.key === key);
+      if (b) announce(`${blockLabel(st.dim, key)}: ${pct(b.value)} of net assets in ${fmtInt(b.tiles.length)} tiles. Escape goes back.`);
+      if (focusFirst) {
+        const first = map.querySelector("[data-tile]");
+        if (first) first.focus({ preventScroll: true });
+      }
+    }
+
+    function zoomOut() {
+      const back = st.zoom;
+      st.zoom = null;
+      hideTip();
+      draw();
+      announce(`${dimInfo().all}.`);
+      const el = back != null ? [...map.querySelectorAll("[data-block]")].find((g) => g.dataset.block === back) : null;
+      if (el) el.focus({ preventScroll: true });
+    }
+
+    function label(g, x, y, w, hgt, fill, lines, opts) {
+      const o = opts || {};
+      const fs = Math.max(9.5, Math.min(o.max || 20, Math.sqrt(w * hgt) / 8.5));
+      if (w < 30 || hgt < fs * 1.45) return;
+      const colour = o.colour || tm.textOn(fill, TM.ink, TM.paper);
+      const first = fitText(lines[0], w - 9, `600 ${fs}px Inter, system-ui, sans-serif`);
+      if (!first) return;
+      g.append(s("text", { x: (x + 5).toFixed(1), y: (y + 4 + fs).toFixed(1), "font-size": fs.toFixed(1), fill: colour,
+        class: "tm-label" }, first));
+      if (lines[1] && hgt >= fs * 2.75) {
+        const fs2 = Math.max(9, fs * 0.82);
+        g.append(s("text", { x: (x + 5).toFixed(1), y: (y + 6 + fs + fs2 * 1.15).toFixed(1), "font-size": fs2.toFixed(1),
+          fill: colour, class: "tm-value" }, fitText(lines[1], w - 9, `400 ${fs2}px Inter, system-ui, sans-serif`)));
+      }
+    }
+
+    function tileFill(tile, colour) {
+      if (tile.kind === "small") return tint(colour, 0.38);
+      if (tile.kind === "others") return tint(colour, 0.55);
+      if (tile.kind === "unexpanded") return tint(colour, 0.25);
+      return colour;
+    }
+
+    function drawTiles(parent, block, colour, x, y, w, hgt, interactive) {
+      const lbl = blockLabel(st.dim, block.key);
+      for (const c of tm.squarify(block.tiles, x, y, w, hgt)) {
+        const tile = c.item;
+        const fill = tileFill(tile, colour);
+        const info = tileInfo(tile, lbl, block.key);
+        const idx = infos.push(info) - 1;
+        const g = s("g", { "data-tile": idx, class: `tm-tile tm-${tile.kind}` });
+        if (interactive) {
+          g.setAttribute("tabindex", "0");
+          g.setAttribute("role", "button");
+          g.setAttribute("aria-label", ariaOf(info));
+        }
+        g.append(s("rect", { x: c.x.toFixed(2), y: c.y.toFixed(2), width: Math.max(0, c.w).toFixed(2),
+          height: Math.max(0, c.h).toFixed(2), fill, class: "tm-cell" }));
+        if (tile.kind === "others" || tile.kind === "unexpanded") {
+          g.append(s("rect", { x: c.x.toFixed(2), y: c.y.toFixed(2), width: Math.max(0, c.w).toFixed(2),
+            height: Math.max(0, c.h).toFixed(2), fill: `url(#${uid}-hatch)`, "pointer-events": "none" }));
+        }
+        const name = tile.kind === "row" || tile.kind === "unexpanded" ? tile.row.name || tile.row.isin
+          : tile.kind === "small" ? `${fmtInt(tile.n)} smaller`
+            : block.key === tm.NOT_LISTED ? "Not listed here" : "Others";
+        const second = tile.kind === "others" ? `${pct(tile.value)} in the full data`
+          : tile.kind === "unexpanded" ? `${pct(tile.value)} not looked through` : pct(tile.value);
+        label(g, c.x, c.y, c.w, c.h, fill, [name, second]);
+        parent.append(g);
+      }
+    }
+
+    function drawUnresolved(svg, c, v) {
+      const info = unresolvedInfo(v);
+      const idx = infos.push(info) - 1;
+      const g = s("g", { "data-tile": idx, class: "tm-tile tm-unresolved", tabindex: 0, role: "button", "aria-label": ariaOf(info) },
+        s("rect", { x: c.x.toFixed(2), y: c.y.toFixed(2), width: c.w.toFixed(2), height: c.h.toFixed(2), fill: TM.unresolved, class: "tm-cell" }));
+      label(g, c.x, c.y, c.w, c.h, TM.unresolved, [UNRESOLVED, pct(v)], { colour: TM.ink2 });
+      svg.append(g);
+    }
+
+    function measure() {
+      const w = Math.max(280, Math.round(map.clientWidth || 640));
+      const hgt = w >= 640 ? Math.round(Math.min(620, Math.max(340, w * 0.56))) : Math.round(Math.min(560, w * 1.15));
+      return [w, hgt];
+    }
+
+    function draw() {
+      const [W, H] = measure();
+      st.width = W;
+      infos = [];
+      const area = W * H;
+      const rough = tm.model(f, rows, t, st.dim);
+      let zoomBlock = st.zoom != null ? rough.blocks.find((b) => b.key === st.zoom) : null;
+      if (st.zoom != null && !zoomBlock) st.zoom = null;
+      // Tiles under about 10 square pixels at this level are merged into one "smaller holdings" tile.
+      const scope = zoomBlock ? zoomBlock.value : rough.total;
+      const m = tm.model(f, rows, t, st.dim, { minValue: scope > 0 ? (scope * 10) / area : 0 });
+      st.model = m;
+      const colours = blockColours(m.blocks);
+      zoomBlock = st.zoom != null ? m.blocks.find((b) => b.key === st.zoom) : null;
+
+      const svg = s("svg", { class: "tm-svg", viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "group",
+        "aria-label": zoomBlock
+          ? `Treemap of ${blockLabel(st.dim, zoomBlock.key)}, ${pct(zoomBlock.value)} of net assets. Each holding is a button; Escape goes back.`
+          : `Treemap of the fund's holdings by ${dimInfo().short.toLowerCase()}. Each block is a button that zooms in.` },
+        s("defs", {}, s("pattern", { id: `${uid}-hatch`, width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" },
+          s("rect", { width: 2, height: 6, fill: TM.paper, opacity: 0.55 }))));
+
+      if (zoomBlock) {
+        drawTiles(svg, zoomBlock, colours.get(zoomBlock.key), 0, 0, W, H, true);
+      } else {
+        const items = m.blocks.map((b) => ({ block: b, value: b.value }));
+        if (m.unresolved) items.push({ unresolved: true, value: m.unresolved });
+        for (const c of tm.squarify(items, 0, 0, W, H)) {
+          if (c.item.unresolved) {
+            drawUnresolved(svg, c, c.item.value);
+            continue;
+          }
+          const b = c.item.block;
+          const colour = colours.get(b.key);
+          const lbl = blockLabel(st.dim, b.key);
+          const g = s("g", { class: "tm-block", "data-block": b.key, tabindex: 0, role: "button",
+            "aria-label": `${lbl}: ${pct(b.value)} of net assets${Math.abs(b.net - b.value) > 0.005 ? ` in long positions, ${pct(b.net)} net` : ""}, ${fmtInt(b.n)} holdings${b.tiles.some((x) => x.kind === "others") ? " and others in the full data" : ""}. Zoom in.` });
+          const band = c.h > 64 && c.w > 70 ? Math.min(22, Math.max(17, c.h * 0.08)) : 0;
+          if (band) {
+            g.append(s("rect", { x: c.x.toFixed(2), y: c.y.toFixed(2), width: c.w.toFixed(2), height: band.toFixed(2), fill: colour, class: "tm-band" }));
+            const fs = Math.min(12.5, band * 0.62);
+            const font = `700 ${fs}px Sora, Inter, system-ui, sans-serif`;
+            // The share always shows; the label gives way first.
+            const need = Math.min(textWidth(lbl, font), fs * 7);
+            const tail = [blockSummary(b, ""), ` · ${pct(b.value)}`].find((x) => c.w - 10 - textWidth(x, font) >= need) || ` · ${pct(b.value)}`;
+            const room = c.w - 10 - textWidth(tail, font);
+            const head = room > fs * 2 ? fitText(lbl, room, font) : "";
+            g.append(s("text", { x: (c.x + 5).toFixed(1), y: (c.y + band * 0.5 + fs * 0.36).toFixed(1), "font-size": fs.toFixed(1),
+              fill: tm.textOn(colour, TM.ink, TM.paper), class: "tm-block-label" },
+              head ? `${head}${tail}` : fitText(tail.replace(/^ · /, ""), c.w - 10, font)));
+          }
+          drawTiles(g, b, colour, c.x, c.y + band, c.w, c.h - band, false);
+          g.append(s("rect", { x: c.x.toFixed(2), y: c.y.toFixed(2), width: c.w.toFixed(2), height: c.h.toFixed(2), class: "tm-outline" }));
+          g.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            zoomTo(b.key, false);
+          });
+          g.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter" || ev.key === " ") {
+              ev.preventDefault();
+              zoomTo(b.key, true);
+            }
+          });
+          svg.append(g);
+        }
+      }
+      map.replaceChildren(svg, tip);
+      tip.hidden = true;
+      drawCrumbs(zoomBlock);
+      drawSide(m, colours, zoomBlock);
+      if (!zoomBlock) setDetail(null);
+    }
+
+    function drawCrumbs(zoomBlock) {
+      const all = dimInfo().all;
+      if (!zoomBlock) {
+        crumbs.replaceChildren(h("span", { class: "tm-crumb", "aria-current": "true" }, all),
+          h("span", { class: "tm-hint" }, hoverable ? "Click a block to zoom in." : "Tap a block to zoom in."));
+        return;
+      }
+      const back = h("button", { type: "button", class: "tm-crumb tm-back" }, all);
+      back.addEventListener("click", zoomOut);
+      crumbs.replaceChildren(back, h("span", { class: "tm-sep", "aria-hidden": "true" }, "›"),
+        h("span", { class: "tm-crumb", "aria-current": "true" }, blockSummary(zoomBlock, blockLabel(st.dim, zoomBlock.key))),
+        h("span", { class: "tm-hint" }, hoverable ? "Esc or the first link goes back." : "Tap a tile for its details."));
+    }
+
+    function drawSide(m, colours, zoomBlock) {
+      const parts = [];
+      if (!zoomBlock) {
+        const shown = m.blocks.slice(0, 12);
+        parts.push(h("h4", {}, `Blocks by ${dimInfo().short.toLowerCase()}`),
+          h("ol", { class: "tm-legend" }, shown.map((b) => {
+            const btn = h("button", { type: "button" },
+              h("i", { class: "sw", style: `background:${colours.get(b.key)}` }),
+              h("span", { class: "tm-leg-label" }, blockLabel(st.dim, b.key)), h("span", { class: "tm-leg-val" }, pct(b.value)));
+            btn.addEventListener("click", () => zoomTo(b.key, true));
+            return h("li", {}, btn);
+          }),
+          m.unresolved ? h("li", { class: "is-unresolved" }, h("span", { class: "tm-leg-static" },
+            h("i", { class: "sw sw-unresolved" }), h("span", { class: "tm-leg-label" }, UNRESOLVED), h("span", { class: "tm-leg-val" }, pct(m.unresolved)))) : null),
+          m.blocks.length > shown.length ? h("p", { class: "tm-more" }, `and ${fmtInt(m.blocks.length - shown.length)} smaller blocks, ${pct(sum(m.blocks.slice(12).map((b) => b.value)))} together`) : null);
+      }
+      const negs = zoomBlock ? m.negatives.filter((x) => x.key === zoomBlock.key) : m.negatives;
+      const unlisted = zoomBlock ? m.unlisted.filter((x) => x.key === zoomBlock.key) : m.unlisted;
+      if (negs.length || unlisted.length) {
+        const top = negs.slice(0, 10);
+        const total = sum(negs.map((x) => x.row.weight)) + sum(unlisted.map((x) => x.value));
+        parts.push(h("h4", {}, "Short positions and written options"),
+          h("p", { class: "tm-side-note" }, `Negative weights have no area, so they are listed here and not drawn: ${pct(total)} together${zoomBlock ? " in this block" : ""}.`),
+          h("ol", { class: "tm-negs" },
+            top.map((x) => h("li", {}, h("span", { class: "tm-neg-name" }, x.row.name || x.row.isin,
+              h("span", { class: "sub" }, [x.row.isin, x.row.depth > 0 && x.row.via ? `via ${x.row.via}` : null, sourceLabel(x.row.source)].filter(Boolean).join(" · "))),
+            h("span", { class: "tm-neg-val neg" }, pct(x.row.weight)))),
+            unlisted.map((x) => h("li", {}, h("span", { class: "tm-neg-name" }, `Rows not listed here, ${blockLabel(st.dim, x.key)}`,
+              h("span", { class: "sub" }, "net, in the full data")), h("span", { class: "tm-neg-val neg" }, pct(x.value))))),
+          negs.length > top.length ? h("p", { class: "tm-more" }, `and ${fmtInt(negs.length - top.length)} more, all in the table below`) : null);
+      }
+      if (m.unresolvedNegative) {
+        parts.push(h("p", { class: "tm-side-note" }, h("strong", {}, `${UNRESOLVED} ${pct(m.unresolvedNegative)}. `),
+          "The positions add up to more than the fund's net assets, so the unresolved weight is negative and has no tile."));
+      }
+      const nodes = parts.filter(Boolean);
+      side.replaceChildren(...nodes);
+      side.hidden = !nodes.length;
+    }
+
+    map.addEventListener("pointermove", (ev) => {
+      if (ev.pointerType !== "mouse") return;
+      const g = ev.target.closest && ev.target.closest("[data-tile]");
+      if (!g) return hideTip();
+      const box = map.getBoundingClientRect();
+      showTip(infos[Number(g.dataset.tile)], ev.clientX - box.left, ev.clientY - box.top);
+    });
+    map.addEventListener("pointerleave", hideTip);
+    map.addEventListener("click", (ev) => {
+      const g = ev.target.closest && ev.target.closest("[data-tile]");
+      if (!g || g.closest("[data-block]")) return;
+      const info = infos[Number(g.dataset.tile)];
+      setDetail(info);
+      if (!hoverable) {
+        // A second tap on the same tile closes its tooltip.
+        if (st.pinned === g.dataset.tile && !tip.hidden) {
+          st.pinned = null;
+          return hideTip();
+        }
+        st.pinned = g.dataset.tile;
+        const box = map.getBoundingClientRect();
+        const r = g.getBoundingClientRect();
+        showTip(info, r.left - box.left + Math.min(r.width / 2, 40), r.top - box.top + Math.min(r.height / 2, 30));
+      }
+    });
+    map.addEventListener("focusin", (ev) => {
+      const g = ev.target.closest && ev.target.closest("[data-tile]");
+      if (!g) return hideTip();
+      const info = infos[Number(g.dataset.tile)];
+      const box = map.getBoundingClientRect();
+      const r = g.getBoundingClientRect();
+      showTip(info, r.left - box.left + Math.min(r.width / 2, 40), r.top - box.top + Math.min(r.height / 2, 30));
+    });
+    map.addEventListener("focusout", hideTip);
+    map.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape" && st.zoom != null) {
+        ev.preventDefault();
+        zoomOut();
+      } else if ((ev.key === "Enter" || ev.key === " ") && ev.target.closest && ev.target.closest("[data-tile]")) {
+        ev.preventDefault();
+        setDetail(infos[Number(ev.target.closest("[data-tile]").dataset.tile)]);
+      }
+    });
+
+    const wrap = h("figure", { class: "tm", "aria-labelledby": `${uid}-cap` },
+      h("div", { class: "tm-head" }, h("figcaption", { id: `${uid}-cap`, class: "tm-cap" }, "Holdings as tiles"), radios),
+      crumbs,
+      h("div", { class: "tm-body" }, map, side),
+      detail,
+      h("p", { class: "tm-note" },
+        "Area is percent of net assets. Hatched tiles are rows this file does not list (in the full data of the release) or funds that could not be looked through. ",
+        h("a", { href: "#dist-alt" }, "The same weights as bars and tables"), "."),
+      provenance(f, rows));
+
+    // Draw once the figure is in the page and its width is known; redraw when the width changes.
+    // A timer, not only an animation frame, so a page opened in a background tab draws too.
+    let started = false;
+    const start = () => {
+      if (started || !wrap.isConnected) return;
+      started = true;
+      draw();
+      // A tap anywhere outside the map closes a tooltip opened by tapping a tile.
+      const outside = (ev) => {
+        if (!wrap.isConnected) return document.removeEventListener("pointerdown", outside);
+        if (!map.contains(ev.target)) hideTip();
+      };
+      document.addEventListener("pointerdown", outside);
+      if (typeof ResizeObserver === "function") {
+        let pending = 0;
+        const ro = new ResizeObserver(() => {
+          if (!wrap.isConnected) return ro.disconnect();
+          clearTimeout(pending);
+          pending = setTimeout(() => {
+            if (Math.abs(Math.round(map.clientWidth) - st.width) > 2) draw();
+          }, 80);
+        });
+        ro.observe(map);
+      }
+    };
+    requestAnimationFrame(start);
+    setTimeout(start, 30);
+    return wrap;
+  }
+
+  function topTenCard(f, rows, t, bd) {
+    const tops = topHoldings(rows).map((x) => ({ ...x, color: C.wine }));
+    const top10 = bd.top10_pct != null ? Number(bd.top10_pct) : sum(tops.map((x) => x.value));
+    const others = t.inRows - top10;
+    const summary = [
+      { label: "Ten largest together", value: top10, color: C.wine },
+      { label: "All other holdings", value: others, color: C.stone, other: true },
+      { label: UNRESOLVED, value: t.unresolved, unresolved: true },
+    ];
+    const aria = `Ten largest holdings: ${fmtPct(top10)}% of net assets; all other holdings ${fmtPct(others)}%; ${UNRESOLVED} ${fmtPct(t.unresolved)}%.`;
+    const bar = strip(summary, aria);
+    return h("figure", { class: bar ? "dist-card dist-card-wide" : "dist-card dist-card-wide no-strip", role: bar ? null : "group", "aria-label": bar ? null : aria },
+      h("figcaption", {}, h("h4", {}, "Ten largest holdings"),
+        h("p", { class: "dist-sub" }, `Together ${fmtPct(top10, 2)}% of net assets.`)),
+      bar || h("p", { class: "dist-nostrip" }, "Some totals are negative, so no share bar is drawn."),
+      bars(tops.concat(summary.slice(1))),
+      altTable("ten largest holdings, percent of net assets", ["Holding", "ISIN", "% of net assets"],
+        tops.map((x) => ({ cells: [x.label, x.isin, fmtPct(x.value)] }))
+          .concat(summary.map((x) => ({ cells: [x.label, "", fmtPct(x.value)], unresolved: x.unresolved })))),
+      provenance(f, rows));
+  }
+
+  /* ---------- holdings table ---------- */
+
+  function renderTable(f, rows, fof, tot) {
     const cols = [
       { key: "isin", label: "ISIN", type: "s", cls: "col-isin" },
       { key: "name", label: "Name", type: "s" },
       { key: "weight", label: "Weight %", type: "n", num: true },
       { key: "asset", label: "Asset class", type: "s", opt: true },
+      { key: "country", label: "Country", type: "s", opt: true },
+      { key: "sector", label: "Sector", type: "s", opt: true },
       { key: "source", label: "Source", type: "s" },
       { key: "as_of", label: "As of", type: "s", opt: true },
     ];
@@ -635,13 +1447,14 @@
         ths.forEach((x) => x.setAttribute("aria-sort", "none"));
         th.setAttribute("aria-sort", t.dir > 0 ? "ascending" : "descending");
         draw();
+        announce(`Sorted by ${c.label.toLowerCase()}, ${t.dir > 0 ? "ascending" : "descending"}.`);
       });
       return th;
     });
 
     function sorted() {
       const q = norm(t.filter);
-      let out = q ? rows.filter((r) => norm(`${r.isin || ""} ${r.name} ${r.asset} ${r.via}`).includes(q)) : rows.slice();
+      const out = q ? rows.filter((r) => norm(`${r.isin || ""} ${r.name} ${r.asset} ${r.via} ${r.country} ${countryName(r.country) || ""} ${r.sector}`).includes(q)) : rows.slice();
       if (t.sort) {
         const c = cols.find((x) => x.key === t.sort);
         out.sort((a, b) => {
@@ -657,43 +1470,59 @@
     function draw() {
       const out = sorted();
       const shown = t.all ? out : out.slice(0, FIRST_ROWS);
-      tbody.replaceChildren(...shown.map((r) => rowEl(r, cols)));
+      tbody.replaceChildren(...shown.map((r) => rowEl(r, cols, f)));
       more.hidden = out.length <= FIRST_ROWS || t.all;
       more.textContent = `Show all ${fmtInt(out.length)} rows`;
       count.textContent = `Showing ${fmtInt(shown.length)} of ${fmtInt(out.length)} rows${t.filter ? " matching the filter" : ""}` +
-        (f.truncated ? `, the largest ${fmtInt(rows.length)} of ${fmtInt(f.n_constituents)} constituents.` : ".");
+        (tot.truncated ? `, the largest ${fmtInt(rows.length)} of the fund's ${fmtInt(tot.nRows)} rows.` : ".");
     }
+    state.redrawTable = draw;
 
     more.addEventListener("click", () => {
       t.all = true;
       draw();
+      announce(`Showing all ${fmtInt(rows.length)} rows.`);
     });
 
-    const filter = h("input", { class: "filter", type: "search", placeholder: "Filter rows by ISIN or name", "aria-label": "Filter rows" });
+    const filter = h("input", { class: "filter", type: "search", placeholder: "Filter rows by ISIN, name, country…", "aria-label": "Filter rows" });
+    let ft = 0;
     filter.addEventListener("input", () => {
       t.filter = filter.value;
       draw();
+      clearTimeout(ft);
+      ft = setTimeout(() => announce(count.textContent), 500);
     });
 
     const csv = h("button", { class: "btn btn-sm", type: "button" }, "Download CSV");
-    csv.addEventListener("click", () => downloadCsv(f, rows, unresolved));
+    csv.addEventListener("click", () => downloadCsv(f, rows, tot));
     const src = state.sources[f.source] || {};
-    const why = f.unresolved && f.unresolved.note;
-    const foot = h("tfoot", {}, h("tr", {},
-      h("td", { class: "isin col-isin" }, "—"),
-      h("td", { class: "name" }, "Unresolved weight",
-        h("span", { class: "why" }, why || "100 minus the sum of the rows above: what the source does not tie to an ISIN.")),
-      h("td", { class: `num${unresolved < 0 ? " neg" : ""}` }, fmtPct(unresolved)),
-      h("td", { class: "col-opt" }, ""),
-      h("td", {}, badge(f.source, true)),
-      h("td", { class: "col-opt dim" }, f.as_of || ""),
-      fof ? h("td", { class: "col-opt" }, "") : null));
+
+    const footRow = (name, why, weight, srcId, asOf, cls) => {
+      const cells = {
+        isin: h("td", { class: "isin col-isin" }, "—"),
+        name: h("td", { class: "name" }, name, h("span", { class: "why" }, why)),
+        weight: h("td", { class: `num${weight < 0 ? " neg" : ""}` }, fmtPct(weight)),
+        source: h("td", {}, badge(srcId, true)),
+        as_of: h("td", { class: "col-opt dim" }, asOf || ""),
+      };
+      return h("tr", { class: cls }, cols.map((c) => cells[c.key] || h("td", { class: c.opt ? "col-opt" : null }, "")));
+    };
+    const un = f.unresolved || {};
+    const unWhy = [un.note, `100 minus the resolved weight of all ${fmtInt(tot.nRows != null ? tot.nRows : rows.length)} rows: what the source does not tie to an ISIN.`]
+      .filter(Boolean).join(" ");
+    const foot = h("tfoot", {},
+      tot.truncated
+        ? footRow("Not listed here", h("span", {}, `The other ${fmtInt(tot.nRows - rows.length)} rows, all resolved to ISINs, are in the `,
+          safeUrl(f.full_data_url) ? ext(f.full_data_url, "full Parquet file") : "full Parquet file", "."),
+          tot.notListed, f.source, f.as_of, "not-listed")
+        : null,
+      footRow("Unresolved weight", unWhy, tot.unresolved, un.source || f.source, un.as_of || f.as_of, "unresolved"));
 
     const captionText = `Constituents of ${f.name}, largest first. Weights are percent of net assets, never rescaled. Source: ${src.name || sourceLabel(f.source)}, as of ${f.as_of || "unknown"}.`;
-    const table = h("table", {}, h("caption", { class: "sr-only" }, captionText), h("thead", {}, h("tr", {}, ths)), tbody, foot);
+    const table = h("table", { class: "holdings" }, h("caption", { class: "sr-only" }, captionText), h("thead", {}, h("tr", {}, ths)), tbody, foot);
     draw();
 
-    return h("div", {},
+    return h("section", { class: "holdings-block", "aria-label": "Holdings" },
       h("div", { class: "toolbar" }, filter,
         h("div", { class: "actions" }, csv,
           h("a", { class: "btn btn-ghost btn-sm", href: fundUrl(f.id), type: "application/json" }, "JSON"),
@@ -703,23 +1532,27 @@
       h("div", { class: "table-foot" }, count, more),
       h("p", { class: "table-foot" },
         h("span", {}, "Data: ", safeUrl(f.source_url) ? ext(f.source_url, src.name || sourceLabel(f.source)) : src.name || sourceLabel(f.source),
-          f.credit ? ` · ${f.credit}` : null, ` · as of ${f.as_of || "unknown"}. openbasket only gathers this data; check the source before relying on it.`)));
+          f.credit ? [" · ", linkify(f.credit)] : null, ` · as of ${f.as_of || "unknown"}. openbasket only gathers this data; check the source before relying on it.`)));
   }
 
-  function rowEl(r, cols) {
+  function rowEl(r, cols, f) {
     const fundLink = r.isin && state.index && state.index.aliases[r.isin];
     const isinCell = r.isin
       ? fundLink
         ? h("a", { href: `?isin=${encodeURIComponent(r.isin)}`, title: "This holding is a fund: open its look-through",
-          onclick: (ev) => { if (!ev.metaKey && !ev.ctrlKey) { ev.preventDefault(); openFund(r.isin); } } }, h("code", {}, r.isin))
+          onclick: (ev) => { if (!ev.metaKey && !ev.ctrlKey) { ev.preventDefault(); openFund(r.isin, { focus: true }); } } }, h("code", {}, r.isin))
         : h("code", {}, r.isin)
       : "—";
+    // On phones the optional columns are hidden, so the ISIN, as-of date and route go under the name.
+    const sub = [r.isin || "no ISIN", r.as_of ? `as of ${r.as_of}` : null, r.depth > 0 && r.via ? `via ${r.via}` : null].filter(Boolean).join(" · ");
     const cells = {
       isin: h("td", { class: "isin col-isin" }, isinCell),
-      name: h("td", { class: "name" }, r.name, h("span", { class: "sub" }, r.isin || "no ISIN")),
+      name: h("td", { class: "name" }, r.name, h("span", { class: "sub" }, sub)),
       weight: h("td", { class: `num${r.weight < 0 ? " neg" : ""}` }, fmtPct(r.weight)),
       asset: h("td", { class: "col-opt dim" }, r.asset),
-      source: h("td", {}, badge(r.source)),
+      country: h("td", { class: "col-opt dim", title: countryName(r.country) !== r.country ? countryName(r.country) : null }, r.country),
+      sector: h("td", { class: "col-opt dim" }, r.sector),
+      source: h("td", {}, badge(r.source, r.source === f.source)),
       as_of: h("td", { class: "col-opt dim" }, r.as_of || ""),
       via: h("td", { class: "col-opt dim" }, r.depth > 0 ? r.via : "direct"),
     };
@@ -728,24 +1561,18 @@
 
   /* ---------- CSV ---------- */
 
-  function csvCell(v) {
-    if (v == null) return "";
-    if (typeof v === "number") return Number.isFinite(v) ? String(v) : "";
-    let s = String(v);
-    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
-    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  }
+  const csvCell = core.csvCell;
 
-  function downloadCsv(f, rows, unresolved) {
-    const header = ["fund_id", "fund_isin", "fund_name", "constituent_isin", "name", "weight_pct", "asset_class", "source",
-      "source_name", "source_licence", "credit", "as_of", "depth", "via", "fund_source_url"];
-    const credit = (s) => (s === f.source ? f.credit : state.sources[s] && state.sources[s].credit) || "";
-    const line = (r) => [f.id, f.isin, f.name, r.isin, r.name, r.weight, r.asset, r.source, sourceName(r.source),
-      (state.sources[r.source] || {}).licence || "", credit(r.source), r.as_of, r.depth, r.via, f.source_url].map(csvCell).join(",");
-    const lines = [header.join(","), ...rows.map(line),
-      line({ isin: null, name: "Unresolved weight", weight: unresolved, asset: "", source: f.source, as_of: f.as_of, depth: 0, via: f.name })];
+  function downloadCsv(f, rows, tot) {
+    const header = ["fund_id", "fund_isin", "fund_name", "constituent_isin", "name", "weight_pct", "asset_class", "country", "sector",
+      "source", "source_name", "source_licence", "credit", "as_of", "depth", "via", "fund_source_url", "file_truncated", "full_data_url"];
+    const credit = (x) => (x === f.source ? f.credit : state.sources[x] && state.sources[x].credit) || "";
+    const line = (r) => [f.id, f.isin, f.name, r.isin, r.name, r.weight, r.asset, r.country, r.sector, r.source, sourceName(r.source),
+      (state.sources[r.source] || {}).licence || "", credit(r.source), r.as_of, r.depth, r.via, f.source_url, tot.truncated,
+      f.full_data_url].map(csvCell).join(",");
+    const lines = [header.join(","), ...rows.map(line), ...core.closingRows(f, rows, tot).map(line)];
     const blob = new Blob(["﻿" + lines.join("\r\n") + "\r\n"], { type: "text/csv;charset=utf-8" });
-    const a = h("a", { download: `openbasket_${f.id}_${f.as_of || "undated"}${f.truncated ? "_largest" : ""}.csv` });
+    const a = h("a", { download: `openbasket_${f.id}_${f.as_of || "undated"}${tot.truncated ? "_largest" : ""}.csv` });
     a.href = URL.createObjectURL(blob);
     document.body.append(a);
     a.click();
@@ -765,14 +1592,25 @@
     const metaReady = loadMeta();
     const route = (opts) => {
       const id = idFromLocation();
-      if (id) metaReady.finally(() => openFund(id, { push: false, ...opts }));
+      const replace = core.fundFromHash(location.search, location.hash);
+      if (id) metaReady.finally(() => openFund(id, { push: false, replace, ...opts }));
       else {
+        state.shownId = null;
+        state.token++;
         section.hidden = true;
         document.title = "openbasket — what an ETF or fund holds, by ISIN, from public sources";
       }
     };
-    window.addEventListener("popstate", () => route({ scroll: true }));
-    window.addEventListener("hashchange", () => idFromLocation() && route({ scroll: true }));
+    // Back and forward between funds. A click on an in-page link (#api, #top) also fires popstate;
+    // it leaves the fund in the address unchanged, so nothing is reloaded and the browser scrolls.
+    window.addEventListener("popstate", () => {
+      if (idFromLocation() !== state.shownId) route({ scroll: true });
+    });
+    // #ISIN deep links typed into the address bar. Other hashes are left to the browser.
+    window.addEventListener("hashchange", () => {
+      const id = core.hashRoute(location.hash, state.shownId);
+      if (id) metaReady.finally(() => openFund(id, { push: false, replace: true, scroll: true }));
+    });
     route({ scroll: true });
   }
 

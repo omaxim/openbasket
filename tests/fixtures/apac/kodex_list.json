@@ -1,0 +1,23 @@
+[
+ {
+  "fNm": "KODEX 200",
+  "stkTicker": "069500",
+  "fId": "2ETF01",
+  "typeLnm": "국내주식",
+  "totalCnt": "3"
+ },
+ {
+  "fNm": "KODEX CD금리액티브(합성)",
+  "stkTicker": "459580",
+  "fId": "2ETFJ8",
+  "typeLnm": "금리",
+  "totalCnt": "3"
+ },
+ {
+  "fNm": "KODEX 레버리지",
+  "stkTicker": "122630",
+  "fId": "2ETF25",
+  "typeLnm": "레버리지/인버스",
+  "totalCnt": "3"
+ }
+]

@@ -1,9 +1,10 @@
 {% extends "!page.html" %}
-{#- Furo's page, with the same aggregator disclaimer as the landing page footer. -#}
+{#- Furo's page, with the same aggregator disclaimer and links as the landing page footer. -#}
 {% block footer %}
 {{ super() }}
+{%- set landing = pathto('_static/', 1)|replace('_static/', '') ~ '../' %}
 <div class="ob-disclaimer">
   <p>openbasket is an aggregator and a quick-lookup tool, not investment advice. It is not affiliated with, endorsed by or checked by any fund issuer or data provider. The holdings data belongs to its sources, which are named on every fund and every row; check the source before relying on it.</p>
-  <p><a href="{{ pathto(master_doc)|replace('index.html', '') ~ '../' }}">Search funds</a> · <a href="{{ repo_url }}">GitHub</a> · <a href="https://www.leithresearch.org/">Leith Research</a></p>
+  <p><a href="{{ landing }}">Search funds</a> · <a href="{{ pathto(master_doc) }}">Docs</a> · <a href="{{ landing }}pipeline/">Pipeline</a> · <a href="{{ repo_url }}">GitHub</a> · <a href="https://www.leithresearch.org/">Leith Research</a></p>
 </div>
 {% endblock footer %}

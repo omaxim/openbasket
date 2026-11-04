@@ -1,0 +1,5 @@
+# prefetch -------------------------------------------------------------------
+# Per host: jobs, ok, failed, seconds, requests, bytes; plus a full-run estimate.
+prefetch_report:
+  type: json.JSONDataset
+  filepath: data/08_reporting/prefetch_report.json

@@ -1,0 +1,50 @@
+# registry ---------------------------------------------------------------------
+# Raw downloads (GLEIF golden copy, ISIN-LEI, FIRDS FULINS_C) are cached under
+# params:registry.root and never published; these are the parsed tables.
+registry_firds_funds:
+  type: pandas.ParquetDataset
+  filepath: data/02_intermediate/registry/firds_funds.parquet
+
+registry_gleif_relationships:
+  type: pandas.ParquetDataset
+  filepath: data/02_intermediate/registry/gleif_relationships.parquet
+
+registry_gleif_entities:
+  type: pandas.ParquetDataset
+  filepath: data/02_intermediate/registry/gleif_entities.parquet
+
+registry_gleif_isin_lei:
+  type: pandas.ParquetDataset
+  filepath: data/02_intermediate/registry/gleif_isin_lei.parquet
+
+registry_esma_funds:
+  type: pandas.ParquetDataset
+  filepath: data/02_intermediate/registry/esma_funds.parquet
+
+registry_regulator_products:
+  type: pandas.ParquetDataset
+  filepath: data/02_intermediate/registry/regulator_products.parquet
+
+fund_entities:
+  type: pandas.ParquetDataset
+  filepath: data/03_primary/fund_entities.parquet
+
+fund_registry:
+  type: pandas.ParquetDataset
+  filepath: data/03_primary/fund_registry.parquet
+
+registry_coverage:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/registry_coverage.csv
+
+registry_banks:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/registry_banks.csv
+
+registry_domiciles:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/registry_domiciles.csv
+
+registry_summary:
+  type: json.JSONDataset
+  filepath: data/08_reporting/registry_summary.json

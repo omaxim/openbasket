@@ -98,6 +98,84 @@ def test_choose_prefers_order_then_coverage():
     assert choose([a, b], 99).source == "nport"
 
 
+def test_depth_capped_and_empty_sub_funds_are_unexpanded_not_resolved():
+    p = FakeProviders(
+        {
+            "TOP": [H("nport", [Line(40, "US0000000010", ticker="SUB"), Line(30, "US0000000011", ticker="EMPTY"),
+                                Line(30, "US0000000001")])],
+            "SUB": [H("nport", [Line(100, "US0000000020", ticker="DEEP")])],
+            "DEEP": [H("nport", [Line(100, "US0000000002")])],
+            "EMPTY": [],
+        },
+        {"US1111111111": "TOP"},
+    )
+    r = look_through("US1111111111", p, max_depth=1)
+    s = r.summary
+    assert s["resolved_pct"] == pytest.approx(30)
+    assert s["unexpanded_fund_pct"] == pytest.approx(70)
+    assert s["unresolved_pct"] == pytest.approx(0)
+    assert s["max_depth_reached"] is True
+    notes = {x["constituent_isin"]: x["note"] for x in r.leaves}
+    assert "depth limit of 1" in notes["US0000000020"]
+    assert notes["US0000000011"] == "fund, holdings not found"
+    assert {x["asset_class"] for x in r.leaves if x["unexpanded"]} == {"fund"}
+    assert s["status"] == "partial" and "could not be looked through" in s["note"]
+
+
+@pytest.mark.parametrize(
+    "lines, name, status",
+    [
+        ([Line(99.5, "US0000000001"), Line(0.5, None)], "Plain Equity ETF", "ok"),
+        ([Line(121, "US0000000001")], "Core Bond ETF", "over_100"),
+        ([Line(70, "US0000000001")], "Some Fund", "partial"),
+        ([Line(503.95, "US0000000001"), Line(200, None)], "GraniteShares Fund", "leveraged"),
+        ([Line(100, "US0000000001")], "Direxion Daily Semiconductor Bull 3X Shares", "leveraged"),
+        ([Line(100, "US0000000001")], "ProShares UltraPro QQQ", "leveraged"),
+        ([Line(100, "US0000000001")], "iShares Ultra Short-Term Bond ETF", "ok"),
+        ([Line(100, "US0000000001")], "JPMorgan Ultra-Short Income ETF", "ok"),
+    ],
+)
+def test_plausibility_status(lines, name, status):
+    class P(FakeProviders):
+        def resolve(self, isin):
+            return FundRef("F", None, name, "test")
+
+    r = look_through("US1111111111", P({"F": [H("nport", lines)]}, {}))
+    assert r.summary["status"] == status
+    if name == "GraniteShares Fund":
+        assert "703.95%" in r.summary["note"] and "not exposure" in r.summary["note"]
+
+
+def test_sub_funds_over_100_flag_the_parent():
+    p = FakeProviders(
+        {
+            "TOP": [H("nport", [Line(50, "US0000000010", ticker="BOND"), Line(50, "US0000000001")])],
+            "BOND": [H("nport", [Line(130, "US0000000002"), Line(-30, None, name="USD cash")])],
+        },
+        {"X": "TOP"},
+    )
+    s = look_through("X", p).summary
+    assert s["reported_total_pct"] == pytest.approx(100) and s["resolved_pct"] == pytest.approx(115)
+    assert s["status"] == "over_100" and "add up to 115.00%" in s["note"]
+
+
+def test_unmatched_status_is_no_match():
+    assert look_through("US9999999999", FakeProviders({}, {})).summary["status"] == "no_match"
+
+
+def test_cycle_detected_across_ids():
+    class P(FakeProviders):
+        def resolve_line(self, line):
+            # The same fund, reached by its issuer id while it was entered by series id.
+            if line.ticker == "BACK":
+                return FundRef(None, None, "A again", "test", issuer_id="iss:A")
+            return super().resolve_line(line)
+
+    p = P({"A": [H("nport", [Line(100, "US0000000020", ticker="BACK")])]}, {})
+    r = look_through("X", p, ref=FundRef("A", None, "A", "test", issuer_id="iss:A"))
+    assert r.leaves[0]["note"] == "fund cycle, not expanded"
+
+
 class DerivativeProviders(FakeProviders):
     """Adds resolve_underlying: an ISIN that names a fund in ``self.funds`` is that fund."""
 
@@ -143,3 +221,64 @@ def test_derivatives_can_be_switched_off():
     )
     r = look_through("US1111111111", p, look_through_derivatives=False)
     assert r.leaves == [] and r.summary["derivative_exposure_pct"] == 0
+
+
+def test_derivative_rows_count_as_resolved():
+    p = DerivativeProviders(
+        {
+            "BUFFER": [H("nport", [
+                Line(95, None, asset_class="derivative (equity)", underlying_isin="US78462F1030", underlying_name="SPY"),
+                Line(5, "US0000000001"),
+            ])],
+            "SPY": [H("spdr", [Line(60, "US0378331005"), Line(40, "US5949181045")])],
+        },
+        {"US1111111111": "BUFFER", "US78462F1030": "SPY"},
+    )
+    s = look_through("US1111111111", p).summary
+    assert s["resolved_pct"] == pytest.approx(100)
+    assert s["unexpanded_fund_pct"] == pytest.approx(0) and s["unresolved_pct"] == pytest.approx(0)
+    assert s["status"] == "ok"
+
+
+def test_derivative_on_a_fund_without_holdings_is_unexpanded():
+    p = DerivativeProviders(
+        {
+            "F": [H("nport", [
+                Line(40, None, asset_class="derivative (equity)", underlying_isin="US78462F1030", underlying_name="SPY"),
+                Line(60, "US0000000001"),
+            ])],
+            "SPY": [],
+        },
+        {"US1111111111": "F", "US78462F1030": "SPY"},
+    )
+    r = look_through("US1111111111", p)
+    row = next(x for x in r.leaves if x["constituent_isin"] == "US78462F1030")
+    assert row["unexpanded"] is True and row["asset_class"] == "fund" and row["exposure"] == "derivative"
+    assert row["note"] == "derivatives on SPY; fund, holdings not found"
+    s = r.summary
+    assert s["resolved_pct"] == pytest.approx(60) and s["unexpanded_fund_pct"] == pytest.approx(40)
+    assert s["derivative_exposure_pct"] == pytest.approx(40)
+    assert "could not be looked through" in s["note"]
+
+
+def test_derivative_on_itself_is_a_cycle():
+    p = DerivativeProviders(
+        {"F": [H("nport", [Line(100, None, asset_class="derivative (equity)", underlying_isin="US1111111111")])]},
+        {"US1111111111": "F"},
+    )
+    r = look_through("US1111111111", p)
+    assert r.leaves[0]["unexpanded"] is True and "fund cycle" in r.leaves[0]["note"]
+
+
+def test_sub_funds_reached_through_derivatives_keep_the_label():
+    p = DerivativeProviders(
+        {
+            "F": [H("nport", [Line(50, None, asset_class="derivative (equity)", underlying_isin="US2222222222")])],
+            "FOF": [H("nport", [Line(100, "US0000000010", ticker="SUB")])],
+            "SUB": [H("nport", [Line(100, "US0000000001")])],
+        },
+        {"US1111111111": "F", "US2222222222": "FOF"},
+    )
+    r = look_through("US1111111111", p)
+    assert len(r.leaves) == 1 and r.leaves[0]["exposure"] == "derivative"
+    assert r.leaves[0]["via_fund"] == "SUB (via derivatives)" and r.leaves[0]["unexpanded"] is False

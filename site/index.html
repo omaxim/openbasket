@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>openbasket — what an ETF or fund holds, by ISIN, from public sources</title>
-  <meta name="description" content="openbasket is a free look-through aggregator: type an ETF or fund and see the securities it holds, by ISIN and percent of net assets, from issuer files, SEC N-PORT filings and TickerInside, each with its source and date.">
+  <meta name="description" content="openbasket is a free look-through aggregator: type an ETF or fund and see the securities it holds, by ISIN and percent of net assets, from openly licensed sources such as SEC N-PORT filings and TickerInside, each with its source and date. Run it yourself for issuer files.">
   <link rel="canonical" href="https://openbasket.leithresearch.org/">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,16 +21,18 @@
   </div>
   <ul>
     <li class="nav-search"><a href="#search">Search</a></li>
+    <li class="nav-wide"><a href="#coverage">Coverage</a></li>
     <li><a href="#release">Data</a></li>
     <li><a href="#api">API</a></li>
     <li><a href="docs/">Docs</a></li>
+    <li><a href="pipeline/">Pipeline</a></li>
   </ul>
 </nav>
 
 <header class="hero" id="search">
   <p class="eyebrow">Open fund look-through · free sources</p>
   <h1>Every fund, <em>opened up.</em></h1>
-  <p class="lede">openbasket is a quick-lookup aggregator. Type an ETF or fund and see the securities it holds, each by ISIN and as a percent of the fund's net assets, gathered from public sources: issuer holdings files, SEC filings and TickerInside. Every figure names its source and the date of that source, so you can check it there.</p>
+  <p class="lede">openbasket is a look-through tool. Type an ETF or fund and see the securities it holds, each by ISIN and as a percent of the fund's net assets. This site shows holdings from sources whose licences allow it, such as SEC filings and TickerInside; for issuers whose terms do not, you run openbasket on your own computer. Every figure names its source and the date of that source, so you can check it there.</p>
 
   <form class="search" role="search" id="search-form" autocomplete="off" novalidate>
     <label class="search-label" for="q">Find a fund by name, ticker or ISIN</label>
@@ -43,7 +45,8 @@
       </div>
       <button class="btn" type="submit">Look through</button>
     </div>
-    <p class="search-hint" id="search-status" aria-live="polite">Try
+    <p class="search-hint search-status" id="search-status" role="status" aria-live="polite"></p>
+    <p class="search-hint" id="search-examples">Try
       <a href="?isin=IE00B5BMR087" data-isin="IE00B5BMR087">CSPX</a>,
       <a href="?isin=US78462F1030" data-isin="US78462F1030">SPY</a> or
       <a href="?isin=US4642898674" data-isin="US4642898674">AOR</a>, a fund of funds.</p>
@@ -54,16 +57,18 @@
 <section class="strip" aria-label="Sources">
   <p>Holdings from</p>
   <ul class="source-strip">
-    <li><a href="https://www.ishares.com/">iShares</a></li>
-    <li><a href="https://www.ssga.com/">SPDR</a></li>
     <li><a href="https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets">SEC Form N-PORT</a></li>
     <li><a href="https://tickerinside.com/">TickerInside</a></li>
+    <li><a href="https://www.cnmv.es/">CNMV</a></li>
+    <li><a href="https://dados.cvm.gov.br/">CVM</a></li>
     <li><a href="https://www.openfigi.com/">OpenFIGI</a> <span>(names)</span></li>
   </ul>
+  <p class="strip-local">Issuer files, such as iShares and SPDR: <a href="docs/running-locally.html">run it yourself</a></p>
 </section>
 
-<section id="fund" class="section fund" hidden>
-  <div id="fund-view" aria-live="polite"></div>
+<section id="fund" class="section fund" aria-label="Fund look-through" hidden>
+  <p id="fund-status" class="sr-only" role="status" aria-live="polite"></p>
+  <div id="fund-view"></div>
 </section>
 
 <section id="how" class="section">
@@ -81,6 +86,18 @@
       <h3>Every row names its source</h3>
       <p>openbasket only gathers what others publish. Each fund and each row says where it came from and on what date, with a link and the credit the source asks for. Check the source before relying on a figure.</p>
     </div>
+    <div>
+      <h3>Some holdings you run yourself</h3>
+      <p>Many issuers publish holdings files whose terms do not allow republishing. Those funds are listed here, marked “run locally”, without their holdings. Clone openbasket and run it on your computer to see them; the holdings it reads stay on your machine. <a href="docs/running-locally.html">How to run it locally</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="coverage" class="section coverage">
+  <h2>Coverage</h2>
+  <p class="section-intro">How many funds each source covers in this build, and the dates of the holdings it supplied. Dates differ by source: issuer files are daily, SEC N-PORT filings are quarterly and published with a delay.</p>
+  <div id="coverage-view">
+    <p class="muted">Loading the coverage…</p>
   </div>
 </section>
 
@@ -117,10 +134,12 @@
 <footer>
   <a class="wordmark wordmark-lg" href="#top"><span class="wm-open">open</span><span class="wm-basket">basket</span></a>
   <p class="disclaimer">openbasket is an aggregator and a quick-lookup tool, not investment advice. It is not affiliated with, endorsed by or checked by any fund issuer or data provider. The holdings data belongs to its sources, which are named on every fund and every row; figures can be late, incomplete or wrong, so check the source before relying on them.</p>
-  <p class="footer-links"><a href="https://github.com/omaxim/openbasket">GitHub</a><a href="docs/">Docs</a><a href="docs/data-api.html">Data API</a><a href="https://www.leithresearch.org/">Leith Research</a></p>
+  <p class="footer-links"><a href="https://github.com/omaxim/openbasket">GitHub</a><a href="docs/">Docs</a><a href="docs/data-api.html">Data API</a><a href="pipeline/">Pipeline</a><a href="https://www.leithresearch.org/">Leith Research</a></p>
   <p>© <span id="year">2026</span> Leith Research · Edinburgh, Scotland</p>
 </footer>
 
+<script src="assets/core.js" defer></script>
+<script src="assets/treemap.js" defer></script>
 <script src="assets/app.js" defer></script>
 </body>
 </html>

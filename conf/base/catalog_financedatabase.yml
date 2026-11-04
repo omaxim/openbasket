@@ -1,0 +1,19 @@
+# financedatabase -------------------------------------------------------------
+# Raw downloads (compression/*.parquet from the FinanceDatabase repository)
+# are cached under params:financedatabase.root and never committed.
+findb_manifest:
+  type: pandas.CSVDataset
+  filepath: data/01_raw/financedatabase/manifest.csv
+
+# One row per ISIN: names, family, category, listings. MIT; no summary text.
+findb_funds:
+  type: pandas.ParquetDataset
+  filepath: data/03_primary/findb_funds.parquet
+
+findb_summary:
+  type: json.JSONDataset
+  filepath: data/08_reporting/findb_summary.json
+
+findb_overlap:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/findb_overlap.csv

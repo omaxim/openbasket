@@ -1,0 +1,13 @@
+{"protocolVersion":"fqs.json#17x","pageNumber":1,"pageSize":99999,"totalRows":7,"delayedDateTime":"20261103T16:48:18.440",
+"copyRight":"synthetic test fixture",
+"colNames":["ISIN","FundLongName","IssuerNameFull","LegalStructureCountryCode","AssetClassDesc","ReplicationMethodDesc","FundUnderlyingDescription","ProductLine","TradingBaseCurrency","ValorNumber"],
+"rowData":[
+["CH0017142719","UBS SMI ETF CHF dis","UBS Fund Management (Switzerland) AG","CH","Equity Developed Markets","Physical","SMI Total Return","ET","CHF","1714271"],
+["IE00B7K93397","UBS Core S&P 500 UCITS ETF USD dis","UBS (Irl) ETF plc","IE","Equity Developed Markets","Physical","S&P 500 Index","ET","USD","18016554"],
+["IE00B7K93397","UBS Core S&P 500 UCITS ETF USD dis","UBS (Irl) ETF plc","IE","Equity Developed Markets","Physical","S&P 500 Index","ET","CHF","18016554"],
+["LU0950674175","UBS MSCI Emerging Markets Socially Responsible UCITS ETF","UBS (Lux) Fund Solutions","LU","Equity Emerging Markets","Physical","MSCI Emerging Markets Index","ET","USD","21593117"],
+["IE000JBZXFH0","Pictet AI Enhanced World Equity UCITS ETF USD Acc","Pictet ICAV","IE","Equity Developed Markets","Physical","MSCI World Index","ET","USD","130000001"],
+["LU0950668870","UBS MSCI USA Swap UCITS ETF","UBS (Lux) Fund Solutions","LU","Equity Developed Markets","Synthetic","MSCI USA","ET","USD","21593100"],
+["CH0008899764","iShares SMI ETF (CH)","BlackRock Asset Management Schweiz AG","CH","Equity Developed Markets","Physical","SMI Swiss Market Index","ET","CHF","889976"],
+["CH0315623006","Swisscanto (CH) Index Equity Fund USA FA USD","Swisscanto Fondsleitung AG","CH","Equity Developed Markets","Unknown","Unknown","PF","USD","31562300"]
+]}

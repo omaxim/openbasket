@@ -1,0 +1,104 @@
+{
+ "Success": true,
+ "Result": {
+  "InvType": "all",
+  "TableType": "ov",
+  "FundSet": [
+   {
+    "Id": 1,
+    "FundID": "UCTEXSM",
+    "FundName": "VanEck Example Semiconductor UCITS ETF",
+    "ISIN": "IE00BMC38736",
+    "TickerGroup": "ETF",
+    "AsOfDate": "11/02/26",
+    "RowData": [
+     {
+      "Header": "ticker",
+      "Value": "UCTEXSM",
+      "DisplayValue": "UCTEXSM",
+      "Link": "/DE/en/investments/example-semiconductor-etf/"
+     },
+     {
+      "Header": "isin",
+      "Value": "IE00BMC38736",
+      "DisplayValue": "IE00BMC38736",
+      "Link": ""
+     },
+     {
+      "Header": "assetClass",
+      "Value": "Equity",
+      "DisplayValue": "Equity",
+      "Link": ""
+     },
+     {
+      "Header": "category",
+      "Value": "Thematic",
+      "DisplayValue": "Thematic",
+      "Link": ""
+     }
+    ]
+   },
+   {
+    "Id": 2,
+    "FundID": "EXCB",
+    "FundName": "VanEck Example EUR Corporates UCITS ETF",
+    "ISIN": "NL0009690247",
+    "TickerGroup": "ETF",
+    "AsOfDate": "11/02/26",
+    "RowData": [
+     {
+      "Header": "ticker",
+      "Value": "EXCB",
+      "DisplayValue": "EXCB",
+      "Link": "/DE/en/investments/example-corporate-bonds-etf/"
+     },
+     {
+      "Header": "assetClass",
+      "Value": "Income",
+      "DisplayValue": "Income",
+      "Link": ""
+     },
+     {
+      "Header": "category",
+      "Value": "Corporate Bonds",
+      "DisplayValue": "Corporate Bonds",
+      "Link": ""
+     }
+    ]
+   },
+   {
+    "Id": 3,
+    "FundID": "EXEBU1",
+    "FundName": "VanEck – Example Bond UCITS-USD I1 Inc",
+    "ISIN": "IE00BYXQSF37",
+    "TickerGroup": "MF",
+    "AsOfDate": "11/02/26",
+    "RowData": [
+     {
+      "Header": "assetClass",
+      "Value": "Income",
+      "DisplayValue": "Income",
+      "Link": ""
+     }
+    ]
+   },
+   {
+    "Id": 4,
+    "FundID": "EXCNETN",
+    "FundName": "VanEck Example Coin ETN",
+    "ISIN": "DE000A28M8D0",
+    "TickerGroup": "ETN",
+    "AsOfDate": "11/02/26",
+    "RowData": [
+     {
+      "Header": "assetClass",
+      "Value": "Digital Assets",
+      "DisplayValue": "Digital Assets",
+      "Link": ""
+     }
+    ]
+   }
+  ]
+ },
+ "HasError": false
+}

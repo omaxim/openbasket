@@ -1,0 +1,22 @@
+# swiss ------------------------------------------------------------------------
+# Every row carries `redistribution` (public | local_only); only
+# swiss_fund_registry_public is fit for a public build.
+swiss_fund_registry:
+  type: pandas.ParquetDataset
+  filepath: data/03_primary/swiss_fund_registry.parquet
+
+swiss_fund_registry_public:
+  type: pandas.ParquetDataset
+  filepath: data/03_primary/swiss_fund_registry_public.parquet
+
+swiss_sample_holdings:
+  type: pandas.ParquetDataset
+  filepath: data/07_model_output/swiss_sample_holdings.parquet
+
+swiss_sample_runs:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/swiss_sample_runs.csv
+
+swiss_bank_coverage:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/swiss_bank_coverage.csv

@@ -13,11 +13,13 @@ kedro run --pipeline=lookthrough --params=isin=IE00B5BMR087
 :maxdepth: 2
 
 usage
+running-locally
 output
 sources/index
 plan
 data-api
 publishing
+data-licence
 deployment
 api
 ```

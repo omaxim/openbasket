@@ -1,0 +1,10 @@
+# Synthetic: same rule shapes as a document library that allows only its document paths.
+User-agent: *
+Allow: /pdf/
+Allow: /fds/
+Allow: /sitemap.xml
+Allow: /sitemaps/
+Disallow: /
+
+User-agent: SomeTrainingBot
+Disallow: /

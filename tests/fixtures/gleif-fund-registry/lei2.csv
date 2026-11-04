@@ -1,0 +1,11 @@
+LEI,Entity.LegalName,Entity.LegalName.xmllang,Entity.LegalAddress.FirstAddressLine,Entity.LegalAddress.Country,Entity.LegalJurisdiction,Entity.EntityCategory,Entity.EntitySubCategory,Entity.LegalForm.EntityLegalFormCode,Entity.LegalForm.OtherLegalForm,Entity.AssociatedEntity.type,Entity.AssociatedEntity.AssociatedLEI,Entity.AssociatedEntity.AssociatedEntityName,Entity.EntityStatus,Registration.InitialRegistrationDate,Registration.LastUpdateDate,Registration.RegistrationStatus
+54930000000000FU0105,Example Umbrella SICAV - Equity Fund,en,1 Example Street,LU,LU,FUND,,UDY2,,,,,ACTIVE,2015-01-01T00:00:00Z,2026-10-01T10:00:00Z,ISSUED
+54930000000000UM0257,Example Umbrella SICAV,en,1 Example Street,LU,LU,FUND,,UDY2,,,,,ACTIVE,2015-01-01T00:00:00Z,2026-10-01T10:00:00Z,ISSUED
+54930000000000MG0333,Example Fund Management S.A.,en,1 Example Street,LU,LU,GENERAL,,5GGB,,,,,ACTIVE,2012-01-01T00:00:00Z,2026-09-01T10:00:00Z,ISSUED
+54930000000000PB0491,Example Kantonalbank,de,2 Beispielweg,CH,CH,GENERAL,,MVII,,,,,ACTIVE,2012-01-01T00:00:00Z,2026-09-01T10:00:00Z,ISSUED
+54930000000000FU0590,Example Feeder Fund,en,3 Example Quay,IE,IE,FUND,,8888,UNIT TRUST,,,,ACTIVE,2018-01-01T00:00:00Z,2026-10-02T10:00:00Z,ISSUED
+54930000000000MG0624,Independent Capital Ltd,en,3 Example Quay,IE,IE,GENERAL,,LZIC,,,,,ACTIVE,2012-01-01T00:00:00Z,2026-09-01T10:00:00Z,ISSUED
+54930000000000GN0723,Unrelated Industrial AG,de,4 Werkstrasse,DE,DE,GENERAL,,2HBR,,,,,ACTIVE,2012-01-01T00:00:00Z,2026-09-01T10:00:00Z,ISSUED
+54930000000000SP0866,Jane Example,en,5 Home Road,GB,GB,SOLE_PROPRIETOR,,8888,SOLE TRADER,,,,ACTIVE,2012-01-01T00:00:00Z,2026-09-01T10:00:00Z,ISSUED
+54930000000000FU0978,Example Pension Fund,en,6 Example Road,GB,GB,FUND,,8888,PENSION FUND,,,,ACTIVE,2012-01-01T00:00:00Z,2026-10-03T10:00:00Z,LAPSED
+54930000000000GN1014,Example US Trust,en,7 Example Ave,US,US-DE,GENERAL,,XSNP,,,,,ACTIVE,2012-01-01T00:00:00Z,2026-09-01T10:00:00Z,ISSUED

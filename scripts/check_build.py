@@ -13,12 +13,22 @@ It fails (exit 1) when:
   credit line: every source id used by a fund or a constituent row (and by an
   ``unresolved`` entry that names one) must be listed in ``meta.sources``;
 - a fund file or a constituent row has no source or no as-of date;
+- a fund file has no ``source_url``, or a fund with no rows has an
+  ``unresolved`` entry that names a source but gives no ``source_url``;
+- the build is not a public one (``meta.mode``), or a source in
+  ``meta.sources``, a fund, a constituent row, an ``unresolved`` entry or a
+  release file names a ``local_only`` source: one whose terms do not allow
+  republication (:func:`openbasket.sources.redistribution`);
 - TickerInside is credited without a link to the CC BY 4.0 licence;
 - the assembled site is over GitHub Pages' 1 GB limit;
 - a page carries a tracking script (Kedro-Viz can inject Heap analytics).
 
-It warns when the site is near the limit, when the newest N-PORT holdings are
-old, or when ``nport.quarters`` lacks the latest quarter SEC should have out.
+It warns when the site is near the limit, or when ``nport.quarters`` lacks
+the latest quarter SEC should have out (then saying how old the newest
+N-PORT holdings are). N-PORT holdings are already about three months old
+when their quarter is published, so their age alone is not a warning while
+``nport.quarters`` is up to date; without ``--params`` it warns past
+``NPORT_STALE_DAYS``.
 Errors and warnings are printed as GitHub annotations and listed in the job
 summary. The release notes are written from ``meta.json`` either way.
 """
@@ -37,9 +47,11 @@ from pathlib import Path
 PAGES_LIMIT_BYTES = 1_000_000_000
 #: Warn from here, so a growing universe is noticed before deploys fail.
 PAGES_WARN_BYTES = 900_000_000
-#: N-PORT holdings are reported monthly and released quarterly, with a lag of
-#: two months or so; older than this means a quarter was probably not added.
-NPORT_STALE_DAYS = 150
+#: N-PORT holdings are reported monthly and released quarterly: the newest are
+#: about 95 days old when a quarter comes out and about 185 just before the
+#: next. Used only when nport.quarters is not known; past this, a quarter was
+#: probably missed.
+NPORT_STALE_DAYS = 200
 #: SEC posts a quarter's N-PORT data sets some weeks after the quarter ends.
 NPORT_PUBLISH_LAG_DAYS = 60
 #: Sources that supply names or identifiers rather than dated holdings.
@@ -47,6 +59,30 @@ UNDATED_SOURCES = {"openfigi"}
 CC_BY_URL = "creativecommons.org/licenses/by/4.0"
 TRACKING_MARKERS = ("heapanalytics", "heap.load(", "googletagmanager", "google-analytics.com")
 REQUIRED_SOURCE_FIELDS = ("name", "url", "licence", "credit")
+PUBLIC = "public"
+
+
+def _classifier():
+    """``redistribution(source_id)`` from the installed package, or ``None`` when it is not installed."""
+    try:
+        from openbasket.sources import redistribution
+    except Exception:  # the gate still runs, on meta.json's own classes
+        return None
+    return redistribution
+
+
+def source_class(sid: str, declared: object = None, classify=None) -> str:
+    """``public`` or ``local_only``: the package's answer, else what meta.json declares, else ``local_only``.
+
+    A source is public only if every answer available says so.
+    """
+    classify = _classifier() if classify is None else classify
+    answers = []
+    if classify is not None:
+        answers.append(classify(sid))
+    if declared is not None:
+        answers.append(declared)
+    return PUBLIC if answers and all(a == PUBLIC for a in answers) else "local_only"
 
 
 class Findings:
@@ -66,6 +102,25 @@ def _blank(v: object) -> bool:
 
 
 # --- sources -----------------------------------------------------------------
+
+
+def check_public_meta(meta: dict, found: Findings, classify=None) -> set[str]:
+    """The build must be a public one and ``meta.sources`` must list public sources only; returns the public ids."""
+    mode = meta.get("mode")
+    if mode is not None and mode != PUBLIC:
+        found.error(f"meta.json says this is a {mode!r} build; only a public build (publish.mode: public) may be deployed.")
+    ok = set()
+    for s in meta.get("sources") or []:
+        if not isinstance(s, dict) or _blank(s.get("id")):
+            continue
+        if source_class(s["id"], s.get("redistribution"), classify) == PUBLIC:
+            ok.add(s["id"])
+        else:
+            found.error(
+                f"Source {s['id']!r} in meta.json is local_only: its terms do not allow republication, "
+                "so the public build must not publish it."
+            )
+    return ok
 
 
 def check_meta_sources(meta: dict, found: Findings) -> dict[str, dict]:
@@ -104,17 +159,37 @@ def _col(fields: list, name: str) -> int | None:
     return fields.index(name) if isinstance(fields, list) and name in fields else None
 
 
-def scan_api(api_v1: Path, known: set[str], found: Findings, max_examples: int = 5) -> dict:
-    """Check the source and as-of date of every fund and every row in ``index.json`` and ``funds/*.json``."""
-    stats = {"fund_files": 0, "alias_files": 0, "rows": 0}
+def scan_api(api_v1: Path, known: set[str], found: Findings, max_examples: int = 5,
+             public: set[str] | None = None, classify=None) -> dict:
+    """Check the source, link and as-of date of every fund and every row in ``index.json`` and ``funds/*.json``.
+
+    With ``public`` (the public source ids from :func:`check_public_meta`),
+    any other source on a fund, a row or an ``unresolved`` entry is an error.
+    """
+    stats = {"fund_files": 0, "alias_files": 0, "rows": 0, "by_status": {}}
     unknown: dict[str, list[str]] = {}
+    local_only: dict[str, list[str]] = {}
     no_source: list[str] = []
     no_as_of: list[str] = []
+    no_url: list[str] = []
+    no_unresolved_url: list[str] = []
+    classes: dict[str, str] = {}
+
+    def note(bucket: dict, sid: str, where: str) -> None:
+        bucket.setdefault(sid, [])
+        if len(bucket[sid]) < max_examples:
+            bucket[sid].append(where)
 
     def note_unknown(sid: str, where: str) -> None:
-        unknown.setdefault(sid, [])
-        if len(unknown[sid]) < max_examples:
-            unknown[sid].append(where)
+        note(unknown, sid, where)
+
+    def check_class(sid: str, where: str) -> None:
+        if public is None or _blank(sid):
+            return
+        if sid not in classes:
+            classes[sid] = PUBLIC if sid in public and source_class(sid, None, classify) == PUBLIC else "local_only"
+        if classes[sid] != PUBLIC:
+            note(local_only, sid, where)
 
     index_path = api_v1 / "index.json"
     index_ids: list[str] = []
@@ -127,6 +202,8 @@ def scan_api(api_v1: Path, known: set[str], found: Findings, max_examples: int =
             index_ids.append(fid)
             if i_src is not None and not _blank(row[i_src]) and row[i_src] not in known:
                 note_unknown(row[i_src], f"index.json {fid}")
+            if i_src is not None:
+                check_class(row[i_src], f"index.json {fid}")
     else:
         found.error(f"No {index_path}.")
 
@@ -140,16 +217,25 @@ def scan_api(api_v1: Path, known: set[str], found: Findings, max_examples: int =
         stats["fund_files"] += 1
         fid = doc.get("id", path.stem)
         present.add(fid)
+        status = doc.get("status") or "unknown"
+        stats["by_status"][status] = stats["by_status"].get(status, 0) + 1
         src = doc.get("source")
         if _blank(src):
             no_source.append(fid)
         elif src not in known:
             note_unknown(src, f"funds/{path.name}")
+        check_class(src, f"funds/{path.name}")
         if _blank(doc.get("as_of")):
             no_as_of.append(fid)
+        if _blank(doc.get("source_url")):
+            no_url.append(fid)
         unresolved = doc.get("unresolved") or {}
-        if isinstance(unresolved, dict) and not _blank(unresolved.get("source")) and unresolved["source"] not in known:
-            note_unknown(unresolved["source"], f"funds/{path.name} unresolved")
+        if isinstance(unresolved, dict) and not _blank(unresolved.get("source")):
+            if unresolved["source"] not in known:
+                note_unknown(unresolved["source"], f"funds/{path.name} unresolved")
+            check_class(unresolved["source"], f"funds/{path.name} unresolved")
+            if not doc.get("constituents") and _blank(unresolved.get("source_url")):
+                no_unresolved_url.append(fid)
         fields = doc.get("fields") or []
         c_src, c_asof = _col(fields, "source"), _col(fields, "as_of")
         rows = doc.get("constituents") or []
@@ -163,11 +249,20 @@ def scan_api(api_v1: Path, known: set[str], found: Findings, max_examples: int =
                 no_source.append(f"{fid} row {row[0]}")
             elif rs not in known:
                 note_unknown(rs, f"funds/{path.name}")
+            check_class(rs, f"funds/{path.name}")
             if _blank(ra):
                 no_as_of.append(f"{fid} row {row[0]}")
 
     for sid, where in sorted(unknown.items()):
         found.error(f"Source {sid!r} is used but not listed in meta.sources (e.g. {', '.join(where)}).")
+    for sid, where in sorted(local_only.items()):
+        found.error(f"Source {sid!r} is local_only but is published (e.g. {', '.join(where)}); "
+                    "the public build must not publish it.")
+    if no_url:
+        found.error(f"{len(no_url)} fund files have no source_url (e.g. {', '.join(no_url[:max_examples])}).")
+    if no_unresolved_url:
+        found.error(f"{len(no_unresolved_url)} funds without rows have an unresolved entry with no source_url "
+                    f"(e.g. {', '.join(no_unresolved_url[:max_examples])}).")
     if no_source:
         found.error(f"{len(no_source)} funds or rows have no source (e.g. {', '.join(no_source[:max_examples])}).")
     if no_as_of:
@@ -176,6 +271,40 @@ def scan_api(api_v1: Path, known: set[str], found: Findings, max_examples: int =
     if missing_files:
         found.error(f"{len(missing_files)} funds in index.json have no fund file (e.g. {', '.join(missing_files[:max_examples])}).")
     return stats
+
+
+def scan_release(release: Path, public: set[str], found: Findings, classify=None) -> dict[str, int]:
+    """Every ``source`` in the release Parquet files must be public; returns rows per source."""
+    try:
+        import pyarrow.compute as pc
+        import pyarrow.parquet as pq
+    except ImportError:  # pragma: no cover - pyarrow comes with the package
+        found.warn("pyarrow is not installed; the release files' sources were not checked.")
+        return {}
+    counts: dict[str, int] = {}
+    for name in ("openbasket-lookthrough.parquet", "openbasket-funds.parquet"):
+        path = release / name
+        if not path.is_file():
+            continue
+        try:
+            if "source" not in pq.read_schema(path).names:
+                found.error(f"{name} has no source column.")
+                continue
+            col = pq.read_table(path, columns=["source"]).column("source")
+        except Exception as exc:
+            found.error(f"{name} cannot be read: {exc}")
+            continue
+        vc = pc.value_counts(col).to_pylist()
+        bad = []
+        for item in vc:
+            sid, n = item["values"], int(item["counts"])
+            if name.startswith("openbasket-lookthrough"):
+                counts[sid] = counts.get(sid, 0) + n
+            if not _blank(sid) and not (sid in public and source_class(sid, None, classify) == PUBLIC):
+                bad.append(f"{sid} ({n} rows)")
+        if bad:
+            found.error(f"{name} has rows from local_only sources: {', '.join(bad)}; the public build must not release them.")
+    return counts
 
 
 # --- size, tracking ----------------------------------------------------------
@@ -224,28 +353,36 @@ def expected_nport_quarter(today: date, lag_days: int = NPORT_PUBLISH_LAG_DAYS) 
 
 
 def check_nport_freshness(meta: dict, quarters: list | None, today: date, found: Findings) -> None:
+    """Warn when ``nport.quarters`` lacks the quarter SEC should have out.
+
+    The age of the newest holdings is only reported with that warning: it
+    passes ``NPORT_STALE_DAYS``-like values every quarter before the next
+    data set is due, when there is nothing to add. Without ``quarters`` the
+    age is all there is, and it warns past ``NPORT_STALE_DAYS``.
+    """
     nport = next((s for s in meta.get("sources") or [] if isinstance(s, dict) and s.get("id") == "nport"), None)
     newest = nport.get("as_of_max") if nport else None
+    age = None
     if newest:
         try:
             age = (today - date.fromisoformat(str(newest)[:10])).days
         except ValueError:
             found.warn(f"N-PORT as_of_max {newest!r} is not a date.")
-        else:
-            if age > NPORT_STALE_DAYS:
-                found.warn(
-                    f"The newest N-PORT holdings are from {newest}, {age} days ago. "
-                    "Add the latest SEC quarter to nport.quarters (docs: Deployment > Quarterly maintenance)."
-                )
-    if quarters:
-        parsed = [p for p in map(_parse_quarter, quarters) if p]
-        if parsed:
-            have, want = max(parsed), expected_nport_quarter(today)
-            if have < want:
-                found.warn(
-                    f"nport.quarters ends at {have[0]}q{have[1]}; SEC should have published {want[0]}q{want[1]} by now. "
-                    "Add it to conf/base/parameters.yml once it is on the N-PORT data sets page."
-                )
+    parsed = [p for p in map(_parse_quarter, quarters or []) if p]
+    if parsed:
+        have, want = max(parsed), expected_nport_quarter(today)
+        if have < want:
+            held = f" The newest N-PORT holdings are from {newest}, {age} days ago." if age is not None else ""
+            found.warn(
+                f"nport.quarters ends at {have[0]}q{have[1]}; SEC should have published {want[0]}q{want[1]} by now.{held} "
+                "Add it to conf/base/parameters.yml once it is on the N-PORT data sets page "
+                "(docs: Deployment > Quarterly maintenance)."
+            )
+    elif age is not None and age > NPORT_STALE_DAYS:
+        found.warn(
+            f"The newest N-PORT holdings are from {newest}, {age} days ago. Check whether SEC has published a newer "
+            "quarter and add it to nport.quarters (docs: Deployment > Quarterly maintenance)."
+        )
 
 
 # --- reports -----------------------------------------------------------------
@@ -288,6 +425,8 @@ def summary_markdown(meta: dict, report: dict, found: Findings, *, n_funds, min_
         lines.append(f"Site size: {pages_bytes / 1e6:.1f} MB of GitHub Pages' 1,000 MB.")
     if scan:
         lines.append(f"Checked {scan['fund_files']} fund files, {scan['alias_files']} alias files, {scan['rows']} rows.")
+        if scan.get("by_status"):
+            lines.append("Fund files by status: " + ", ".join(f"{k} {v}" for k, v in sorted(scan["by_status"].items())) + ".")
     if live is not None:
         lines.append("This run releases and deploys." if live else
                      "**Sample run: not released or deployed.** Its files are attached to the run as artifacts.")
@@ -331,7 +470,10 @@ def release_notes(meta: dict, site_url: str, sha: str) -> str:
         "",
         "openbasket publishes no data of its own. Every row names its source and as-of "
         "date; each fund gives a link to the page or filing its holdings came from. "
-        "This build used:",
+        "Only sources whose terms allow republication are included; funds whose holdings "
+        "only an issuer's own site publishes are listed by name and ISIN, with status "
+        f"`local_only`, and their holdings are available when you run openbasket yourself "
+        f"({site_url}/docs/running-locally.html). This build used:",
         "",
         "| Source | Funds | As of | Licence | Credit |",
         "|---|---|---|---|---|",
@@ -391,7 +533,10 @@ def run(args: argparse.Namespace) -> int:
         found.error(f"{n_funds} funds published, fewer than the minimum of {args.min_funds}.")
 
     known = set(check_meta_sources(meta, found)) if meta else set()
-    scan = scan_api(api_v1, known, found) if meta else {}
+    public = check_public_meta(meta, found) if meta and args.mode == PUBLIC else None
+    scan = scan_api(api_v1, known, found, public=public) if meta else {}
+    if public is not None:
+        scan_release(Path(args.release), public, found)
 
     pages_bytes = None
     if args.pages:
@@ -436,6 +581,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--min-funds", type=int, default=1)
     p.add_argument("--sample", default=os.environ.get("SAMPLE", ""))
     p.add_argument("--live", choices=("true", "false"), help="whether this run releases and deploys")
+    p.add_argument("--mode", choices=("public", "full"), default="public",
+                   help="public (default): fail on any local_only source; full: check a local build without that rule")
     p.add_argument("--params", default="conf/base/parameters.yml", help="for nport.quarters")
     p.add_argument("--today", help="YYYY-MM-DD (default: today)")
     p.add_argument("--summary", help="append the job summary (markdown) here")

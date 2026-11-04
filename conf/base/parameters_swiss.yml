@@ -1,0 +1,26 @@
+swiss:
+  # Raw downloads (GLEIF pages, ISIN-LEI file, FIRDS, SIX, FINMA, reports,
+  # peer files) are cached here per day; data/ is gitignored.
+  cache_dir: data/01_raw/swiss
+  # gleif and firds are openly licensed; six and finma are local only.
+  registry_sources: [gleif, firds, six, finma]
+  # Adapters that are off by default (their sites show an investor-type or
+  # residence overlay that openbasket does not answer). Add them here, or in
+  # conf/local/parameters_swiss.yml, only after deciding to read those
+  # reports: [swiss_vontobel, swiss_migros]
+  enable: []
+  # Funds fetched by the swiss_sample_holdings node.
+  sample:
+    - CH0017142719   # UBS SMI ETF CHF dis (stand-in: iShares SMI ETF (CH))
+    - CH0032912732   # UBS SLI ETF CHF dis (stand-in: iShares SLI ETF (CH))
+    - CH0111762537   # UBS SMIM ETF CHF dis
+    - IE00B7K93397   # UBS Core S&P 500 UCITS ETF USD dis
+    - LU0147308422   # UBS Core MSCI EMU UCITS ETF EUR dis
+    - LU0446734104   # UBS Core MSCI Europe UCITS ETF EUR dis
+    - LU0136240974   # UBS Core MSCI Japan UCITS ETF JPY dis
+    - LU0571085413   # Vontobel Fund - mtx Emerging Markets Leaders (off by default)
+    - LU0035765741   # Vontobel Fund - US Equity (off by default)
+    - LU0384405600   # Vontobel Fund - Global Environmental Change (off by default)
+    - CH0023406587   # Migros Bank (CH) Fonds - SwissStock A (off by default)
+    - CH0023406629   # Migros Bank (CH) Fonds - EuropeStock A (off by default)
+    - LU0261663909   # Migros Bank (Lux) Fonds SwissStock A (off by default)

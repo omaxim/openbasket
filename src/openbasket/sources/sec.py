@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from pathlib import Path
 
@@ -17,6 +18,10 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+#: Redistribution class (see :func:`openbasket.sources.redistribution`):
+#: SEC's fund ticker list is a US government work in the public domain.
+REDISTRIBUTION = "public"
+
 NPORT_URL = "https://www.sec.gov/files/dera/data/form-n-port-data-sets/{quarter}_nport.zip"
 FUND_TICKERS_URL = "https://www.sec.gov/files/company_tickers_mf.json"
 
@@ -24,7 +29,9 @@ FUND_TICKERS_URL = "https://www.sec.gov/files/company_tickers_mf.json"
 def user_agent() -> str:
     ua = os.environ.get("SEC_USER_AGENT", "").strip()
     if not ua:
-        raise RuntimeError("Set SEC_USER_AGENT in .env, e.g. 'openbasket research you@example.org'.")
+        raise RuntimeError("Set SEC_USER_AGENT in .env to your name and email, e.g. 'openbasket research jane@example.com'.")
+    if re.search(r"@(example\.(org|com|net)|yourdomain)\b", ua, re.I):
+        raise RuntimeError("SEC_USER_AGENT still holds a placeholder address; the SEC asks for your real contact email.")
     return ua
 
 

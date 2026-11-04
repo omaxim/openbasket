@@ -1,0 +1,127 @@
+{
+ "fundData": {
+  "dailyHoldings": {
+   "effectiveDate": "2026-11-02",
+   "data": []
+  },
+  "dailyHoldingsAll": {
+   "effectiveDate": "2026-11-02",
+   "data": [
+    {
+     "marketValue": 40000.0,
+     "netAssetValuePercent": 40.0,
+     "securityDescription": "APPLE INC COMMON STOCK",
+     "securityId": "037833100",
+     "securityTicker": "AAPL",
+     "securityType": "DOMESTIC COMMON STOCK",
+     "securityIsin": null,
+     "securityCusip": null,
+     "securitySedol": null,
+     "shares": 1,
+     "marketValuePercent": 40.0,
+     "navDate": "2026-11-02",
+     "country": "United States",
+     "method": "Physical",
+     "currencyCode": "USD",
+     "fundHoldingElnData": []
+    },
+    {
+     "marketValue": 20000.0,
+     "netAssetValuePercent": 20.0,
+     "securityDescription": "TOYOTA MOTOR CORP COMMON",
+     "securityId": "6900643",
+     "securityTicker": "7203",
+     "securityType": "FOREIGN COMMON STOCK",
+     "securityIsin": null,
+     "securityCusip": null,
+     "securitySedol": null,
+     "shares": 1,
+     "marketValuePercent": 20.0,
+     "navDate": "2026-11-02",
+     "country": "Japan",
+     "method": "Physical",
+     "currencyCode": "JPY",
+     "fundHoldingElnData": []
+    },
+    {
+     "marketValue": 20000.0,
+     "netAssetValuePercent": 20.0,
+     "securityDescription": "UNITED 3.375% 02/28",
+     "securityId": "91282CQB0",
+     "securityTicker": "T",
+     "securityType": "TREASURY NOTES",
+     "securityIsin": null,
+     "securityCusip": null,
+     "securitySedol": null,
+     "shares": 1,
+     "marketValuePercent": 20.0,
+     "navDate": "2026-11-02",
+     "country": "United States",
+     "method": "Physical",
+     "currencyCode": "USD",
+     "fundHoldingElnData": []
+    },
+    {
+     "marketValue": 15000.0,
+     "netAssetValuePercent": 15.0,
+     "securityDescription": "SPX_12",
+     "securityId": "JPH994057",
+     "securityTicker": null,
+     "securityType": "Equity Linked Notes",
+     "securityIsin": null,
+     "securityCusip": null,
+     "securitySedol": null,
+     "shares": 1,
+     "marketValuePercent": 15.0,
+     "navDate": "2026-11-02",
+     "country": "United States",
+     "method": "Synthetic",
+     "currencyCode": "USD",
+     "fundHoldingElnData": [
+      {
+       "securityId": "JPH994057",
+       "elnUnderlyingIsin": null
+      }
+     ]
+    },
+    {
+     "marketValue": 5250.0,
+     "netAssetValuePercent": 5.25,
+     "securityDescription": "JPMORGAN PRIME MONEY",
+     "securityId": "46637K844",
+     "securityTicker": "JIMXX",
+     "securityType": "MONEY MARKET",
+     "securityIsin": null,
+     "securityCusip": null,
+     "securitySedol": null,
+     "shares": 1,
+     "marketValuePercent": 5.25,
+     "navDate": "2026-11-02",
+     "country": "United States",
+     "method": "Physical",
+     "currencyCode": "USD",
+     "fundHoldingElnData": []
+    },
+    {
+     "marketValue": -120.0,
+     "netAssetValuePercent": -0.12,
+     "securityDescription": "CASH",
+     "securityId": "CASH",
+     "securityTicker": null,
+     "securityType": "CURRENCIES",
+     "securityIsin": null,
+     "securityCusip": null,
+     "securitySedol": null,
+     "shares": 1,
+     "marketValuePercent": -0.12,
+     "navDate": "2026-11-02",
+     "country": "United States",
+     "method": "Physical",
+     "currencyCode": "USD",
+     "fundHoldingElnData": []
+    }
+   ]
+  }
+ },
+ "error": null
+}

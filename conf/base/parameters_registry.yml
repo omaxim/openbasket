@@ -1,0 +1,24 @@
+registry:
+  # Raw downloads: GLEIF lei2 golden copy (about 480 MB zipped, streamed),
+  # GLEIF rr (about 25 MB), GLEIF ISIN-LEI, ESMA FIRDS FULINS_C. One copy of
+  # each is kept (older ones are deleted); a rerun on the same day reads them.
+  root: data/01_raw/registry
+  sources:
+    esma_firds: true
+    esma_funds: true
+  # ESMA fund registers read through ESMA's documented Solr endpoint.
+  esma_cores:
+    - esma_registers_funds_cbdif
+    - esma_registers_funds
+  # Stop after this many pages of 1,000 per register (null = all).
+  esma_max_pages: null
+  # Regulator adapters whose fund lists are merged in; an ISIN found there is
+  # routed to that adapter for holdings.
+  regulator_adapters:
+    - cnmv_spain
+    - cvm_brazil
+  # Download a regulator store that is not built yet (as reg_spain/reg_brazil would).
+  refresh_regulators: false
+  # SEC fund_master from the security_master pipeline (series, classes,
+  # tickers and N-PORT series LEIs); skipped if absent.
+  sec_fund_master: data/03_primary/fund_master.parquet

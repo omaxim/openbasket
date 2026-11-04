@@ -1,0 +1,6 @@
+# nport_history ----------------------------------------------------------------
+# How many fund series each loaded N-PORT quarter adds (see
+# parameters_nport_history.yml and docs/source/sources/sec-nport-history.md).
+nport_history_coverage:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/nport_history_coverage.csv

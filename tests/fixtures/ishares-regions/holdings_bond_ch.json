@@ -1,0 +1,76 @@
+{
+ "productId": 900003,
+ "componentsByNameMap": {
+  "holdings": {
+   "containersByNameMap": {
+    "all": {
+     "dataPointsByNameMap": {
+      "asOfDate": {
+       "value": "20261102",
+       "formattedValue": "20261102"
+      },
+      "isin": {
+       "value": "['XS10000000C6', 'CH0000000001', None]",
+       "formattedValue": "['XS10000000C6', 'CH0000000001', None]"
+      },
+      "cusip": {
+       "value": "[None, None, '91282C002']",
+       "formattedValue": "[None, None, '91282C002']"
+      },
+      "sedol": {
+       "value": "['B000001', None, '-']",
+       "formattedValue": "['B000001', None, '-']"
+      },
+      "issueName": {
+       "value": "['EXAMPLE BANK 1.5 2031', 'BAD CHECK DIGIT 2.0 2030', 'TREASURY NOTE']",
+       "formattedValue": "['EXAMPLE BANK 1.5 2031', 'BAD CHECK DIGIT 2.0 2030', 'TREASURY NOTE']"
+      },
+      "holdingPercent": {
+       "value": "[50.12345, 30.0, 19.87655]",
+       "formattedValue": "[50.12345, 30.0, 19.87655]"
+      },
+      "assetClass": {
+       "value": "['Fixed Income', 'Fixed Income', 'Fixed Income']",
+       "formattedValue": "['Fixed Income', 'Fixed Income', 'Fixed Income']"
+      },
+      "couponRate": {
+       "value": "[1.5, 2.0, 4.0]",
+       "formattedValue": "[1.5, 2.0, 4.0]"
+      }
+     }
+    },
+    "documents": {
+     "dataPointsByNameMap": {
+      "documents": {
+       "value": "[]",
+       "formattedValue": "[]"
+      }
+     }
+    }
+   }
+  },
+  "keyFundFacts": {
+   "containersByNameMap": {
+    "default": {
+     "dataPointsByNameMap": {
+      "productStructure": {
+       "value": "Physical",
+       "formattedValue": "Physical"
+      },
+      "fundMethodologyTypeCode": {
+       "value": "Optimised",
+       "formattedValue": "Optimised"
+      }
+     }
+    }
+   }
+  }
+ },
+ "content": {
+  "x": [
+   {
+    "text": "disclaimer"
+   }
+  ]
+ }
+}

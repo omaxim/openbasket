@@ -1,0 +1,90 @@
+{
+ "historicalPrice": {
+  "ticker": "XETF"
+ },
+ "holdingDetails": {
+  "asOfDate": "09/30/2026",
+  "equityHoldings": [
+   {
+    "securityId": "11111A100",
+    "securityType": "EQ.STOCK",
+    "securityMainType": "EQ",
+    "securityLongDescription": "Example Corp",
+    "marketValuePercentage": "60.12%",
+    "ticker": "EXC",
+    "isin": "US11111A1007",
+    "cusip": "11111A100",
+    "sedol": "2046251",
+    "marketValueBaseCurrency": "$6,012,000"
+   },
+   {
+    "securityId": "6889106",
+    "securityType": "EQ.STOCK",
+    "securityMainType": "EQ",
+    "securityLongDescription": "Overseas Holdings Ltd",
+    "marketValuePercentage": "39.50%",
+    "ticker": "2330",
+    "isin": "TW0002330008",
+    "sedol": "6889106",
+    "marketValueBaseCurrency": "$3,950,000"
+   },
+   {
+    "securityId": "9027185",
+    "securityType": "EQ.RIGHT",
+    "securityMainType": "EQ",
+    "securityLongDescription": "TINY RIGHTS",
+    "sedol": "9027185",
+    "marketValueBaseCurrency": "$10"
+   }
+  ],
+  "shortTermReservesHoldings": [
+   {
+    "securityId": "CMT001142",
+    "securityType": "MM.CASH",
+    "securityMainType": "MM",
+    "securityLongDescription": "MKTLIQ",
+    "marketValuePercentage": "0.30%",
+    "cusip": "CMT001142",
+    "marketValueBaseCurrency": "$30,000"
+   }
+  ],
+  "derivativeHoldings": [
+   {
+    "securityId": "ESZ6",
+    "securityType": "DE.IND",
+    "securityMainType": "DE",
+    "securityLongDescription": "S&P500 EMINI FUT  Dec26",
+    "marketValuePercentage": "0.03%",
+    "ticker": "ESZ6",
+    "marketValueBaseCurrency": "$3,000"
+   },
+   {
+    "securityId": "FX1",
+    "securityType": "CT.FOREX",
+    "securityMainType": "CT",
+    "securityLongDescription": "JPY/USD FWD 20261216",
+    "marketValuePercentage": "0.00%",
+    "marketValueBaseCurrency": "$0"
+   }
+  ],
+  "fixedIncomeHoldings": [
+   {
+    "securityId": "US22222B2007",
+    "securityType": "FI.US_GOV",
+    "securityMainType": "FI",
+    "securityLongDescription": "Example Treasury Note",
+    "marketValuePercentage": "0.05%",
+    "ticker": "T",
+    "isin": "US22222B2007",
+    "cusip": "22222B200",
+    "marketValueBaseCurrency": "$5,000",
+    "maturityDate": "11/15/2034",
+    "couponRate": "4.250%"
+   }
+  ],
+  "portfolioCompositionFile": {
+   "basketId": "00X000000",
+   "usageCode": "CRRD"
+  }
+ }
+}

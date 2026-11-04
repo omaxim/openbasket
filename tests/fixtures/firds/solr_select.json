@@ -1,0 +1,42 @@
+{
+  "responseHeader": {"status": 0, "QTime": 12, "params": {"q": "isin:(CH0000000015 OR XS0000000017) AND latest_received_flag:1", "wt": "json"}},
+  "response": {
+    "numFound": 4,
+    "start": 0,
+    "numFoundExact": true,
+    "docs": [
+      {
+        "id": "1000000001", "isin": "CH0000000015", "mic": "XHAM", "rca_mic": "XETA",
+        "gnr_full_name": "EXAMPLE SMI ETF CH", "gnr_short_name": "EXAMPLE SMI/UT CHF", "gnr_cfi_code": "CEOIEU",
+        "gnr_notional_curr_code": "CHF", "lei": "529900EXAMPLE0000001",
+        "mrkt_trdng_start_date": "2008-03-03T08:00:00Z", "mrkt_trdng_trmination_date": "2017-12-04T00:00:00Z",
+        "status": "TERM", "valid_from_date": "2024-12-19T00:00:00Z", "publication_date": "2026-01-03T03:14:12.083Z"
+      },
+      {
+        "id": "1000000002", "isin": "CH0000000015", "mic": "XETA", "rca_mic": "XETA",
+        "gnr_full_name": "Example SMI ETF (CH) Inhaber-Anteile", "gnr_short_name": "EXAMPLE SMI/UT CHF", "gnr_cfi_code": "CEOIEU",
+        "gnr_notional_curr_code": "CHF", "lei": "529900EXAMPLE0000001",
+        "mrkt_trdng_start_date": "2010-01-04T08:00:00Z",
+        "status": "UNCH", "valid_from_date": "2025-05-10T00:00:00Z", "publication_date": "2026-01-03T02:59:17.277Z"
+      },
+      {
+        "id": "1000000003", "isin": "CH0000000015", "mic": "XDUS", "rca_mic": "XETA",
+        "gnr_full_name": "Example SMI ETF (CH) Inhaber-Anteile", "gnr_short_name": "EXAMPLE SMI/UT CHF", "gnr_cfi_code": "CEOIEU",
+        "gnr_notional_curr_code": "CHF", "lei": "529900EXAMPLE0000001",
+        "mrkt_trdng_start_date": "2012-02-01T07:00:00Z",
+        "status": "UNCH", "valid_from_date": "2025-05-10T00:00:00Z", "publication_date": "2026-01-04T02:59:17.277Z"
+      },
+      {
+        "id": "1000000004", "isin": "XS0000000017", "mic": "MANL", "rca_mic": "BTFE",
+        "gnr_full_name": "EXMPL Float 06/30/28", "gnr_short_name": "EXAMPLE BV/VAR MTN 20280630", "gnr_cfi_code": "DTVUFB",
+        "gnr_notional_curr_code": "EUR", "lei": "529900EXAMPLE0000006",
+        "mrkt_trdng_start_date": "2024-06-30T08:00:00Z",
+        "bnd_nmnl_value_total": "500000000", "bnd_maturity_date": "2028-06-30T00:00:00Z", "bnd_nmnl_value_unit": "1000",
+        "bnd_nmnl_value_curr_code": "EUR", "bnd_fixed_rate": "0", "bnd_fltng_rt_ndx_isin": "EU0000000016",
+        "bnd_fltng_rt_ndx_trm_value": "3", "bnd_fltng_rt_ndx_trm_unit": "MNTH", "bnd_fltng_rate_bs_pnt_sprd": "25",
+        "bnd_seniority": "SNDB",
+        "status": "MODF", "valid_from_date": "2026-01-05T00:00:00Z", "publication_date": "2026-01-05T03:42:49.181Z"
+      }
+    ]
+  }
+}

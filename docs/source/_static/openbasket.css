@@ -36,6 +36,7 @@ article em { font-family: var(--ob-serif); font-size: 1.08em; }
 .ob-sub a { color: var(--ob-muted); text-decoration: none; }
 .ob-sub a:hover, .ob-back:hover { color: var(--ob-wine); }
 .ob-back { display: inline-block; font-size: .86rem; font-weight: 600; color: var(--ob-wine); text-decoration: none; }
+.ob-back.ob-pipeline { margin-left: 1rem; color: var(--ob-ink-2); }
 .mobile-header .header-center a { text-decoration: none; }
 .mobile-header .brand { font-size: 0; display: inline-flex; align-items: baseline; }
 .mobile-header .brand::before { content: "open"; font: 800 1.35rem/1 var(--ob-display); letter-spacing: -0.045em; color: var(--ob-ink); }

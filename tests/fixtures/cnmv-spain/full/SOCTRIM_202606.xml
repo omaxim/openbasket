@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<SocTrim xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="SocTrim.xsd">
+  <FechaDatos>202606</FechaDatos>
+  <Entidad>
+    <Tipo>SICAV</Tipo>
+    <NumeroRegistro>201</NumeroRegistro>
+    <CodigoDivisaIIC>EUR</CodigoDivisaIIC>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <ClaseSociedad>Sociedad que invierte más del 10% en otros fondos y/o sociedades</ClaseSociedad>
+      <VocacionInversora>Global</VocacionInversora>
+      <Serie>
+        <NumeroSerie>0</NumeroSerie>
+        <CodigoDivisa>EUR</CodigoDivisa>
+        <Patrimonio>3000000.00</Patrimonio>
+      </Serie>
+    </Compartimento>
+  </Entidad>
+</SocTrim>

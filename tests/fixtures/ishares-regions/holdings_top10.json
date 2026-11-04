@@ -1,0 +1,40 @@
+{
+ "productId": 900003,
+ "componentsByNameMap": {
+  "holdings": {
+   "containersByNameMap": {
+    "ten-largest": {
+     "dataPointsByNameMap": {
+      "asOfDate": {
+       "value": "20260930",
+       "formattedValue": "20260930"
+      },
+      "name": {
+       "value": "['SWITZERLAND (CONFEDERATION OF) 1 2030', 'EXAMPLE CANTON 0.5 2029']",
+       "formattedValue": "['SWITZERLAND (CONFEDERATION OF) 1 2030', 'EXAMPLE CANTON 0.5 2029']"
+      },
+      "fundPercentage": {
+       "value": "[1.2345, 0.9876]",
+       "formattedValue": "[1.2345, 0.9876]"
+      }
+     }
+    },
+    "documents": {
+     "dataPointsByNameMap": {
+      "documents": {
+       "value": "[]",
+       "formattedValue": "[]"
+      }
+     }
+    }
+   }
+  }
+ },
+ "content": {
+  "x": [
+   {
+    "text": "disclaimer"
+   }
+  ]
+ }
+}

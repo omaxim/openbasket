@@ -1,0 +1,37 @@
+{
+ "productId": 900040,
+ "portfolioType": "ISHARES_FUND_DATA",
+ "fundName": "iShares Example Canada Bond Index ETF",
+ "currencyCode": "CAD",
+ "aladdinFundTicker": "XCB",
+ "componentsByNameMap": {
+  "keyFundFacts": {
+   "containersByNameMap": {
+    "default": {
+     "dataPointsByNameMap": {
+      "cusip": {
+       "value": "464000009",
+       "formattedValue": "464000009"
+      },
+      "assetClass": {
+       "value": "Fixed Income",
+       "formattedValue": "Fixed Income"
+      },
+      "totalNetAssets": {
+       "value": 500000000.0,
+       "formattedValue": 500000000.0
+      }
+     }
+    }
+   }
+  }
+ },
+ "content": {
+  "disclaimer": [
+   {
+    "metadata": null,
+    "text": "dropped from the cache"
+   }
+  ]
+ }
+}

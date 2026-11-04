@@ -34,6 +34,10 @@ from ..throttle import THROTTLE
 
 logger = logging.getLogger(__name__)
 
+#: Redistribution class (see :func:`openbasket.sources.redistribution`):
+#: State Street's site terms restrict republication: read only for the person running openbasket.
+REDISTRIBUTION = "local_only"
+
 HOST = "https://www.ssga.com"
 FUND_FINDER_URL = HOST + "/bin/v1/ssmp/fund/fundfinder"
 USER_AGENT = "Mozilla/5.0 (compatible; openbasket)"
@@ -112,7 +116,8 @@ def parse_holdings(content: bytes) -> tuple[str | None, pd.DataFrame]:
     """Read a holdings workbook into ``(as_of, DataFrame)``.
 
     Output columns: ``isin``, ``cusip``, ``sedol``, ``identifier``, ``name``,
-    ``ticker``, ``weight_pct``, ``currency``, ``is_debt``. ``isin`` and
+    ``ticker``, ``weight_pct``, ``currency``, ``country`` (as the file names
+    it), ``sector``, ``is_debt``. ``isin`` and
     ``cusip`` are only set when the file's value has a valid check digit.
     """
     raw = pd.read_excel(io.BytesIO(content), header=None, dtype=object)
@@ -151,6 +156,10 @@ def parse_holdings(content: bytes) -> tuple[str | None, pd.DataFrame]:
     out["weight_pct"] = pd.to_numeric(body[weight_col], errors="coerce")
     cur = next((c for c in ("Local Currency", "Currency", "Currency Local") if c in body.columns), None)
     out["currency"] = body[cur].map(_clean) if cur else None
+    country = next((c for c in ("Trade Country Name", "Country of Issue", "Country", "Country of Risk") if c in body.columns), None)
+    out["country"] = body[country].map(_clean) if country else None
+    sector = next((c for c in ("Sector Classification", "Sector") if c in body.columns), None)
+    out["sector"] = body[sector].map(_clean) if sector else None
     out["is_debt"] = is_debt
     out = out[out["name"].notna() | out["weight_pct"].notna()]
     return as_of, out.reset_index(drop=True)
@@ -162,12 +171,13 @@ def holdings(url: str, cache_dir: str | Path | None = None) -> IssuerHoldings:
     if cache_dir:
         cache = Path(cache_dir) / f"spdr_{Path(url).stem}_{sha1(url.encode()).hexdigest()[:6]}_{date.today().isoformat()}.xlsx"
     if cache is not None and cache.exists():
-        content = cache.read_bytes()
+        as_of, df = parse_holdings(cache.read_bytes())
     else:
         logger.info("Fetching SPDR holdings %s", url)
         content = _get(url).content
+        as_of, df = parse_holdings(content)
+        # Cached only once it parsed, so a broken download is fetched again.
         if cache is not None:
             cache.parent.mkdir(parents=True, exist_ok=True)
             cache.write_bytes(content)
-    as_of, df = parse_holdings(content)
     return IssuerHoldings(as_of, df, url)

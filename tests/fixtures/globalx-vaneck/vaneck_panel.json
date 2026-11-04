@@ -1,0 +1,85 @@
+{
+ "Success": true,
+ "Rows": [
+  {
+   "Values": [
+    "IE00BMC38736",
+    "A0AAAA",
+    "VanEck Example Semiconductor UCITS ETF",
+    "0.35%",
+    "$1.0 B"
+   ],
+   "Keywords": [
+    "EXSM",
+    "EXSM GY",
+    "Technology"
+   ],
+   "Url": "/DE/en/investments/example-semiconductor-etf/"
+  },
+  {
+   "Values": [
+    "NL0009690247",
+    "A0AAAB",
+    "VanEck Example EUR Corporates UCITS ETF",
+    "0.15%",
+    "€30.0 M"
+   ],
+   "Keywords": [
+    "EXCB",
+    "Bond"
+   ],
+   "Url": "/DE/en/investments/example-corporate-bonds-etf/"
+  },
+  {
+   "Values": [
+    "IE00BYXQSD13",
+    "A0AAAC",
+    "VanEck – Example Bond UCITS-EUR Hedged I1 Inc",
+    "0.76%",
+    "$1.0 M"
+   ],
+   "Keywords": [
+    "EXEBI1"
+   ],
+   "Url": "/DE/en/investments/example-bond/"
+  },
+  {
+   "Values": [
+    "IE00BYXQSF37",
+    "A0AAAD",
+    "VanEck – Example Bond UCITS-USD I1 Inc",
+    "0.70%",
+    "$2.0 M"
+   ],
+   "Keywords": [
+    "EXEBU1"
+   ],
+   "Url": "/DE/en/investments/example-bond/"
+  },
+  {
+   "Values": [
+    "DE000A28M8D0",
+    "A0AAAE",
+    "VanEck Example Coin ETN",
+    "1.00%",
+    "$5.0 M"
+   ],
+   "Keywords": [
+    "EXCN",
+    "EXCN GY"
+   ],
+   "Url": "/DE/en/investments/example-coin-etp/"
+  },
+  {
+   "Values": [
+    "NOTANISIN",
+    "",
+    "Broken row",
+    "",
+    ""
+   ],
+   "Keywords": [],
+   "Url": "/DE/en/x/"
+  }
+ ]
+}

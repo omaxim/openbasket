@@ -10,13 +10,28 @@ nport:
   overwrite: false
 
 issuers:
-  # iShares regional sites whose fund lists are downloaded by `ingest`.
-  ishares_sites: [uk, us]
+  # iShares regional sites the `ishares` adapter reads, in order of preference
+  # for a share class several sites list. A site that fails is skipped; only
+  # funds with full holdings are kept. [] reads none.
+  ishares_sites: [uk, ch, us, de, nl, it, se, dk, "no", fi, fr, es, latam, hk, sg, jp, au, ca, mx, br, co]  # "no" quoted: bare no is YAML for false
   # SPDR fund finders: "us" (US ETFs, including SPY and DIA) and "emea" (UCITS).
   spdr_regions: [us, emea]
+  # Issuer adapters registered in openbasket.sources.issuers are used by
+  # `ingest` (their fund lists join issuer_products) and by the look-through
+  # (their holdings files). null uses every registered adapter; a list uses
+  # only those. `disabled` drops some either way. Adapters whose terms forbid
+  # automated access are off unless named here (e.g. in conf/local).
+  enabled: null
+  disabled: []
+  # Keyword arguments for an adapter's products(), by adapter name. First
+  # Trust keeps its ticker-to-ISIN file in cache_dir (only new funds cost a
+  # request); `limit` caps the summary pages read in one run.
+  options:
+    first_trust:
+      cache_dir: data/01_raw/issuers
 
 lookthrough:
-  # Holdings sources in priority order. "issuer" is iShares and SPDR;
+  # Holdings sources in priority order. "issuer" is SPDR and every enabled issuer adapter;
   # "top_holdings" is a placeholder and is skipped.
   source_order: [issuer, tickerinside, nport, top_holdings]
   # Take the first source that resolves at least this much weight to ISINs;
@@ -29,19 +44,41 @@ lookthrough:
   use_openfigi: true
   enrich_openfigi: true
   openfigi_cache: data/03_primary/openfigi_cache.parquet
-  # Issuer responses, one file per fund per day.
+  # Issuer responses, one file per fund per day, written only once they parse.
   issuer_cache_dir: data/01_raw/issuers/holdings
+  # Match holdings an issuer adapter names without any identifier (statutory
+  # reports) to ISINs by name, country, currency and, for bonds, coupon and
+  # maturity. Only a match that leaves exactly one ISIN is used; its rows say
+  # isin_source: name_match and carry a match_score. See openbasket.matching.
+  name_matching: true
+  # Coupons, maturities and currencies from N-PORT (built by the security_master pipeline).
+  name_matching_terms: data/03_primary/security_terms.parquet
+  # A FIRDS extract (isin, name, cfi[, currency, coupon, maturity]) to match against, if you have one.
+  name_matching_firds: null
+  # Peer funds whose holdings files confirm matches, by fund ISIN; funds named
+  # after a plain index (MSCI World, S&P 500, SMI ...) find an iShares or SPDR
+  # peer on the same index by themselves when name_matching_index_peers is true.
+  #   IE00BD4TXV59: [IE00B4L5Y983]
+  name_matching_peers: {}
+  name_matching_index_peers: true
+  # An ISIN or CUSIP that N-PORT reports under more than this many fund
+  # series LEIs is a placeholder or an error and is not used to match a fund.
+  # Holdings under other LEIs (a trust's, a typo) are not counted.
+  max_issuer_leis_per_isin: 3
   # Funds with no free full holdings, mapped to a fund on the same index.
-  # Output rows from a proxy say so in matched_via and note. Example:
+  # A proxy wins over an issuer listing, so swap ETFs can be shown through a
+  # physical stand-in. Output rows from a proxy say so in matched_via and
+  # note. A proxy ticker is a US ticker. Example:
   #   IE000OY7BDY9:   # iShares MSCI North America Swap UCITS ETF
   #     ticker: IVV
   #     note: "swap-based; physical S&P 500 ETF as a stand-in"
   proxies: {}
 
 universe:
-  # Which fund lists to run: ishares, spdr, nport. A US ETF that is both an
-  # issuer fund and an N-PORT series counts as the issuer's.
-  sources: [ishares, spdr, nport]
+  # Which fund lists to run: ishares, spdr, nport and any issuer adapter's
+  # name. null runs them all. A US fund that is both an issuer fund and an
+  # N-PORT series counts as the issuer's.
+  sources: null
   # Quick runs: only these fund ids or series IDs, `sample` funds per source
   # (seeded), then the first `limit`. null runs everything.
   #   kedro run --pipeline=universe --params=universe.sample=15
@@ -67,6 +104,26 @@ universe:
       tickerinside.com: 0.25
 
 publish:
+  # "full" (a run on your own machine): every enabled source is read and
+  # shown. "public" (conf/public, the GitHub Action): holdings from local_only
+  # sources (issuer sites whose terms restrict republication) are never
+  # fetched or written; their funds are listed by name and ISIN only, with
+  # status local_only. See docs/source/publishing.md.
+  mode: full
+  # Where a local_only fund's note sends readers who want its holdings.
+  run_locally_url: https://openbasket.leithresearch.org/docs/running-locally.html
+  # Public build only: where a local_only issuer's funds get their identity
+  # (ISIN, name, issuer). Open registries first, when built; then a fund list
+  # cached by an earlier full run, of which only those three columns are read.
+  identity:
+    registries:
+      fund_directory: data/03_primary/fund_directory.parquet
+      fund_registry: data/03_primary/fund_registry.parquet
+      firds: data/03_primary/firds_instruments.parquet
+    issuer_lists: [data/01_raw/issuers/issuer_products.parquet]
+    # US funds get their US ticker from OpenFIGI (not the issuer), so they
+    # still meet their N-PORT series by ticker. null skips it.
+    openfigi_cache: data/03_primary/openfigi_cache.parquet
   # The scheduled build passes the tag: --params=publish.release_tag=2026-11.
   # null uses the current UTC year and month.
   release_tag: null
@@ -78,36 +135,68 @@ publish:
   # min_constituents) and the cut is logged and put in the quality report.
   site_budget_mb: 800
   min_constituents: 50
+  # The quality report lists constituent ISINs that rows attribute to more
+  # than this many different issuer names.
+  shared_isin_issuers: 20
   # Every source a published row can come from. Each fund file credits the
-  # sources its rows came from; meta.json lists them all.
+  # sources its rows came from; meta.json lists them all. `listed_by` names
+  # the source in the credit of a fund it lists but has no holdings for.
+  # Issuer adapters bring their own entries.
   sources:
     ishares:
       name: iShares (BlackRock) fund holdings
       url: https://www.ishares.com/
       licence: Public website data; terms not reviewed
       credit: Holdings data from iShares by BlackRock
+      listed_by: iShares by BlackRock
     spdr:
       name: SPDR (State Street) daily fund holdings
       url: https://www.ssga.com/
       licence: Public website data; terms not reviewed
       credit: Holdings data from SPDR ETFs by State Street Global Advisors
+      listed_by: SPDR ETFs by State Street Global Advisors
     tickerinside:
       name: TickerInside
       url: https://tickerinside.com/
       licence: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
-      credit: "Holdings from TickerInside (https://tickerinside.com/), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Changed by openbasket: tickers mapped to ISINs, names from SEC N-PORT."
+      credit: "Holdings from TickerInside (https://tickerinside.com/), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); changed by openbasket: tickers mapped to ISINs through SEC Form N-PORT and OpenFIGI, names taken from N-PORT"
     nport:
       name: SEC Form N-PORT
       url: https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets
       licence: Public US government data
       credit: Holdings from SEC Form N-PORT filings, U.S. Securities and Exchange Commission
+      listed_by: SEC Form N-PORT
     security_master:
       name: Security master built from SEC Form N-PORT
       url: https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets
       licence: Public US government data
       credit: Security details from SEC Form N-PORT filings, U.S. Securities and Exchange Commission
+    issuer_list:
+      name: Issuers' public fund lists (fund names and ISINs only)
+      url: https://openbasket.leithresearch.org/docs/running-locally.html
+      licence: Facts only (fund name, ISIN, issuer); no holdings or other content is republished
+      credit: Fund name and ISIN as listed by the fund's issuer
+      listed_by: the issuer's public fund list
+    fund_directory:
+      name: openbasket fund directory (exchange and regulator listings)
+      url: https://openbasket.leithresearch.org/docs/sources/index.html
+      licence: Facts only (fund name, ISIN, issuer) from public listings
+      credit: Fund name and ISIN from public exchange and regulator listings
+      listed_by: the fund directory
+    fund_registry:
+      name: GLEIF and ESMA fund registry
+      url: https://www.gleif.org/
+      licence: GLEIF data CC0 1.0; ESMA registers free to reuse with credit
+      credit: Fund identity from GLEIF (CC0) and ESMA registers
+      listed_by: GLEIF and ESMA
+    firds:
+      name: ESMA Financial Instruments Reference Data System (FIRDS)
+      url: https://registers.esma.europa.eu/publication/searchRegister?core=esma_registers_firds
+      licence: ESMA register data, free to reuse with credit
+      credit: Instrument reference data from ESMA FIRDS
+      listed_by: ESMA FIRDS
     openfigi:
       name: OpenFIGI
       url: https://www.openfigi.com/
       licence: OpenFIGI API terms; terms not reviewed
-      credit: Names and security types from OpenFIGI
+      credit: Names and security types from OpenFIGI (https://www.openfigi.com/)

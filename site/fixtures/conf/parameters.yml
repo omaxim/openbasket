@@ -1,0 +1,22 @@
+# Kedro parameters for cutting the site fixtures (site/fixtures/README.md).
+# Copy to conf/fixtures/ and run with --env fixtures. Public sources only:
+# TickerInside and SEC N-PORT, no issuer adapters and no issuer fund lists,
+# so nothing from a local_only source reaches the fixtures.
+lookthrough:
+  source_order: [tickerinside, nport]
+issuers:
+  ishares_sites: []
+  spdr_regions: []
+  enabled: []
+universe:
+  sources: null
+  # Index funds, a fund of funds (AOR), a buffer ETF looked through its SPY
+  # options (JANP), a long/short fund (CLSE), and two funds whose lines have
+  # no ISIN (BOXX, BTCU).
+  ids: [S000004406, S000006027, S000006037, S000009227, S000002564, S000002839, S000002848, S000023587, S000004310,
+        S000083284, S000074838, S000101292, US78462F1030, S000077497, S000084489]
+publish:
+  release_tag: "2026-11"
+  max_constituents: 500
+  site_dir: build/fixture-site
+  release_dir: build/fixture-release

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<SocRegistro xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="SocRegistro.xsd">
+  <FechaDatos>202606</FechaDatos>
+  <Entidad>
+    <Tipo>SICAV</Tipo>
+    <NumeroRegistro>201</NumeroRegistro>
+    <Denominacion>EJEMPLO INVERSIONES, S.A., SICAV</Denominacion>
+    <ETF>NO</ETF>
+    <Compartimento>
+      <NumeroCompartimento>0</NumeroCompartimento>
+      <DenominacionCompartimento>COMPARTIMENTO 0</DenominacionCompartimento>
+      <Serie>
+        <NumeroSerie>0</NumeroSerie>
+        <DenominacionSerie>SERIE 0</DenominacionSerie>
+        <ISIN>ES0900000060</ISIN>
+      </Serie>
+    </Compartimento>
+  </Entidad>
+</SocRegistro>

@@ -1,0 +1,8 @@
+# sweden_fi --------------------------------------------------------------------
+sweden_fi_manifest:
+  type: pandas.CSVDataset
+  filepath: data/01_raw/sweden_fi/manifest.csv
+
+sweden_fi_products:
+  type: pandas.ParquetDataset
+  filepath: data/01_raw/sweden_fi/products.parquet

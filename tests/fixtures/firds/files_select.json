@@ -1,0 +1,19 @@
+{
+  "responseHeader": {"status": 0, "QTime": 3},
+  "response": {
+    "numFound": 9,
+    "start": 0,
+    "docs": [
+      {"file_name": "", "file_type": "", "publication_date": "2026-01-06T06:29:26Z"},
+      {"file_name": "DLTINS_20260106_01of02.zip", "file_type": "DLTINS", "publication_date": "2026-01-06T00:00:00Z", "download_link": "https://firds.esma.europa.eu/firds/DLTINS_20260106_01of02.zip", "checksum": "00000000000000000000000000000001"},
+      {"file_name": "DLTINS_20260106_02of02.zip", "file_type": "DLTINS", "publication_date": "2026-01-06T00:00:00Z", "download_link": "https://firds.esma.europa.eu/firds/DLTINS_20260106_02of02.zip", "checksum": "00000000000000000000000000000002"},
+      {"file_name": "DLTINS_20260103_01of01.zip", "file_type": "DLTINS", "publication_date": "2026-01-03T00:00:00Z", "download_link": "https://firds.esma.europa.eu/firds/DLTINS_20260103_01of01.zip", "checksum": "00000000000000000000000000000003"},
+      {"file_name": "FULINS_C_20260103_01of01.zip", "file_type": "FULINS", "publication_date": "2026-01-03T00:00:00Z", "download_link": "https://firds.esma.europa.eu/firds/FULINS_C_20260103_01of01.zip", "checksum": "00000000000000000000000000000004"},
+      {"file_name": "FULINS_D_20260103_01of02.zip", "file_type": "FULINS", "publication_date": "2026-01-03T00:00:00Z", "download_link": "https://firds.esma.europa.eu/firds/FULINS_D_20260103_01of02.zip", "checksum": "00000000000000000000000000000005"},
+      {"file_name": "FULINS_D_20260103_02of02.zip", "file_type": "FULINS", "publication_date": "2026-01-03T00:00:00Z", "download_link": "https://firds.esma.europa.eu/firds/FULINS_D_20260103_02of02.zip", "checksum": "00000000000000000000000000000006"},
+      {"file_name": "FULINS_E_20260103_01of01.zip", "file_type": "FULINS", "publication_date": "2026-01-03T00:00:00Z", "download_link": "https://firds.esma.europa.eu/firds/FULINS_E_20260103_01of01.zip", "checksum": "00000000000000000000000000000007"},
+      {"file_name": "FULINS_R_20260103_01of09.zip", "file_type": "FULINS", "publication_date": "2026-01-03T00:00:00Z", "download_link": "https://firds.esma.europa.eu/firds/FULINS_R_20260103_01of09.zip", "checksum": "00000000000000000000000000000008"},
+      {"file_name": "FULINS_E_20251227_01of01.zip", "file_type": "FULINS", "publication_date": "2025-12-27T00:00:00Z", "download_link": "https://firds.esma.europa.eu/firds/FULINS_E_20251227_01of01.zip", "checksum": "00000000000000000000000000000009"}
+    ]
+  }
+}

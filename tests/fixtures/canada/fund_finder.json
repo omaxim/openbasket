@@ -1,0 +1,23 @@
+{
+  "funds": [
+    {"portId": "9001", "profile": {"portId": "9001", "fundCurrency": "CAD", "fundFullName": "Vanguard Example Equity Index ETF", "shareClassName": "ETF", "assetClassificationLevel1": "Equity",
+      "identifiers": [{"altId": "ISIN", "altIdValue": "CA9229Z00162"}],
+      "listings": [{"portId": "L901", "exchange": "Toronto Stock Exchange", "stockExchangeMarketIdentifierCode": "XTSE",
+        "identifiers": [{"altId": "SEDOL", "altIdValue": "B0000B0"}, {"altId": "Ticker - Canada", "altIdValue": "VXEQ"}]}],
+      "polarisPdtTypeIndicator": "ETF", "currencyHedgingStrategy": "No Hedge", "marketOfDomicile": "CANADA"}},
+    {"portId": "9002", "profile": {"portId": "9002", "fundCurrency": "CAD", "fundFullName": "Vanguard Example All-Equity ETF Portfolio", "shareClassName": "ETF", "assetClassificationLevel1": "Balanced/Diversified",
+      "identifiers": [{"altId": "ISIN", "altIdValue": "CA 9229Z00246"}],
+      "listings": [{"portId": "L902", "exchange": "Toronto Stock Exchange", "stockExchangeMarketIdentifierCode": "XTSE",
+        "identifiers": [{"altId": "SEDOL", "altIdValue": "B1111C7"}, {"altId": "Ticker - Canada", "altIdValue": "VXAL"}]}],
+      "polarisPdtTypeIndicator": "ETF", "currencyHedgingStrategy": "No Hedge", "marketOfDomicile": "CANADA"}},
+    {"portId": "9003", "profile": {"portId": "9003", "fundCurrency": "CAD", "fundFullName": "Vanguard Example Fund With A Bad ISIN", "shareClassName": "ETF", "assetClassificationLevel1": "Bond",
+      "identifiers": [{"altId": "ISIN", "altIdValue": "CA0000000000"}], "listings": [],
+      "polarisPdtTypeIndicator": "ETF", "currencyHedgingStrategy": "No Hedge", "marketOfDomicile": "CANADA"}},
+    {"portId": "D101", "profile": {"portId": "D101", "fundCurrency": "CAD", "fundFullName": "Vanguard Example Value Fund Series F", "shareClassName": "Series F", "assetClassificationLevel1": "Equity",
+      "identifiers": [{"altId": "FundServ Code", "altIdValue": "VIC900"}, {"altId": "ISIN", "altIdValue": "CA9229Z00329"}, {"altId": "Ticker", "altIdValue": "VIC900"}],
+      "listings": [], "polarisPdtTypeIndicator": "FUND", "currencyHedgingStrategy": "No Hedge", "marketOfDomicile": "CANADA"}},
+    {"portId": "D102", "profile": {"portId": "D102", "fundCurrency": "CAD", "fundFullName": "Vanguard Example Value Fund Series M", "shareClassName": "Series M", "assetClassificationLevel1": "Equity",
+      "identifiers": [{"altId": "FundServ Code", "altIdValue": "VIC901"}, {"altId": "ISIN", "altIdValue": "CA9229Z00402"}],
+      "listings": [], "polarisPdtTypeIndicator": "FUND", "currencyHedgingStrategy": "No Hedge", "marketOfDomicile": "CANADA"}}
+  ]
+}

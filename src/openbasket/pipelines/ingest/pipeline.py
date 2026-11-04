@@ -8,7 +8,7 @@ def create_pipeline(**kwargs) -> Pipeline:
         [
             Node(
                 download_nport,
-                inputs=["params:nport.quarters", "params:nport.raw_dir", "params:nport.overwrite"],
+                inputs=["params:nport.quarters", "params:nport.raw_dir", "params:nport.overwrite", "params:nport_history"],
                 outputs="nport_raw_manifest",
                 name="download_nport",
             ),
@@ -21,7 +21,7 @@ def create_pipeline(**kwargs) -> Pipeline:
             Node(download_fund_tickers, inputs=None, outputs="sec_fund_tickers", name="download_fund_tickers"),
             Node(
                 download_issuer_products,
-                inputs=["params:issuers.ishares_sites", "params:issuers.spdr_regions"],
+                inputs=["params:issuers.ishares_sites", "params:issuers.spdr_regions", "params:issuers", "params:publish"],
                 outputs="issuer_products",
                 name="download_issuer_products",
             ),

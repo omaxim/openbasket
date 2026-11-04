@@ -10,9 +10,37 @@ one test file and one page in this folder. Nothing else needs editing.
    - `holdings(product, ctx)`, returning an `IssuerHoldings` with the as-of
      date read from the issuer's own file, the URL it came from, and a frame
      with `HOLDING_COLUMNS`. Weights are percent of net assets exactly as
-     reported: never rescale them.
+     reported: never rescale them. Give every identifier the file has; a
+     line with none is matched to an ISIN by its name when
+     `lookthrough.name_matching` is on (`openbasket.matching`), so also give
+     its `asset_class`, `country` and `currency` where the file prints them.
    - `credit`, `licence` and `homepage`, which are shown next to every row
      from this source.
+   - `redistribution`: `"public"` only when the source's licence allows its
+     holdings to be republished (a regulator's open data, CC BY, public
+     domain); otherwise leave the default, `"local_only"`. The public build
+     (`publish.mode: public`) never calls a `local_only` adapter's
+     `products()` or `holdings()` and refuses to write its rows; its funds
+     are listed there by name and ISIN only, with status `local_only`.
+     People who run openbasket themselves still get its holdings locally
+     (see [](../running-locally.md)).
+     Say in the docs page which class the source has and quote the licence
+     text it rests on.
+   - `enabled_by_default=False` when the site's terms forbid automated
+     access even for private use. The adapter then runs only when the user
+     names it in `issuers.enabled` (for example in `conf/local`). A site
+     whose robots.txt disallows the pages needed gets no adapter at all.
+   - `stand_in=True` when the holdings are not the fund's own but a peer's
+     (another ETF on the same index, see
+     [Exchange and index publications](exchange-index.md)). `ingest` lists
+     stand-ins after every direct adapter, so they answer only for funds no
+     direct source lists.
+   - `replication` in `products()`: `"swap"` whenever the issuer says the
+     fund is synthetic. A swap fund's listed securities are its substitute
+     basket, not what it tracks: label them with
+     `mark_substitute_basket(df)` (`asset_class`
+     `collateral (substitute basket)`, `SUBSTITUTE_BASKET`) and say so in the
+     notes.
 2. Fetch through `openbasket.http.get` / `post`, which waits between requests
    to the same host and retries rate limits. Do not bypass bot protection,
    log-in walls or consent gates; if a site needs them, it is not a source.
@@ -25,5 +53,19 @@ one test file and one page in this folder. Nothing else needs editing.
    and credit, known gaps (swap funds, top-10 only, rounding), and the
    numbers from a real run.
 
-`openbasket.sources.issuers.discover()` imports every module in the package,
-so the ingest pipeline picks the new source up automatically.
+`openbasket.sources.issuers.safe_discover()` imports every module in the
+package, so the ingest pipeline picks the new source up automatically. A
+module that fails to import is logged and skipped; the other sources still
+run.
+
+A source that is not an issuer adapter (a module directly under
+`src/openbasket/sources/`, such as `nport`, `firds` or `tickerinside_source`)
+declares its class in a module-level constant, `REDISTRIBUTION = "public"` or
+`"local_only"`; a directory list declares it in its `DirectorySource`.
+`openbasket.sources.redistribution(source_id)` answers for any source id
+found in the data: the adapter's field, else the directory source's, else the
+module's constant, else `"local_only"`.
+
+A regulator's open data that already covers many funds (CVM, CNMV, the SEC)
+belongs in one module per regulator: a second adapter for the same filings
+would list the same funds twice.

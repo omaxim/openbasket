@@ -1,0 +1,6 @@
+Market:;XETR
+Date Last Update:;03.11.2026
+Product Status;Instrument Status;Instrument;ISIN;Product ID;Instrument ID;WKN;Mnemonic;MIC Code;Product Assignment Group;Product Assignment Group Description;Instrument Type;Currency;Settlement Currency
+Active;Active;UBS CORE EX.UCITS ETF USD;IE0000000020;111;1;000A0EX01;EXUB;XETR;RNT;EXCHANGE TRADED FUNDS - RENTEN;ETF;EUR;EUR
+Active;Active;XETRA-GOLD EXAMPLE;DE0000000058;112;2;000A0EX02;EXGL;XETR;ETC;ETC;ETC;EUR;EUR
+Active;Active;EXAMPLE AG O.N.;DE0000000090;113;3;000A0EX03;EXAG;XETR;DAX;DAX;CS;EUR;EUR

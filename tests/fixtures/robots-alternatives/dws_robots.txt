@@ -1,0 +1,11 @@
+# Synthetic file with the same rule shapes as an issuer's robots.txt.
+User-Agent: *
+
+Disallow: /etfdata/*
+Disallow: /export/*
+
+Sitemap: https://etf.example.com/en-gb/sitemap.xml
+
+Disallow: */etf-products/?*
+Disallow: /api/
+Disallow: /EntryGate/

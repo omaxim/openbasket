@@ -72,9 +72,12 @@ def web(monkeypatch):
     clock = VirtualTime()
     t = throttle.Throttle(default_s=INTERVAL)
     for mod in (throttle, http, ishares, spdr):
-        monkeypatch.setattr(mod, "THROTTLE", t)
+        if hasattr(mod, "THROTTLE"):  # ishares now waits through openbasket.http
+            monkeypatch.setattr(mod, "THROTTLE", t)
     monkeypatch.setattr(throttle, "time", clock)
     monkeypatch.setattr(http, "_intervals", {})
+    # Use prefetch's own robots.txt reader, so robots requests go through the fake web.
+    monkeypatch.setitem(__import__("sys").modules, "openbasket.sources.robots", None)
     w = Web(clock)
     monkeypatch.setattr(requests.Session, "send", w.send)
     return w
@@ -332,7 +335,7 @@ def test_ishares_and_spdr_jobs_use_their_clients_and_cache(web, tmp_path, monkey
     payload = {"componentsByNameMap": {"holdings": {"containersByNameMap": {"all": {"dataPointsByNameMap": {
         "asOfDate": {"value": "20261102"}, "isin": {"value": "['US0378331005']"},
         "issueName": {"value": "['APPLE']"}, "holdingPercent": {"value": "[100.0]"}}}}}}}
-    monkeypatch.setattr(ishares.requests, "get", lambda url, params=None, **kw: _json_response(payload))
+    monkeypatch.setattr(ishares, "_get", lambda url, params=None: _json_response(payload))
     monkeypatch.setattr(spdr, "_get", lambda url, params=None: _bytes_response(b"not a workbook"))
     products = pd.DataFrame([
         _row("ishares", "253743", "IE00B5BMR087", None, site="uk", name="iShares Core S&P 500"),

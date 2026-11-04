@@ -10,15 +10,19 @@ import pandas as pd
 
 from ...datasets import connection
 from ...identifiers import is_valid_isin
-from ...sources import FULL_MODE, fund_identity, issuers, nport, publish_mode, redistribution, sec, spdr
+from ...sources import FULL_MODE, fund_identity, issuers, nport, publish_mode, redistribution, sec, sec_nport_history, spdr
 
 logger = logging.getLogger(__name__)
 
 
-def download_nport(quarters: list[str], raw_dir: str, overwrite: bool = False) -> pd.DataFrame:
-    """Download the N-PORT ZIP for each quarter (``2026q3`` style) unless cached."""
+def download_nport(quarters: list[str], raw_dir: str, overwrite: bool = False, history: dict | None = None) -> pd.DataFrame:
+    """Download the N-PORT ZIP for each quarter (``2026q3`` style) unless cached.
+
+    ``history`` (``params:nport_history``) adds older quarters, see
+    :func:`openbasket.sources.sec_nport_history.resolve_quarters`.
+    """
     rows = []
-    for q in quarters:
+    for q in sec_nport_history.resolve_quarters(quarters, history):
         q = q.lower()
         dest = Path(raw_dir) / f"{q}_nport.zip"
         sec.download(sec.NPORT_URL.format(quarter=q), dest, overwrite=overwrite)

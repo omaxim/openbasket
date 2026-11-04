@@ -1,0 +1,8 @@
+# americas_open ----------------------------------------------------------------
+americas_open_manifest:
+  type: pandas.CSVDataset
+  filepath: data/01_raw/americas_open/manifest.csv
+
+americas_open_products:
+  type: pandas.ParquetDataset
+  filepath: data/01_raw/americas_open/products.parquet

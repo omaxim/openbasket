@@ -1,0 +1,5 @@
+sweden_fi:
+  # Newest quarterly ZIP from Finansinspektionen (about 6.5 MB) and its
+  # Parquet; the sweden_fi adapter reads the same folder
+  # (OPENBASKET_SWEDEN_FI_DIR).
+  root: data/01_raw/sweden_fi

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<VärdepappersfondInnehav xmlns="http://schemas.fi.se/publika/vardepappersfonder/20200331">
+  <Rapportinformation>
+    <Kvartalsslut>2026-06-30</Kvartalsslut>
+  </Rapportinformation>
+  <Bolagsinformation>
+    <Fondbolag_namn>Exempel Fonder AB</Fondbolag_namn>
+    <Fondbolag_institutnummer>90001</Fondbolag_institutnummer>
+    <Fondbolag_LEI-kod>000000000000000000X1</Fondbolag_LEI-kod>
+  </Bolagsinformation>
+  <Fondinformation>
+    <Fond_institutnummer>10003</Fond_institutnummer>
+    <Fond_ISIN-kod />
+    <Fond_namn>Exempel Stängd Fond</Fond_namn>
+    <Fond_status>Ej aktiv fond</Fond_status>
+  </Fondinformation>
+</VärdepappersfondInnehav>

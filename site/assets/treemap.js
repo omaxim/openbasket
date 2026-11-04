@@ -14,9 +14,22 @@
   /** Weights closer to zero than this (percent of net assets) are left out of the map. */
   const EPS = 0.0005;
 
+  /* Continents by ISO country code, as in openbasket.aggregates. */
+  const REGION_OF = {};
+  for (const [region, codes] of Object.entries({
+    "North America": "US CA BM",
+    Europe: "GB IE FR DE NL BE LU CH AT IT ES PT SE NO DK FI IS PL CZ HU SK SI HR RO BG GR CY MT EE LV LT JE GG IM LI MC",
+    "Asia-Pacific": "JP CN HK TW KR SG IN ID TH MY PH VN AU NZ PK BD LK MO KY",
+    "Latin America": "BR MX CL CO PE AR UY PA VG BS",
+    "Middle East & Africa": "IL SA AE QA KW BH OM TR EG ZA NG KE MA",
+  })) for (const c of codes.split(" ")) REGION_OF[c] = region;
+  const OTHER_REGION = "Other regions";
+  const regionOf = (code) => (!code || code === UNKNOWN ? UNKNOWN : REGION_OF[code] || OTHER_REGION);
+
   /* Group-by dimensions: how a row is keyed and which breakdown of the fund file gives block totals. */
   const DIMENSIONS = {
     sector: { key: (r) => r.sector || UNKNOWN, breakdown: "sector" },
+    region: { key: (r) => regionOf(r.country), breakdown: "region" },
     country: { key: (r) => r.country || UNKNOWN, breakdown: "country" },
     asset: { key: (r) => r.asset || UNKNOWN, breakdown: "asset_class" },
     source: { key: (r) => r.source || UNKNOWN, breakdown: "source" },
@@ -96,13 +109,17 @@
   /** The breakdown totals of one dimension as a Map, without the Unresolved entry. */
   function breakdownTotals(f, dim) {
     const key = DIMENSIONS[dim] && DIMENSIONS[dim].breakdown;
-    const list = key && f.breakdowns && f.breakdowns[key];
+    let list = key && f.breakdowns && f.breakdowns[key];
+    // Fund files have no region breakdown: it is summed from the country one.
+    const fromCountry = dim === "region" && !Array.isArray(list);
+    if (fromCountry) list = f.breakdowns && f.breakdowns.country;
     if (!Array.isArray(list)) return null;
     const m = new Map();
     for (const pair of list) {
       if (!Array.isArray(pair) || pair[0] === "Unresolved") continue;
       const v = Number(pair[1]);
-      if (Number.isFinite(v)) m.set(pair[0], (m.get(pair[0]) || 0) + v);
+      const k = fromCountry ? regionOf(pair[0]) : pair[0];
+      if (Number.isFinite(v)) m.set(k, (m.get(k) || 0) + v);
     }
     return m;
   }
@@ -241,6 +258,6 @@
     return s.length <= chars ? s : `${s.slice(0, Math.max(1, chars - 1)).trimEnd()}…`;
   }
 
-  return { UNKNOWN, DIRECT, NOT_LISTED, DIMENSIONS, squarify, worst, model, breakdownTotals, labelledShare,
+  return { UNKNOWN, DIRECT, NOT_LISTED, DIMENSIONS, regionOf, squarify, worst, model, breakdownTotals, labelledShare,
     defaultDimension, hasRoutes, luminance, textOn, fit };
 });

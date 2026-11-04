@@ -235,7 +235,7 @@ tfoot td .why { display: block; font-weight: 400; color: var(--ink-2); font-size
 .tm-map { position: relative; min-width: 0; }
 .tm-svg { display: block; width: 100%; height: auto; border-radius: 4px; background: var(--paper); touch-action: manipulation; user-select: none; -webkit-user-select: none; }
 .tm-cell { stroke: var(--paper); stroke-width: 1px; vector-effect: non-scaling-stroke; }
-.tm-outline { fill: none; stroke: var(--paper); stroke-width: 2.5px; pointer-events: none; }
+.tm-outline { fill: none; stroke: var(--paper); stroke-width: 3px; pointer-events: none; }
 .tm-band { stroke: var(--paper); stroke-width: 1px; }
 .tm-block { cursor: zoom-in; outline: none; }
 .tm-block:hover .tm-cell, .tm-block:hover .tm-band { filter: brightness(1.06); }
@@ -244,8 +244,8 @@ tfoot td .why { display: block; font-weight: 400; color: var(--ink-2); font-size
 .tm-tile[tabindex] { cursor: pointer; }
 .tm-tile[tabindex]:hover .tm-cell { filter: brightness(1.08); }
 .tm-tile[tabindex]:focus-visible .tm-cell { stroke: var(--ink); stroke-width: 2.5px; }
-.tm-label { font-family: var(--sans); font-weight: 600; pointer-events: none; letter-spacing: -0.005em; }
-.tm-value { font-family: var(--sans); font-weight: 400; pointer-events: none; font-variant-numeric: tabular-nums; opacity: .92; }
+.tm-label { font-family: var(--sans); font-weight: 700; pointer-events: none; letter-spacing: -0.01em; }
+.tm-value { font-family: var(--sans); font-weight: 500; pointer-events: none; font-variant-numeric: tabular-nums; opacity: .95; }
 .tm-block-label { font-family: var(--display); font-weight: 700; letter-spacing: -0.01em; pointer-events: none; }
 .tm-tip { position: absolute; z-index: 5; max-width: min(300px, 86%); padding: .6rem .75rem; background: var(--ink); color: var(--paper); border-radius: 6px; box-shadow: 0 10px 28px rgba(27, 26, 25, .22); font-size: .8rem; line-height: 1.4; pointer-events: none; overflow-wrap: anywhere; }
 .tm-tip strong { display: block; font: 700 .9rem/1.25 var(--display); letter-spacing: -0.01em; margin-bottom: .3rem; }
@@ -373,3 +373,28 @@ footer .wordmark { margin-bottom: .8rem; }
 .agg-value { font: 400 22px var(--sans); }
 .agg-tables { margin-top: .8rem; }
 .agg-tables summary { cursor: pointer; color: var(--ink-2); }
+
+/* Treemap total line and legend chips. */
+.tm-total { margin: .25rem 0 0; color: var(--ink-2); font-size: .9rem; }
+.tm-total strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+.tm-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin: .8rem 0 0; align-items: center; }
+.tm-chip { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .6rem; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); font-size: .8rem; color: var(--ink); cursor: pointer; }
+.tm-chip .sw { background: var(--chip); }
+.tm-chip b { font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.tm-chip:hover { background: var(--paper-2); }
+.tm-chip[aria-pressed="true"] { background: var(--chip); border-color: var(--chip); color: #fff; }
+.tm-chip[aria-pressed="true"] b { color: #fff; }
+.tm-chip[aria-pressed="true"] .sw { background: #fff; }
+.tm-chip:focus-visible { outline: 2px solid var(--wine); outline-offset: 2px; }
+.tm-chip.is-unresolved { cursor: default; }
+/* The holdings table, folded away under the chart. */
+details.holdings-block > summary { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .3rem 1rem; cursor: pointer; padding: .9rem 1.1rem; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); list-style: none; }
+details.holdings-block > summary::-webkit-details-marker { display: none; }
+details.holdings-block > summary::before { content: "▸"; color: var(--wine); margin-right: .2rem; }
+details.holdings-block[open] > summary::before { content: "▾"; }
+details.holdings-block[open] > summary { margin-bottom: 1rem; }
+details.holdings-block > summary:hover { background: var(--paper-2); }
+details.holdings-block > summary:focus-visible { outline: 2px solid var(--wine); outline-offset: 2px; }
+.holdings-sum-title { font: 700 1.02rem/1.2 var(--display); letter-spacing: -0.02em; flex: 1; }
+.holdings-sum-hint { color: var(--muted); font-size: .82rem; }
+.tm-body:has(> .tm-side[hidden]) { grid-template-columns: minmax(0, 1fr); }

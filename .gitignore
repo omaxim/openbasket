@@ -165,3 +165,4 @@ mlruns/*
 # project
 !.env.example
 docs/source/_autosummary/
+.claude/

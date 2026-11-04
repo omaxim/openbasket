@@ -30,13 +30,14 @@
   /* Shares in a strip: wine for the largest entry, then wine fading into paper. Bars are all
      wine; "others" are stone and Unresolved is a dashed paper bar. */
   const SERIES = [C.wine, "#b0606d", "#c48b94", "#d6b2b5", "#e4cdcc", "#ecdcd9"];
-  /* Treemap blocks: a calm categorical palette led by the Leith wine, muted to sit on paper.
+  /* Treemap blocks: bold categorical colours led by the Leith wine, dark enough for white labels.
      Unknown labels are stone; Unresolved is a pale grey of its own. */
-  const PALETTE = ["#9c3848", "#4f6d7a", "#c9a96e", "#6f8455", "#7a5374", "#3f7f7b", "#b9803f", "#c98c92",
-    "#8a9fae", "#a39a5a", "#a65f4b", "#9fb39a"];
+  const PALETTE = ["#9c3848", "#2e6b9e", "#d08a1e", "#3f8a4a", "#6d4a9c", "#1d8a87", "#c4572b", "#b8417a",
+    "#43599e", "#7f8f22", "#8a5a3c", "#3b8fbf"];
   const TM = { unknown: "#b8aea3", unresolved: "#dcd5ca", paper: "#f6f2ec", ink: "#1b1a19", ink2: "#4a4744", muted: "#7d7873" };
   const TM_DIMS = [
     { id: "sector", label: "Sector", short: "Sector", all: "All sectors" },
+    { id: "region", label: "Region", short: "Region", all: "All regions" },
     { id: "country", label: "Country", short: "Country", all: "All countries" },
     { id: "asset", label: "Asset class", short: "Asset class", all: "All asset classes" },
     { id: "source", label: "Source", short: "Source", all: "All sources" },
@@ -1061,6 +1062,7 @@
     const tip = h("div", { class: "tm-tip", role: "tooltip", id: `${uid}-tip`, hidden: true });
     const crumbs = h("nav", { class: "tm-crumbs", "aria-label": "Treemap level" });
     const side = h("div", { class: "tm-side" });
+    const chips = h("div", { class: "tm-chips", role: "group", "aria-label": "Blocks" });
     const detail = h("p", { class: "tm-detail", "aria-live": "polite" });
     const hoverable = typeof matchMedia === "function" && matchMedia("(hover: hover)").matches;
     let infos = [];
@@ -1178,17 +1180,18 @@
 
     function label(g, x, y, w, hgt, fill, lines, opts) {
       const o = opts || {};
-      const fs = Math.max(9.5, Math.min(o.max || 20, Math.sqrt(w * hgt) / 8.5));
+      const fs = Math.max(9.5, Math.min(o.max || 30, Math.sqrt(w * hgt) / 6.5));
       if (w < 30 || hgt < fs * 1.45) return;
       const colour = o.colour || tm.textOn(fill, TM.ink, TM.paper);
-      const first = fitText(lines[0], w - 9, `600 ${fs}px Inter, system-ui, sans-serif`);
+      const pad = Math.max(5, Math.min(10, fs * 0.45));
+      const first = fitText(lines[0], w - pad * 2, `700 ${fs}px Inter, system-ui, sans-serif`);
       if (!first) return;
-      g.append(s("text", { x: (x + 5).toFixed(1), y: (y + 4 + fs).toFixed(1), "font-size": fs.toFixed(1), fill: colour,
+      g.append(s("text", { x: (x + pad).toFixed(1), y: (y + pad * 0.6 + fs).toFixed(1), "font-size": fs.toFixed(1), fill: colour,
         class: "tm-label" }, first));
-      if (lines[1] && hgt >= fs * 2.75) {
-        const fs2 = Math.max(9, fs * 0.82);
-        g.append(s("text", { x: (x + 5).toFixed(1), y: (y + 6 + fs + fs2 * 1.15).toFixed(1), "font-size": fs2.toFixed(1),
-          fill: colour, class: "tm-value" }, fitText(lines[1], w - 9, `400 ${fs2}px Inter, system-ui, sans-serif`)));
+      if (lines[1] && hgt >= fs * 2.6) {
+        const fs2 = Math.max(9, fs * 0.78);
+        g.append(s("text", { x: (x + pad).toFixed(1), y: (y + pad * 0.6 + fs + fs2 * 1.2).toFixed(1), "font-size": fs2.toFixed(1),
+          fill: colour, class: "tm-value" }, fitText(lines[1], w - pad * 2, `500 ${fs2}px Inter, system-ui, sans-serif`)));
       }
     }
 
@@ -1312,6 +1315,7 @@
       map.replaceChildren(svg, tip);
       tip.hidden = true;
       drawCrumbs(zoomBlock);
+      drawChips(m, colours, zoomBlock);
       drawSide(m, colours, zoomBlock);
       if (!zoomBlock) setDetail(null);
     }
@@ -1330,22 +1334,25 @@
         h("span", { class: "tm-hint" }, hoverable ? "Esc or the first link goes back." : "Tap a tile for its details."));
     }
 
+    /** One colour chip per block under the map; a chip zooms into its block, the pressed one back out. */
+    function drawChips(m, colours, zoomBlock) {
+      const shown = m.blocks.slice(0, 16);
+      chips.replaceChildren(...shown.map((b) => {
+        const on = zoomBlock && zoomBlock.key === b.key;
+        const btn = h("button", { type: "button", class: "tm-chip", "aria-pressed": on ? "true" : "false",
+          style: `--chip:${colours.get(b.key)}` },
+          h("i", { class: "sw" }), h("span", {}, blockLabel(st.dim, b.key)), h("b", {}, pct(b.value)));
+        btn.addEventListener("click", () => (on ? zoomOut() : zoomTo(b.key, false)));
+        return btn;
+      }),
+      m.unresolved ? h("span", { class: "tm-chip is-unresolved" }, h("i", { class: "sw sw-unresolved" }),
+        h("span", {}, UNRESOLVED), h("b", {}, pct(m.unresolved))) : "",
+      m.blocks.length > shown.length ? h("span", { class: "tm-more" },
+        `+ ${fmtInt(m.blocks.length - shown.length)} smaller, ${pct(sum(m.blocks.slice(shown.length).map((b) => b.value)))}`) : "");
+    }
+
     function drawSide(m, colours, zoomBlock) {
       const parts = [];
-      if (!zoomBlock) {
-        const shown = m.blocks.slice(0, 12);
-        parts.push(h("h4", {}, `Blocks by ${dimInfo().short.toLowerCase()}`),
-          h("ol", { class: "tm-legend" }, shown.map((b) => {
-            const btn = h("button", { type: "button" },
-              h("i", { class: "sw", style: `background:${colours.get(b.key)}` }),
-              h("span", { class: "tm-leg-label" }, blockLabel(st.dim, b.key)), h("span", { class: "tm-leg-val" }, pct(b.value)));
-            btn.addEventListener("click", () => zoomTo(b.key, true));
-            return h("li", {}, btn);
-          }),
-          m.unresolved ? h("li", { class: "is-unresolved" }, h("span", { class: "tm-leg-static" },
-            h("i", { class: "sw sw-unresolved" }), h("span", { class: "tm-leg-label" }, UNRESOLVED), h("span", { class: "tm-leg-val" }, pct(m.unresolved)))) : null),
-          m.blocks.length > shown.length ? h("p", { class: "tm-more" }, `and ${fmtInt(m.blocks.length - shown.length)} smaller blocks, ${pct(sum(m.blocks.slice(12).map((b) => b.value)))} together`) : null);
-      }
       const negs = zoomBlock ? m.negatives.filter((x) => x.key === zoomBlock.key) : m.negatives;
       const unlisted = zoomBlock ? m.unlisted.filter((x) => x.key === zoomBlock.key) : m.unlisted;
       if (negs.length || unlisted.length) {
@@ -1415,9 +1422,15 @@
     });
 
     const wrap = h("figure", { class: "tm", "aria-labelledby": `${uid}-cap` },
-      h("div", { class: "tm-head" }, h("figcaption", { id: `${uid}-cap`, class: "tm-cap" }, "Holdings as tiles"), radios),
+      h("div", { class: "tm-head" },
+        h("div", {},
+          h("figcaption", { id: `${uid}-cap`, class: "tm-cap" }, "Holdings as tiles"),
+          h("p", { class: "tm-total" }, "Total: ", h("strong", {}, `${fmtPct(t.resolved, 2)}%`), " of net assets resolved",
+            Number.isFinite(t.unresolved) ? ` · ${fmtPct(t.unresolved, 2)}% unresolved` : null)),
+        radios),
       crumbs,
       h("div", { class: "tm-body" }, map, side),
+      chips,
       detail,
       h("p", { class: "tm-note" },
         "Area is percent of net assets. Hatched tiles are rows this file does not list (in the full data of the release) or funds that could not be looked through. ",
@@ -1581,7 +1594,9 @@
     const table = h("table", { class: "holdings" }, h("caption", { class: "sr-only" }, captionText), h("thead", {}, h("tr", {}, ths)), tbody, foot);
     draw();
 
-    return h("section", { class: "holdings-block", "aria-label": "Holdings" },
+    return h("details", { class: "holdings-block" },
+      h("summary", {}, h("span", { class: "holdings-sum-title" }, `All ${fmtInt(tot.nRows != null ? tot.nRows : rows.length)} holdings as a table`),
+        h("span", { class: "holdings-sum-hint" }, "Sort, filter, CSV")),
       h("div", { class: "toolbar" }, filter,
         h("div", { class: "actions" }, csv,
           h("a", { class: "btn btn-ghost btn-sm", href: fundUrl(f.id), type: "application/json" }, "JSON"),

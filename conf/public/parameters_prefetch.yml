@@ -1,0 +1,4 @@
+# The public build fetches no local_only source, so here prefetch reads
+# nothing from issuer sites.
+prefetch:
+  mode: public

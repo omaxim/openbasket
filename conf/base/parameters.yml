@@ -88,6 +88,11 @@ universe:
   limit: null
   # Stop reading sources for a fund once one resolves lookthrough.min_resolved_pct.
   stop_early: true
+  # A fund with no holdings of its own available (no_holdings, or local_only in
+  # the public build) named after an index a US fund also tracks is shown
+  # through that US fund's N-PORT holdings, status stand_in. See
+  # docs/source/sources/stand-ins.md.
+  stand_ins: true
   # Ask TickerInside only for tickers in its issuer layer (one list download).
   tickerinside_prefilter: true
   log_every: 100

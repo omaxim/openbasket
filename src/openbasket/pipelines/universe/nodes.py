@@ -18,6 +18,10 @@ issuer keeps only its identity. If it is also an N-PORT series it becomes
 that series (name and issuer from SEC), so its public holdings are used;
 otherwise it is listed with status ``local_only``, no rows, and a note
 saying where its holdings are.
+
+A fund whose own holdings are missing that is named after an index a US
+fund also tracks is shown through that US fund's N-PORT holdings, with
+status ``stand_in`` (see :mod:`openbasket.stand_in`).
 """
 
 from __future__ import annotations
@@ -36,7 +40,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from ... import throttle
+from ... import stand_in, throttle
 from ...datasets import connection
 from ...identifiers import normalise_ticker
 from ...lookthrough import FundRef, look_through
@@ -398,10 +402,17 @@ def _isins(v: object) -> list[str]:
     return [str(x) for x in v]
 
 
-def expand_fund(fund: dict, providers, params: dict) -> tuple[dict, pd.DataFrame]:
+#: Outcomes after which a fund is shown through its stand-in, if it has one.
+STAND_IN_AFTER = ("no_holdings", "local_only")
+
+
+def expand_fund(fund: dict, providers, params: dict, stand_in_ref: FundRef | None = None) -> tuple[dict, pd.DataFrame]:
     """Look through one universe fund. Never raises: an error is returned in the summary.
 
     A configured proxy for any of the fund's ISINs replaces its own holdings.
+    ``stand_in_ref`` (see :mod:`openbasket.stand_in`) is used only when the
+    fund's own holdings are not available; the fund then has status
+    ``stand_in`` and its note says why its own holdings are missing.
     """
     t0 = time.perf_counter()
     catcher = _Warnings()
@@ -415,10 +426,18 @@ def expand_fund(fund: dict, providers, params: dict) -> tuple[dict, pd.DataFrame
         proxy_ref = getattr(providers, "proxy_ref", None)
         if proxy_ref is not None:
             ref = next((r for r in map(proxy_ref, _isins(fund.get("isins")) or [fund["id"]]) if r is not None), None)
-        res = look_through(
-            fund["id"], providers, max_depth=params["max_depth"], min_resolved_pct=params["min_resolved_pct"],
-            ref=ref or fund_ref(fund), look_through_derivatives=params.get("look_through_derivatives", True),
-        )
+        opts = {"max_depth": params["max_depth"], "min_resolved_pct": params["min_resolved_pct"],
+                "look_through_derivatives": params.get("look_through_derivatives", True)}
+        res = look_through(fund["id"], providers, ref=ref or fund_ref(fund), **opts)
+        if stand_in_ref is not None and res.summary.get("status") in STAND_IN_AFTER:
+            own = res.summary
+            alt = look_through(fund["id"], providers, ref=stand_in_ref, **opts)
+            if alt.summary.get("source") is not None:
+                res = alt
+                why = ("its own holdings come from a source the public build may not republish"
+                       if own["status"] == "local_only" else "no source had this fund's own holdings")
+                res.summary.update(status="stand_in", fund_name=_str(fund.get("name")) or own.get("fund_name"),
+                                   note="; ".join(x for x in (res.summary.get("note"), why) if x))
         summary = res.summary
         rows = _fund_rows(fund, res.leaves, summary)
     except Exception as exc:  # one broken fund must not stop the batch
@@ -608,10 +627,14 @@ def run_universe(
     every = int(params.get("log_every", 100))
     # The OpenFIGI cache is rewritten whole, so not after every fund.
     save_every = int(params.get("openfigi_save_every", 500))
+    stand_ins = stand_in.refs(universe, fund_master) if params.get("stand_ins", True) else {}
+    if stand_ins:
+        logger.info("Stand-ins: %d funds have a US fund on the same index to show if their own holdings are missing",
+                    len(stand_ins))
     records = []
     funds = universe.to_dict("records")
     for i, fund in enumerate(funds, 1):
-        rec, rows = expand_fund(fund, providers, lookthrough_params)
+        rec, rows = expand_fund(fund, providers, lookthrough_params, stand_ins.get(fund["id"]))
         records.append(rec)
         writer.add(rows)
         if i % every == 0 or i == len(funds):
@@ -645,6 +668,7 @@ def run_universe(
         "n_failed": int((~ok).sum()),
         "n_no_holdings": int((funds_df["status"] == "no_holdings").sum()),
         "n_local_only": int((funds_df["status"] == "local_only").sum()),
+        "n_stand_in": int((funds_df["status"] == "stand_in").sum()),
         "mode": providers.mode,
         "status": {k: int(v) for k, v in funds_df["status"].value_counts().items()},
         "n_constituent_rows": writer.n_rows,
@@ -744,7 +768,10 @@ def _with_credit(funds: pd.DataFrame, constituents: duckdb.DuckDBPyRelation, sou
                 credits.append(f"Fund listed by {name}; no holdings were available from any source")
             continue
         ids = list(dict.fromkeys([top, *by_fund.get(fid, [])]))
-        credits.append("; ".join((sources.get(s) or {}).get("credit") or s for s in ids if s))
+        credit = "; ".join((sources.get(s) or {}).get("credit") or s for s in ids if s)
+        if status == "stand_in":
+            credit = f"Stand-in, not this fund's own holdings: a US fund on the same index. {credit}"
+        credits.append(credit)
     funds = funds.copy()
     funds["credit"] = credits
     return funds

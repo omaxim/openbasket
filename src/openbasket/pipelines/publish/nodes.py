@@ -316,11 +316,16 @@ def _write_fund_files(funds: dict[str, dict], rel, cap: int, out: Path, full_dat
     With ``public`` each file is checked to name public sources only before it is written.
     A fund with no rows that has an entry in ``aggregates`` (see
     :mod:`openbasket.aggregates`) gets those coarse splits as its breakdowns.
+    A ``stand_in`` fund keeps the breakdowns of its stand-in's rows and gets
+    its own coarse splits, where there are any, as ``breakdowns.own``.
     """
     sizes, n_rows = {}, {}
     for fid, n, rows, sums in _stream_constituents(rel, cap, only if only is not None else set(funds)):
         if fid in funds:
             bd = _finish_breakdowns(sums, funds[fid].get("unresolved_pct"))
+            own = _aggregate_breakdowns(funds[fid], aggregates) if funds[fid].get("status") == "stand_in" else None
+            if own:
+                bd["own"] = own
             doc = fund_document(funds[fid], rows, n, full_data_url, bd)
             if public:
                 _check_document(doc)
@@ -374,8 +379,8 @@ def load_aggregates(path: str | None) -> dict | None:
 
 
 def _aggregate_breakdowns(fund: dict, index: dict | None) -> dict | None:
-    """Breakdowns for a fund without rows, from openbasket's own aggregates of its holdings."""
-    if not index or fund.get("status") != "local_only":
+    """Breakdowns from openbasket's own aggregates of a fund's holdings, for a fund the public build cannot show."""
+    if not index or fund.get("status") not in ("local_only", "stand_in"):
         return None
     entry = next((index[k] for k in [fund.get("id"), *_isins(fund.get("isins"))] if k in index), None)
     if entry is None:

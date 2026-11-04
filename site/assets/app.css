@@ -281,6 +281,7 @@ tfoot td .why { display: block; font-weight: 400; color: var(--ink-2); font-size
 .status-partial, .status-over_100, .status-leveraged { color: #7a5214; border-color: #e1cfa7; background: #f6eedb; }
 .status-no_holdings, .status-no_match, .status-error { color: var(--wine-2); border-color: color-mix(in srgb, var(--wine) 35%, var(--line)); background: color-mix(in srgb, var(--wine) 7%, var(--paper)); }
 .status-local_only { color: var(--paper); border-color: var(--ink); background: var(--ink); }
+.status-stand_in { color: #7a5214; border-color: #e1cfa7; background: #f6eedb; }
 .status-why { color: var(--ink-2); max-width: 62ch; }
 .badge-local { color: var(--paper); background: var(--ink); border-color: var(--ink); }
 .opt-badges { display: inline-flex; flex: none; gap: .3rem; }

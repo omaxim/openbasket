@@ -90,6 +90,7 @@
     leveraged: ["Leveraged", "A leveraged or inverse fund, or lines far from 100%: the weights are market values, not economic exposure."],
     no_holdings: ["No holdings", "The source lists this fund, but no holdings could be read from it."],
     local_only: ["Run locally", "The holdings come from a source whose terms do not allow republishing them. Run openbasket yourself to see them."],
+    stand_in: ["Stand-in", "Not this fund's own holdings: these are the public SEC filing of a US fund named after the same index, shown because this fund's own holdings cannot be published here."],
     error: ["Error", "The build could not read this fund's holdings. The note says what went wrong."],
     no_match: ["Not matched", "No source could be matched to this fund."],
   };
@@ -867,6 +868,13 @@
       chip(fmtInt(f.n_constituents), t.truncated ? `distinct ISINs, ${fmtInt(rows.length)} rows listed here` : "distinct ISINs"));
 
     const notices = [];
+    if (f.status === "stand_in") {
+      notices.push(h("p", { class: "notice notice-warn" }, h("strong", {}, "Stand-in holdings. "),
+        "This fund's own holdings are not available on this site, so these are the holdings of a US fund on the same index, ",
+        `from its SEC Form N-PORT filing as of ${fmtDate(f.as_of)}. A fund that replicates its index physically holds much the same; `,
+        "one that uses a swap holds something else and only returns the index. Weights are percent of the US fund's net assets. ",
+        h("a", { href: `${DOCS}sources/stand-ins.html` }, "How stand-ins are chosen and how close they are"), "."));
+    }
     if (noHoldings) {
       notices.push(h("p", { class: "notice notice-warn" }, h("strong", {}, "No holdings available. "),
         `${sourceLabel(f.source)} lists this fund, but no holdings could be read from it on ${fmtDate(f.as_of)}, so all of its weight is unresolved. `,
@@ -885,7 +893,8 @@
         h("a", { href: `${DOCS}output.html#unresolved-weight` }, "More on unresolved weight"), "."));
     }
 
-    show(h("div", { class: "fund-grid" }, head, panel), chips, notices,
+    const own = f.status === "stand_in" && f.breakdowns && f.breakdowns.own ? renderAggregates({ breakdowns: f.breakdowns.own }) : null;
+    show(h("div", { class: "fund-grid" }, head, panel), chips, notices, own,
       noHoldings ? null : renderDistribution(f, rows, t),
       noHoldings ? null : renderTable(f, rows, fof, t));
     announce(noHoldings

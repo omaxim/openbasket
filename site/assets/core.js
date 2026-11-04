@@ -23,6 +23,7 @@
     series_id: "its SEC series ID",
     issuer_id: "the issuer's own fund ID",
     proxy: "a configured proxy fund that tracks the same index",
+    stand_in: "a stand-in: a US fund whose name names the same index",
     security_master: "the security master: a single security, its own constituent",
     directory: "a fund directory listing",
   };

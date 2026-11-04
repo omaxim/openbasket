@@ -39,6 +39,7 @@ without any configuration.
 | {doc}`VanEck Europe <globalx-vaneck>` (`vaneck`) | Daily full holdings of UCITS ETFs and ETNs, 25 seconds between requests | local_only (issuer site terms) | yes | daily |
 | {doc}`BNP Paribas Easy <bnp-easy>` (`bnp_easy`) | Holdings inventories of LU, IE and FR ETFs and index funds, private-investor segment only | local_only (issuer site terms) | yes | irregular |
 | {doc}`Asia-Pacific issuers <apac>` (`ssga_apac`, `nomura`, `kodex`, `ishares_au`, `betashares`, `vanguard_au`, `trahk`) | Full holdings of ETFs domiciled in Australia, Japan, Korea, Hong Kong and Singapore | local_only (issuer site terms) | yes | daily |
+| {doc}`US stand-ins <stand-ins>` (status `stand_in`) | For a fund with no holdings the public build may show, the N-PORT holdings of a US fund named after the same index: about 400 European index funds (S&P 500, MSCI World, Nasdaq-100, MSCI Europe, MSCI Japan ...) | public (US government data, labelled as not the fund's own) | yes | the US fund's N-PORT filing: two to five months old |
 | {doc}`Stand-ins <exchange-index>` (`index_proxy`) | A physically replicating peer ETF's holdings, for blocked physical funds on the SMI, SLI, S&P 500, Nasdaq-100 and MSCI EMU | local_only (built from issuer files) | yes | daily |
 | {doc}`EDINET Japan <edinet-japan>` | Japanese investment trust reports; client only, nothing parsed | local_only | no (needs a personal API key) | annual and semi-annual reports |
 

@@ -99,7 +99,7 @@ changed: tickers mapped to ISINs and names taken from N-PORT, under
 ## `api/v1/index.json`
 
 Every fund the build covers, as a table, so the search box can load it once
-(gzip on the wire, about 1 MB). In 1.1 each row ends with the fund's `status` (`ok`, `partial`, `over_100`, `leveraged`, `no_holdings`, `local_only`, `error`), so search can mark funds whose holdings need a local run:
+(gzip on the wire, about 1 MB). In 1.1 each row ends with the fund's `status` (`ok`, `partial`, `over_100`, `leveraged`, `no_holdings`, `local_only`, `stand_in`, `error`), so search can mark funds whose holdings need a local run:
 
 ```json
 {
@@ -258,7 +258,8 @@ Source and matching
   `nport_lei` (an N-PORT holding with this ISIN whose issuer LEI is a
   series' LEI); `openfigi_ticker` (the ISIN's US ticker from OpenFIGI, in
   SEC's fund list); `sec_ticker` (a US ticker in SEC's fund list);
-  `proxy` (a configured stand-in, said in `note`); `security_master` (not a
+  `proxy` (a configured stand-in, said in `note`); `stand_in` (a US fund
+  named after the same index, see {doc}`sources/stand-ins`); `security_master` (not a
   fund: a single security, or a fund ISIN no source has holdings for);
   `issuer_list`, `fund_directory`, `fund_registry` or `firds` (a
   `local_only` fund in the public build, named from that list or registry).
@@ -271,7 +272,9 @@ Status
   the like, or the lines are more than 50 points from 100: weights are market
   values, not exposure); `no_holdings`; `local_only` (public build only:
   the only source of the fund's holdings may not be republished, see
-  below). `note` says why in words.
+  below); `stand_in` (the fund's own holdings are not available, so the rows
+  are a US fund's N-PORT holdings on the same index, see below). `note` says
+  why in words.
 
 Funds with no holdings
 : `as_of` is the date the source's fund list was read (for an N-PORT
@@ -301,6 +304,20 @@ Funds with no holdings
 
   (Keys abridged.) A fund in the public build that holds a `local_only`
   fund keeps it as an unexpanded `fund` row with the same note.
+
+## Stand-in funds
+
+A fund with status `stand_in` has rows, but they are not its own: they are
+the SEC Form N-PORT holdings of a US fund whose name names the same index
+(see {doc}`sources/stand-ins`). `source` is `nport`, `as_of` the date of
+that filing, `matched_via` `stand_in`, every row's `via` the US fund, and
+`note` names the US fund, its SEC series, the index and why the fund's own
+holdings are missing. Weights are percent of the US fund's net assets.
+`credit` begins "Stand-in, not this fund's own holdings".
+
+Where a local run has computed the fund's own coarse splits (below),
+`breakdowns.own` carries them in the same shape as a `local_only` fund's
+`breakdowns`; the other `breakdowns` keys describe the stand-in's rows.
 
 ## Coarse splits for `local_only` funds
 

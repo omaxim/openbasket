@@ -137,7 +137,9 @@ class Result:
 #: Plausibility of a result, worst first. ``error`` and ``no_match`` are set by the callers.
 #: ``local_only`` is a fund with no holdings in the public build whose only
 #: holdings source may not be republished (see :mod:`openbasket.sources`).
-STATUSES = ("error", "no_match", "no_holdings", "local_only", "leveraged", "over_100", "partial", "ok")
+#: ``stand_in`` is a fund shown through a US fund on the same index, its own
+#: holdings being unavailable (see :mod:`openbasket.stand_in`); set by the universe batch.
+STATUSES = ("error", "no_match", "no_holdings", "local_only", "stand_in", "leveraged", "over_100", "partial", "ok")
 
 #: Names of leveraged and inverse products.
 #: "Ultra-Short Duration" and the like are bond funds, not leveraged ones.

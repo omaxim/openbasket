@@ -154,7 +154,7 @@ def test_publish_mode_is_validated():
 
 
 def test_full_mode_reads_every_source_and_publishes_its_rows(registry, tmp_path, monkeypatch):
-    monkeypatch.setattr(ingest.ishares, "products", lambda site: pd.DataFrame(columns=PRODUCT_COLUMNS))
+    monkeypatch.setattr(ingest.spdr, "products", lambda region: pd.DataFrame(columns=PRODUCT_COLUMNS))
     pp = _publish_params(tmp_path, "full")
     products = ingest.download_issuer_products(["uk"], [], {}, pp)
     assert set(products["issuer"]) == {"fakeco", "openco"}
@@ -188,7 +188,6 @@ def _cached_issuer_list(tmp_path) -> str:
 
 
 def test_public_mode_never_asks_a_local_only_source_and_lists_its_funds(registry, tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(ingest.ishares, "products", registry)
     monkeypatch.setattr(ingest.spdr, "products", registry)
     pp = _publish_params(tmp_path, "public", issuer_lists=[_cached_issuer_list(tmp_path)])
     products = ingest.download_issuer_products(["uk", "us"], ["us", "emea"], {}, pp)
@@ -244,7 +243,7 @@ def test_public_mode_never_asks_a_local_only_source_and_lists_its_funds(registry
 
 
 def test_public_publish_refuses_a_full_run(registry, tmp_path, monkeypatch):
-    monkeypatch.setattr(ingest.ishares, "products", lambda site: pd.DataFrame(columns=PRODUCT_COLUMNS))
+    monkeypatch.setattr(ingest.spdr, "products", lambda region: pd.DataFrame(columns=PRODUCT_COLUMNS))
     full = _publish_params(tmp_path, "full")
     universe, funds, rel, run = _run(ingest.download_issuer_products([], [], {}, full), tmp_path, full)
     public = _publish_params(tmp_path, "public")

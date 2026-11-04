@@ -451,13 +451,18 @@ def test_extraetf_route_is_gone():
     assert redistribution("ubs_reports") == "local_only" and fr.REDISTRIBUTION == "local_only"
 
 
-def test_public_build_disables_the_report_adapters():
+def test_public_build_never_uses_the_report_adapters():
     import yaml
 
-    conf = yaml.safe_load((Path(__file__).parents[1] / "conf" / "public" / "parameters.yml").read_text())
+    from openbasket.sources import redistribution
+    from openbasket.sources.issuers import safe_discover
+
+    safe_discover()
     names = {"ubs_reports", "invesco_reports", "pictet_reports", "wisdomtree_reports", "fidelity_reports",
              "franklin_reports", "lombardodier_reports"}
-    assert names <= set(conf["issuers"]["disabled"])
+    # The public build skips every local_only adapter by its class, so these never run there.
+    assert {redistribution(n) for n in names} == {"local_only"}
+    conf = yaml.safe_load((Path(__file__).parents[1] / "conf" / "public" / "parameters.yml").read_text())
     assert conf["lookthrough"]["name_matching"] is False
 
 

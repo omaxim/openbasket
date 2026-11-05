@@ -35,3 +35,11 @@ def test_public_build_lists_funds_from_the_identity_file(tmp_path):
     rows = local_only_identity(["ishares"], {}, cfg)
     assert rows["isin"].tolist() == ["IE00B5BMR087"] and rows["fund_name"].tolist() == ["iShares Core S&P 500 UCITS ETF"]
     assert local_only_identity(["amundi"], {}, cfg).empty  # only the withheld issuers' funds
+
+
+def test_registry_rows_with_empty_adapter_or_name(tmp_path):
+    reg = tmp_path / "fund_directory.parquet"
+    pd.DataFrame({"isin": ["IE00B5BMR087", "LU0274208692"], "name": ["iShares Core S&P 500", None],
+                  "adapter": ["ishares", None]}).to_parquet(reg)
+    rows = fi.identity_rows({"ishares": {"title": "iShares", "homepage": "https://www.ishares.com"}}, {"fund_directory": str(reg)})
+    assert rows["isin"].tolist() == ["IE00B5BMR087"]

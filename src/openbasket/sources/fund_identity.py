@@ -154,10 +154,10 @@ def identity_rows(
             continue
         logger.info("Fund identity: %d ISINs in %s (%s)", len(reg), rid, path)
         for r in reg.itertuples(index=False):
-            adapter = (r.adapter or "").lower()
+            adapter = (_text(r.adapter) or "").lower()  # NaN in a parquet column is not None
             if adapter in local_only:
                 covered.setdefault(r.isin, adapter)
-            if r.name and r.isin not in names:
+            if _text(r.name) and r.isin not in names:
                 names[r.isin] = (r.name, rid, r.url, r.as_of)
     for path in issuer_lists or []:
         lst = read_issuer_list(path)

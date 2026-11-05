@@ -9,7 +9,9 @@ from openbasket.pipelines.publish.nodes import _aggregate_breakdowns, load_aggre
 
 
 def _rows(*rows):
-    return pd.DataFrame(rows, columns=["fund_id", "weight_pct", "sector", "country", "asset_class"])
+    df = pd.DataFrame(rows, columns=["fund_id", "weight_pct", "sector", "country", "asset_class"])
+    df.insert(1, "constituent_isin", [f"XS{i:09d}0" for i in range(len(df))])
+    return df
 
 
 @pytest.mark.parametrize("label, asset_class, sector", [
@@ -194,3 +196,17 @@ def test_share_commits_only_the_splits_file(tmp_path, monkeypatch):
         "shared": False, "reason": "aggregates.share.enabled is false"}
     with pytest.raises(aggregates.AggregatesError):
         aggregates.share({**doc, "funds": {"IE00B5BMR087": {"rows": [["US0378331005", 7]]}}}, cfg, str(path))
+
+
+def test_build_counts_the_unresolved_row_once():
+    funds = pd.DataFrame([{"id": "AU0000005886", "isins": ["AU0000005886"], "source": "vanguard_au",
+                           "as_of": "2026-09-30", "unresolved_pct": 60.0, "n_constituents": 1}])
+    rel = connection().from_df(pd.DataFrame([
+        ("AU0000005886", "US0378331005", 40.0, "Information Technology", "US", "equity"),
+        ("AU0000005886", None, 60.0, None, None, "unresolved"),  # the fund's own unresolved-weight row
+    ], columns=["fund_id", "constituent_isin", "weight_pct", "sector", "country", "asset_class"]))
+    doc = aggregates.build(funds, rel, {"computed_at": "2026-11-04T00:00:00Z", "keep_previous": False})
+    f = doc["funds"]["AU0000005886"]
+    for d in aggregates.DIMENSIONS:
+        assert sum(v for _, v in f[d]) == 100, (d, f[d])
+    assert f["asset_class"] == [["Equity", 40], ["Unresolved", 60]]

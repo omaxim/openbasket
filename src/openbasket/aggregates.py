@@ -164,9 +164,10 @@ def build(universe_funds: pd.DataFrame, universe_constituents: duckdb.DuckDBPyRe
     sector = "coalesce(nullif(trim(r.sector), ''), m.sector)" if has_map else "r.sector"
     join = "left join _agg_sectors m on r.constituent_isin = m.isin" if has_map else ""
     try:
+        # Rows with an ISIN only: the fund's own unresolved row is added as Unresolved by fund_aggregates.
         rows = con.execute(
             f"select r.fund_id, r.weight_pct, {sector} as sector, r.country, r.asset_class from _agg_rel r {join} "
-            "where r.fund_id in (select unnest(?))", [funds["id"].tolist()]
+            "where r.fund_id in (select unnest(?)) and r.constituent_isin is not null", [funds["id"].tolist()]
         ).df()
     finally:
         con.unregister("_agg_rel")

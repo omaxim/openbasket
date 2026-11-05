@@ -1,0 +1,8 @@
+reg_japan:
+  # EDINET filing lists (one request per day, kept), code lists and the parsed
+  # latest annual report of every listed Japanese investment trust. The
+  # "edinet" holdings source reads the same folder (lookthrough.edinet.root).
+  # Needs EDINET_API_KEY in .env.
+  root: data/01_raw/reg_japan
+  # Days of filing lists to keep: an annual report is at most a year old.
+  days: 400

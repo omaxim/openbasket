@@ -41,7 +41,7 @@ without any configuration.
 | {doc}`Asia-Pacific issuers <apac>` (`ssga_apac`, `nomura`, `kodex`, `ishares_au`, `betashares`, `vanguard_au`, `trahk`) | Full holdings of ETFs domiciled in Australia, Japan, Korea, Hong Kong and Singapore | local_only (issuer site terms) | yes | daily |
 | {doc}`US stand-ins <stand-ins>` (status `stand_in`) | For a fund with no holdings the public build may show, the N-PORT holdings of a US fund named after the same index: about 400 European index funds (S&P 500, MSCI World, Nasdaq-100, MSCI Europe, MSCI Japan ...) | public (US government data, labelled as not the fund's own) | yes | the US fund's N-PORT filing: two to five months old |
 | {doc}`Stand-ins <exchange-index>` (`index_proxy`) | A physically replicating peer ETF's holdings, for blocked physical funds on the SMI, SLI, S&P 500, Nasdaq-100 and MSCI EMU | local_only (built from issuer files) | yes | daily |
-| {doc}`EDINET Japan <edinet-japan>` | Japanese investment trust reports; client only, nothing parsed | public (PDL1.0, with credit) | no (needs a personal API key) | annual and semi-annual reports |
+| {doc}`EDINET Japan <edinet-japan>` (`edinet_japan`) | Holdings of Tokyo-listed investment trusts (ETFs) from their annual securities reports, through mother funds; Japanese share names matched to ISINs | public (PDL1.0, with credit) | yes, with an EDINET API key (`EDINET_API_KEY`) | annual: positions up to a year old |
 
 ## Reference sources (no holdings)
 

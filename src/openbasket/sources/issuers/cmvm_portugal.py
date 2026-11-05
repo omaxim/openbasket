@@ -49,6 +49,11 @@ def _findb():
     return _indexes[("findb", path)]
 
 
+def name_indexes() -> tuple[dict | None, dict | None]:
+    """The exact-name indexes share lines are matched with: N-PORT security master, FinanceDatabase."""
+    return _master(), _findb()
+
+
 def products() -> pd.DataFrame:
     s = store()
     if not s.is_built():

@@ -59,7 +59,7 @@ from .sources.tickerinside_source import fetch_fund
 
 logger = logging.getLogger(__name__)
 
-SOURCES = ("issuer", "tickerinside", "nport", "top_holdings")
+SOURCES = ("issuer", "tickerinside", "nport", "edinet", "top_holdings")
 
 SERIES_RE = re.compile(r"^S\d{9}$")
 NPORT_DATASETS_URL = "https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets"
@@ -99,6 +99,7 @@ class DataProviders:
         mode: str = FULL_MODE,
         run_locally_url: str | None = None,
         name_matching: dict | None = None,
+        edinet: dict | None = None,
     ):
         """``stop_at_pct`` stops reading further sources once one resolves that
         much, which spares a universe run the network calls whose answer
@@ -114,7 +115,9 @@ class DataProviders:
         its funds' notes point to. ``name_matching`` turns on matching adapter lines without
         identifiers to ISINs by name: ``{"security_terms": path, "firds": path,
         "figi_cache": path, "peers": {fund ISIN: [peer ISINs]}, "index_peers": bool}``;
-        the matcher is built on first use."""
+        the matcher is built on first use. ``edinet`` (``{"root": path, "findb_equities": path,
+        "figi_cache": path}``) is the store of Japanese listed funds' EDINET reports
+        (:mod:`openbasket.sources.edinet_reports`) read by the ``edinet`` source."""
         unknown = set(source_order) - set(SOURCES)
         if unknown:
             raise ValueError(f"Unknown sources {sorted(unknown)}; choose from {SOURCES}")
@@ -148,6 +151,10 @@ class DataProviders:
         self.issuer_cache_dir = issuer_cache_dir
         self.name_matching = dict(name_matching) if name_matching else None
         self._matcher: NameMatcher | None = None
+        self.edinet = dict(edinet) if edinet else None
+        self._edinet_store = None
+        self._edinet_index: dict[str, str] | None = None
+        self._edinet_codes: dict[str, str] = {}
         self._peer_cache: dict[str, list] = {}
         self._index_peer: dict[str, str] | None = None
         self.cusip_isin = {c: v for c, v in (cusip_isin or {}).items() if not is_placeholder_cusip(c)}
@@ -404,6 +411,8 @@ class DataProviders:
             elif source == "nport" and ref.series_id:
                 h = self._from_nport(ref.series_id)
                 status = "ok" if h is not None else "empty"
+            elif source == "edinet" and self.edinet is not None and ref.issuer_id:
+                h, status = self._from_edinet(ref)
             # "top_holdings" has no client yet and is skipped.
             if status is not None:
                 self._status.setdefault(ref.key, {})[source] = "empty" if status == "ok" and not (h and h.lines) else status
@@ -581,6 +590,61 @@ class DataProviders:
             self._match_names(lines, records, p)
         return Holdings(adapter.name, got.as_of, lines, source_ref=f"{adapter.title} holdings {got.url}",
                         source_url=self._product_page(iid) or got.url)
+
+    # -- EDINET (Japan) --------------------------------------------------------
+
+    def _edinet_code(self, p: dict) -> str | None:
+        """The Tokyo code of a Japanese fund: from OpenFIGI's listing of its ISIN, else its list's ticker."""
+        isin = str(p.get("isin") or "")
+        if not isin.startswith("JP"):
+            return None
+        if self.figi is not None:
+            try:
+                for row in self.figi.map("ID_ISIN", [isin]).get(isin, []):
+                    if row.get("exchCode") in ("JP", "JT") and row.get("ticker"):
+                        return str(row["ticker"])[:4]
+            except Exception as exc:  # the list's ticker may still do
+                logger.warning("OpenFIGI lookup for %s failed: %s", isin, exc)
+        t = p.get("ticker")
+        return str(t).strip()[:4].upper() if isinstance(t, str) and re.fullmatch(r"\w{4}", t.strip()) else None
+
+    def _from_edinet(self, ref: FundRef) -> tuple[Holdings | None, str | None]:
+        """A Japanese listed fund's holdings from its latest EDINET securities report."""
+        from .sources import edinet_reports
+
+        p = self.issuer_by_id.get(ref.issuer_id)
+        code = self._edinet_code(p) if p is not None else None
+        if code is None:
+            return None, None
+        if self._edinet_store is None:
+            self._edinet_store = edinet_reports.EdinetStore(self.edinet["root"])
+            try:
+                comp = self._edinet_store.company_codes(refresh_after_days=10**6)
+                self._edinet_codes = edinet_reports.code_isins(self.edinet.get("findb_equities"), self.edinet.get("figi_cache"))
+                self._edinet_index = edinet_reports.name_index(comp, self._edinet_codes)
+            except Exception as exc:  # without the index, Japanese names stay unresolved
+                logger.warning("EDINET name index not built: %s: %s", type(exc).__name__, exc)
+                self._edinet_index, self._edinet_codes = {}, {}
+        from .sources.issuers import cmvm_portugal as names  # the same exact-name indexes CMVM uses
+
+        master, findb = names.name_indexes()
+        got = self._edinet_store.holdings(code, self._edinet_index, master, findb, self._edinet_codes)
+        if got is None:
+            return None, "not_listed"
+        records = got["lines"].astype(object).where(got["lines"].notna(), None).to_dict("records")
+        lines = [
+            Line(weight_pct=float(r["weight_pct"] or 0.0), isin=r.get("isin"), name=r.get("name"),
+                 asset_class=r.get("asset_class"), isin_source=r.get("isin_source"),
+                 fund_hint=r.get("asset_class") == "fund" or " ETF" in str(r.get("name") or "").upper(),
+                 country="JP" if r.get("currency") == "日本円" and r.get("asset_class") == "equity" else None)
+            for r in records
+        ]
+        if self.name_matching is not None:
+            self._match_names(lines, records, p)
+        for note in got["notes"]:
+            logger.info("EDINET %s: %s", code, note)
+        return (Holdings(edinet_reports.SOURCE, got["as_of"], lines, source_ref=f"EDINET {got['doc_id']}",
+                         source_url=got["url"]), "ok")
 
     # -- names to ISINs -------------------------------------------------------
 

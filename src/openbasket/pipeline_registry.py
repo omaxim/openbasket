@@ -34,6 +34,7 @@ SOFT_NODES = {
     "findb_fetch": None,
     "refresh_cnmv_iic": None,
     "refresh_cmvm_carteiras": None,
+    "refresh_edinet_reports": None,
     "refresh_fi_fondinnehav": None,
     "refresh_sfc_colombia": None,
     "swiss_public_registry": None,

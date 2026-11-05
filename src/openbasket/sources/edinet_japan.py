@@ -1,12 +1,13 @@
-"""Japan: locating investment trust reports on EDINET (API v2). Client only.
+"""Japan: EDINET API v2 client for investment trust reports.
 
 Japanese investment trusts file their securities reports (有価証券報告書,
 document type ``120``) and semi-annual reports (半期報告書, ``160``) with
-the Financial Services Agency's EDINET. The reports' financial statements end
-with a schedule of securities held (有価証券明細表), which is a full list of
-the fund's holdings at the period end.
+the Financial Services Agency's EDINET. The annual report's financial
+statements end with a schedule of securities held (有価証券明細表), a full list
+of the fund's holdings at the period end; :mod:`openbasket.sources.edinet_reports`
+reads it.
 
-**Gated.** EDINET API v2 needs a free *Subscription-Key*, issued after
+**Key.** EDINET API v2 needs a free *Subscription-Key*, issued after
 registering an account on the EDINET API site (e-mail and phone number). This
 project does not register on anyone's behalf: set ``EDINET_API_KEY`` yourself
 to use this client. Without it every call raises :class:`EdinetKeyMissing`
@@ -16,13 +17,9 @@ Endpoints
     ``GET https://api.edinet-fsa.go.jp/api/v2/documents.json?date=YYYY-MM-DD&type=2``
     lists every document filed that day with ``docID``, ``fundCode``,
     ``docTypeCode``, ``periodEnd``, ``filerName`` and ``docDescription``.
-    ``GET https://api.edinet-fsa.go.jp/api/v2/documents/<docID>?type=5`` is
-    the document's XBRL as CSV (``type=1`` the XBRL ZIP, ``type=2`` the PDF).
-
-What is not built: parsing the securities schedule out of the report (it is
-tagged as a text block, so it needs real documents to develop against), and
-matching a fund ISIN (``JP90C...``) to its EDINET ``fundCode``, for which no
-open mapping was found. No issuer adapter is registered for this source.
+    ``GET https://api.edinet-fsa.go.jp/api/v2/documents/<docID>?type=1`` is
+    the document's XBRL ZIP with its inline-XBRL HTML (``type=5`` the XBRL as
+    CSV, ``type=2`` the PDF).
 """
 
 from __future__ import annotations
@@ -92,6 +89,17 @@ def fund_reports(day: date | str) -> pd.DataFrame:
     r = http.get(LIST_URL, params={"date": str(day), "type": 2, "Subscription-Key": _key()})
     _check(r)
     return parse_document_list(r.json())
+
+
+def fund_documents(day: date | str) -> list[dict]:
+    """Every fund document filed on ``day``, as EDINET lists it (any document type)."""
+    r = http.get(LIST_URL, params={"date": str(day), "type": 2, "Subscription-Key": _key()})
+    _check(r)
+    payload = r.json()
+    status = str((payload.get("metadata") or {}).get("status", payload.get("StatusCode", "")))
+    if status not in ("200", ""):
+        raise RuntimeError(f"EDINET list failed: {payload.get('metadata') or payload}")
+    return [d for d in payload.get("results") or [] if d.get("fundCode")]
 
 
 def download_document(doc_id: str, kind: int = 5) -> bytes:

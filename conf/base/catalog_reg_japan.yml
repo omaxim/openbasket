@@ -1,0 +1,8 @@
+# reg_japan --------------------------------------------------------------------
+reg_japan_manifest:
+  type: pandas.CSVDataset
+  filepath: data/01_raw/reg_japan/manifest.csv
+
+reg_japan_reports:
+  type: pandas.ParquetDataset
+  filepath: data/01_raw/reg_japan/reports_list.parquet

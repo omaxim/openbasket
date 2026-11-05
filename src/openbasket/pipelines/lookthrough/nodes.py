@@ -121,6 +121,7 @@ def make_providers(
         max_issuer_leis=int(params.get("max_issuer_leis_per_isin", 3)),
         mode=publish_mode(pp), run_locally_url=pp.get("run_locally_url"),
         name_matching=name_matching_options(params),
+        edinet=params.get("edinet"),
         **kwargs,
     )
 

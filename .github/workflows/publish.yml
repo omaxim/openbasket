@@ -106,10 +106,19 @@ jobs:
           key: openfigi-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: openfigi-
 
+      - name: Restore EDINET store
+        # Filing lists (one request per day) and parsed reports, so a run only reads new days.
+        uses: actions/cache/restore@v6
+        with:
+          path: data/01_raw/reg_japan
+          key: edinet-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: edinet-
+
       - name: Write .env
         env:
           OPENFIGI_API_KEY: ${{ secrets.OPENFIGI_API_KEY }}
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          EDINET_API_KEY: ${{ secrets.EDINET_API_KEY }}
         run: |
           if [ -z "$SEC_USER_AGENT" ]; then
             echo "::error::The SEC_USER_AGENT secret is not set; SEC refuses requests without one."
@@ -117,7 +126,8 @@ jobs:
           fi
           [ -n "$OPENFIGI_API_KEY" ] || echo "::warning::The OPENFIGI_API_KEY secret is not set; OpenFIGI will run at the anonymous rate limit."
           umask 077
-          printf 'OPENFIGI_API_KEY=%s\nSEC_USER_AGENT=%s\n' "$OPENFIGI_API_KEY" "$SEC_USER_AGENT" > .env
+          [ -n "$EDINET_API_KEY" ] || echo "::warning::The EDINET_API_KEY secret is not set; Japanese listed funds get no EDINET holdings."
+          printf 'OPENFIGI_API_KEY=%s\nSEC_USER_AGENT=%s\nEDINET_API_KEY=%s\n' "$OPENFIGI_API_KEY" "$SEC_USER_AGENT" "$EDINET_API_KEY" > .env
 
       - name: Ingest
         run: kedro run --env public --pipeline=ingest
@@ -139,6 +149,18 @@ jobs:
         # Company ISIN -> GICS sector from FinanceDatabase (MIT), for rows whose source gives none.
         # Before the universe, which also reads its company names to give CMVM share lines an ISIN.
         run: kedro run --env public --pipeline=sectors
+
+      - name: Japan (EDINET)
+        # Japanese listed funds' annual securities reports (PDL1.0), read by the universe's "edinet" source.
+        # Soft: without the key or with EDINET down, the run goes on with the stored reports.
+        run: kedro run --env public --pipeline=reg_japan
+
+      - name: Save EDINET store
+        if: always() && hashFiles('data/01_raw/reg_japan/reports.parquet') != ''
+        uses: actions/cache/save@v6
+        with:
+          path: data/01_raw/reg_japan
+          key: edinet-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Universe
         run: |

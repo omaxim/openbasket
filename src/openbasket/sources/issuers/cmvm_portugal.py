@@ -11,6 +11,8 @@ Share lines are matched to ISINs with the security master
 
 from __future__ import annotations
 
+import logging
+
 import os
 
 import pandas as pd
@@ -18,6 +20,8 @@ import pandas as pd
 from .. import cmvm_portugal as cmvm
 from .. import name_isin
 from . import PRODUCT_COLUMNS, FetchContext, IssuerAdapter, IssuerHoldings, register
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_ROOT = "data/01_raw/reg_portugal"
 DEFAULT_FINDB = "data/01_raw/financedatabase/equities.parquet"
@@ -56,8 +60,12 @@ def name_indexes() -> tuple[dict | None, dict | None]:
 
 def products() -> pd.DataFrame:
     s = store()
-    if not s.is_built():
-        s.refresh()
+    try:
+        s.refresh()  # one list request when the newest quarter is stored already
+    except Exception as exc:  # a slow or down site: the stored quarter stands in
+        if not s.is_built():
+            raise
+        logger.warning("CMVM refresh failed, using the stored quarter: %s: %s", type(exc).__name__, exc)
     df = s.products()
     return df[PRODUCT_COLUMNS + EXTRA_PRODUCT_COLUMNS] if len(df) else pd.DataFrame(columns=PRODUCT_COLUMNS)
 

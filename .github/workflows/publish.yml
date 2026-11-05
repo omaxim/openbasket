@@ -106,6 +106,17 @@ jobs:
           key: openfigi-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: openfigi-
 
+      - name: Restore regulator stores
+        # CNMV and CMVM publish quarterly; a stored quarter stands in when their site is slow or down,
+        # so one timeout does not drop a country from the release.
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            data/01_raw/reg_spain
+            data/01_raw/reg_portugal
+          key: regulators-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: regulators-
+
       - name: Restore EDINET store
         # Filing lists (one request per day) and parsed reports, so a run only reads new days.
         uses: actions/cache/restore@v6
@@ -138,6 +149,15 @@ jobs:
         with:
           path: data/01_raw/nport
           key: ${{ steps.nport-cache.outputs.cache-primary-key }}
+
+      - name: Save regulator stores
+        if: always() && (hashFiles('data/01_raw/reg_spain/**') != '' || hashFiles('data/01_raw/reg_portugal/**') != '')
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            data/01_raw/reg_spain
+            data/01_raw/reg_portugal
+          key: regulators-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Security master
         run: kedro run --env public --pipeline=security_master

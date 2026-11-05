@@ -44,7 +44,7 @@ def test_select_skips_adapters_off_by_default_unless_named():
         ("cnmv_spain", "public"),
         ("ishares", "local_only"),
         ("spdr", "local_only"),
-        ("edinet_japan", "local_only"),
+        ("edinet_japan", "public"),
         ("issuers", "local_only"),
         ("no_such_source", "local_only"),
         ("../etc", "local_only"),

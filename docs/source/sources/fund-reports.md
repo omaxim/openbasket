@@ -22,9 +22,10 @@ schedule parser) and `openbasket.sources.issuers.statutory_reports`
 (the registered adapters). The reports name holdings without ISINs; see
 [Matching names to ISINs](#matching-names-to-isins).
 
-**Redistribution: `local_only`.** The reports are the issuers' documents,
-read from third-party copies whose terms were not reviewed for
-republication, so the adapters run only when you run openbasket yourself.
+**Redistribution: `local_only`.** The reports are the issuers' documents.
+Their terms were reviewed on 2026-11-05 (see [Terms and credit](#terms-and-credit)):
+every issuer whose reports are read bars republishing them without written
+permission, so the adapters run only when you run openbasket yourself.
 They are enabled by default for local runs and listed in `issuers.disabled`
 in `conf/public`, so the public build never runs them.
 
@@ -315,10 +316,33 @@ was read from. AVL Investmentfonds' `robots.txt` allows `/fds/` and
 This client identifies itself as `openbasket`, which the
 rules for all agents allow; whether to rely on AVL at all is the call of the
 person running openbasket, which is one reason these adapters are
-`local_only`. WisdomTree's document service has no `robots.txt`. Neither
-publishes terms for automated use, and they were not reviewed. The client
+`local_only`. WisdomTree's document service has no `robots.txt`. AVL's
+legal notice and imprint say nothing about reuse; the reports on it are the
+issuers' documents. The client
 keeps to one request per second per host, reads one report per umbrella and
 period, and keeps only the extracted text.
+
+Reviewed on 2026-11-05, the website terms of every issuer whose reports are
+read bar reproducing or republishing their content without prior written
+permission, with no exception for non-commercial use:
+
+| Issuer | Terms page | What it says |
+|---|---|---|
+| UBS | `ubs.com/global/en/legal.html` | no use beyond personal viewing, "whether for commercial purposes or otherwise" |
+| Invesco | `invesco.com/emea/en/insights/footer/site-policies.html` | no reproduction or transmission; personal, informational use only |
+| Pictet | `am.pictet.com/be/en/terms-and-conditions` | no reproduction, transmission or public or commercial use |
+| WisdomTree | `wisdomtree.com/gb/terms-and-conditions` | no copying, publishing or distributing without written consent |
+| Fidelity International | `fidelityinternational.com/important-legal-information` | must not be reproduced or circulated without permission |
+| Franklin Templeton | `franklintempleton.lu/footer/important-legal-information` | not to be copied, reproduced or redistributed |
+| Lombard Odier | `am.lombardodier.com/professional/disclaimers/legal-information.html` | no reproduction or public use without written permission |
+| DWS (Xtrackers) | `etf.dws.com/en-lu/footer/terms-of-use/` | publication or distribution needs prior written consent |
+| Legal & General | `am.landg.com/terms-and-conditions/` | no publishing, re-distributing or reproducing |
+| SIX Swiss Exchange | `six-group.com/en/services/legal/terms-and-conditions/terms-of-use.html` | not to be reproduced or reused in any way |
+| Migros Bank | `migrosbank.ch` Nutzungsbedingungen (2021) | any republication strictly prohibited without consent |
+| Vontobel | `vontobel.com/en-ch/legal-notice/terms-and-conditions-of-use/` | no reproduction without prior written consent |
+
+None of these pages mentions automated access. The reports stay
+`local_only` unless an issuer gives permission.
 
 Not used:
 

@@ -222,7 +222,7 @@ copy already in the local cache was used.
 - **Duplicate rule.** Once an edition has proved to be a duplicate, a share
   class whose sub-fund is in an umbrella not yet read for that edition is not
   fetched. Delete `report_duplicates.json` in the cache to force it.
-- **Terms.** AVL's terms of use were not reviewed for automated use; the
+- **Terms.** AVL's legal notice says nothing about reuse or automated use; the
   client keeps to one request a second, reads `/fds/` and `/sitemaps/` only,
   and keeps the files under `data/` (gitignored). The reports are the
   issuers' copyright: never published from the public build.

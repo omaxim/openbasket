@@ -35,8 +35,12 @@ import pandas as pd
 from .. import http
 
 #: Redistribution class (see :func:`openbasket.sources.redistribution`):
-#: Terms not yet reviewed for republication; treated as local only until they are.
-REDISTRIBUTION = "local_only"
+#: EDINET's terms of use (revised 2025-04-25) let anyone reuse its content
+#: under the Public Data License 1.0 (PDL1.0), crediting EDINET and saying who
+#: edited it; scraping is barred, the API is the allowed route.
+REDISTRIBUTION = "public"
+CREDIT = "出典：EDINET (Financial Services Agency, Japan), https://disclosure2.edinet-fsa.go.jp/, PDL1.0; extracted by openbasket"
+LICENCE = "Public Data License 1.0 (https://www.digital.go.jp/resources/open_data/public_data_license_v1.0)"
 
 API = "https://api.edinet-fsa.go.jp/api/v2"
 LIST_URL = API + "/documents.json"

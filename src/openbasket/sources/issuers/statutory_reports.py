@@ -79,7 +79,8 @@ CREDIT = (
 )
 LICENCE = (
     "Statutory UCITS/KAG reports are public documents the fund must publish. They are read from public, "
-    "ungated copies (AVL Investmentfonds{extra}) whose terms were not reviewed for automated use; one report "
+    "ungated copies (AVL Investmentfonds{extra}); the issuers' site terms bar republishing without written "
+    "permission (reviewed 2026-11-05), so they are read locally only; one report "
     "per umbrella and period is downloaded and only its text is kept."
 )
 

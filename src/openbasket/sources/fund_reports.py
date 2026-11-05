@@ -29,10 +29,12 @@ fundinfo's document API (``robots.txt`` disallows ``/document/``),
 swissfunddata.ch (needs an investor-type disclaimer click), and the issuers'
 own sites behind Akamai, Cloudflare, AWS WAF or Fastly challenges.
 
-Redistribution: ``local_only``. The reports are the issuers' documents, read
-from third-party copies whose terms were not reviewed for republication
-(AVL's ``robots.txt`` shuts out AI crawlers by name, which openbasket is not,
-but whether to rely on it is the user's call). The adapters run in local
+Redistribution: ``local_only``. The reports are the issuers' documents, and
+every issuer whose reports are read bars republishing its site content
+without written permission (reviewed 2026-11-05, see
+``docs/source/sources/fund-reports.md``). AVL's ``robots.txt`` shuts out AI
+crawlers by name, which openbasket is not, but whether to rely on it is the
+user's call. The adapters run in local
 runs and never in the public build.
 """
 

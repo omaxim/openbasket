@@ -1,7 +1,11 @@
 # EDINET Japan: investment trust reports (client only)
 
-Module `openbasket.sources.edinet_japan`. Redistribution class `local_only`
-(not classified for republication). No issuer adapter is registered.
+Module `openbasket.sources.edinet_japan`. Redistribution class `public`:
+EDINET's terms of use (利用規約, revised 25 April 2025) let anyone reuse its
+content under the Public Data License 1.0 (PDL1.0), crediting EDINET and
+saying who edited what was taken from it. The same terms bar scraping the
+EDINET sites; the API is the allowed route, and this client uses only the
+API. No issuer adapter is registered.
 
 **Status: not usable as a holdings source yet: the API needs a free key that
 each user registers for, and the reports are not parsed.** Checked on

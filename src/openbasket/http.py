@@ -36,11 +36,19 @@ def _wait(url: str) -> None:
 
 
 def request(method: str, url: str, *, retries: int = 4, timeout: int = 60, headers: dict | None = None, **kw) -> requests.Response:
-    """Send a request, waiting for the host's slot and retrying 429/5xx with backoff."""
+    """Send a request, waiting for the host's slot and retrying timeouts, dropped connections and 429/5xx with backoff."""
     hdrs = {"User-Agent": USER_AGENT, **(headers or {})}
     for attempt in range(retries):
         _wait(url)
-        r = requests.request(method, url, headers=hdrs, timeout=timeout, **kw)
+        try:
+            r = requests.request(method, url, headers=hdrs, timeout=timeout, **kw)
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            if attempt == retries - 1:
+                raise
+            delay = 2 ** (attempt + 2)
+            logger.info("%s %s -> %s, retrying in %.0fs", method, url, type(exc).__name__, delay)
+            time.sleep(delay)
+            continue
         if r.status_code in (429, 500, 502, 503, 504) and attempt < retries - 1:
             delay = float(r.headers.get("Retry-After") or 2 ** (attempt + 1))
             logger.info("%s %s -> %s, retrying in %.0fs", method, url, r.status_code, delay)

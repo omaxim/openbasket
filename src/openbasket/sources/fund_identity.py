@@ -25,6 +25,12 @@ issuer's home page.
 A US fund's ticker is not taken from the issuer either: :func:`add_us_tickers`
 asks OpenFIGI (a public source) for the US listing of its ISIN, so the
 universe can still tie the fund to its N-PORT series by ticker.
+
+The scheduled public build has none of those local files. A local full run
+therefore writes the same identity rows to ``public_aggregates/fund_identity.csv``
+(:func:`write_identity_file`), committed with the coarse splits, and the
+public build reads them back (:func:`read_identity_file`). The file is
+checked by :func:`validate_identity` both ways: identity columns only.
 """
 
 from __future__ import annotations
@@ -209,3 +215,49 @@ def add_us_tickers(rows: pd.DataFrame, figi) -> pd.DataFrame:
     rows["ticker_source"] = rows["ticker"].map(lambda t: "openfigi" if isinstance(t, str) else None)
     logger.info("Fund identity: US tickers for %d of %d US ISINs from OpenFIGI", len(tickers), len(us))
     return rows
+
+
+#: Where the name of an identity row may come from.
+IDENTITY_SOURCES = (*DEFAULT_REGISTRIES, ISSUER_LIST)
+
+
+class IdentityError(ValueError):
+    """An identity file holds something other than fund identities."""
+
+
+def validate_identity(df: pd.DataFrame) -> pd.DataFrame:
+    """The rows if they are identity rows only (:data:`IDENTITY_COLUMNS`, valid ISINs, known name sources); else raise."""
+    if list(df.columns) != IDENTITY_COLUMNS:
+        raise IdentityError(f"identity file columns {list(df.columns)} are not {IDENTITY_COLUMNS}")
+    bad = df[~df["isin"].map(is_valid_isin)]
+    if len(bad):
+        raise IdentityError(f"{len(bad)} rows without a valid ISIN, e.g. {bad['isin'].iloc[0]!r}")
+    src = set(df["identity_source"].dropna()) - set(IDENTITY_SOURCES)
+    if src:
+        raise IdentityError(f"unknown name sources {sorted(src)}")
+    if df["isin"].duplicated().any():
+        raise IdentityError("an ISIN appears twice")
+    return df
+
+
+def write_identity_file(rows: pd.DataFrame, path: str | Path) -> pd.DataFrame:
+    """Write identity rows, sorted by ISIN, for the public build; returns what was written."""
+    out = validate_identity(rows[IDENTITY_COLUMNS].drop_duplicates("isin").sort_values("isin").reset_index(drop=True))
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    out.to_csv(p, index=False)
+    return out
+
+
+def read_identity_file(path: str | Path, issuers: set[str] | None = None) -> pd.DataFrame:
+    """Identity rows from a file a local run wrote; only those of ``issuers`` when given. Empty if absent."""
+    p = Path(path)
+    if not p.is_file():
+        return pd.DataFrame(columns=IDENTITY_COLUMNS)
+    df = pd.read_csv(p, dtype=str, keep_default_na=False).replace({"": None})
+    df["identity_only"] = True
+    df = validate_identity(df[IDENTITY_COLUMNS] if set(IDENTITY_COLUMNS) <= set(df.columns) else df)
+    if issuers is not None:
+        df = df[df["issuer"].isin(issuers)]
+    logger.info("Fund identity: %d funds from %s", len(df), p)
+    return df.reset_index(drop=True)

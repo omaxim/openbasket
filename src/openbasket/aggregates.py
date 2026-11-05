@@ -290,8 +290,12 @@ def _git(args: list[str], cwd: Path, env: dict | None = None, input_text: str | 
                           check=True, timeout=300).stdout.strip()
 
 
-def share(doc: dict, params: dict, path: str) -> dict:
-    """Commit the aggregates file at ``path``, and only that file, to ``params.share.branch`` of the repository.
+def share(doc: dict, params: dict, path: str, extra_paths: list[str] | None = None) -> dict:
+    """Commit the aggregates file at ``path`` (and ``extra_paths``), and only those, to ``params.share.branch``.
+
+    ``extra_paths`` are other public files a local run writes next to it (the
+    fund identity file, see :func:`openbasket.sources.fund_identity.write_identity_file`),
+    checked by the caller; a path that does not exist is left out.
 
     Off unless ``params.share.enabled``. The file is checked with
     :func:`validate` first, so only coarse splits can be committed. The
@@ -307,16 +311,19 @@ def share(doc: dict, params: dict, path: str) -> dict:
     validate(doc)
     file = Path(path).resolve()
     repo = Path(_git(["rev-parse", "--show-toplevel"], file.parent))
-    rel_path = file.relative_to(repo).as_posix()
+    files = [file] + [Path(x).resolve() for x in extra_paths or [] if Path(x).is_file()]
+    rels = [f.relative_to(repo).as_posix() for f in files]
+    rel_path = ", ".join(rels)
     remote, branch = cfg.get("remote", "origin"), cfg.get("branch", "main")
     for attempt in (1, 2):
         _git(["fetch", "-q", remote, branch], repo)
         base = _git(["rev-parse", "FETCH_HEAD"], repo)
-        blob = _git(["hash-object", "-w", "--", str(file)], repo)
         with tempfile.TemporaryDirectory() as tmp:
             env = {**os.environ, "GIT_INDEX_FILE": str(Path(tmp) / "index")}
             _git(["read-tree", base], repo, env)
-            _git(["update-index", "--add", "--cacheinfo", f"100644,{blob},{rel_path}"], repo, env)
+            for f, rel in zip(files, rels):
+                blob = _git(["hash-object", "-w", "--", str(f)], repo)
+                _git(["update-index", "--add", "--cacheinfo", f"100644,{blob},{rel}"], repo, env)
             tree = _git(["write-tree"], repo, env)
         if tree == _git(["rev-parse", f"{base}^{{tree}}"], repo):
             return {"shared": False, "reason": f"{rel_path} is unchanged on {remote}/{branch}", "base": base}
@@ -324,8 +331,8 @@ def share(doc: dict, params: dict, path: str) -> dict:
             n_funds=doc.get("n_funds"), computed_at=doc.get("computed_at"))
         commit = _git(["commit-tree", tree, "-p", base, "-F", "-"], repo, input_text=message + "\n")
         changed = _git(["diff-tree", "--no-commit-id", "--name-only", "-r", base, commit], repo).splitlines()
-        if changed != [rel_path]:  # cannot happen with one update-index above; refuse rather than push anything else
-            raise AggregatesError(f"the commit would change {changed}, not only {rel_path}")
+        if not changed or not set(changed) <= set(rels):  # refuse rather than push anything else
+            raise AggregatesError(f"the commit would change {changed}, not only {rels}")
         if not cfg.get("push", False):
             return {"shared": False, "reason": "aggregates.share.push is false", "commit": commit, "base": base}
         try:

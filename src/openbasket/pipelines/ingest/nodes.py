@@ -128,8 +128,9 @@ def download_issuer_products(
 def local_only_identity(withheld: list[str], adapters: dict, publish_params: dict) -> pd.DataFrame:
     """Identity rows (ISIN, name, issuer) for the funds of the ``withheld`` issuers, from local files only.
 
-    ``publish.identity.registries`` names the open registry files and
-    ``publish.identity.issuer_lists`` the cached issuer fund lists; see
+    ``publish.identity.registries`` names the open registry files,
+    ``publish.identity.issuer_lists`` the cached issuer fund lists and
+    ``publish.identity.identity_files`` identity files a local run wrote; see
     :func:`openbasket.sources.fund_identity.identity_rows`. With
     ``publish.identity.openfigi_cache`` set, US funds get their US ticker
     from OpenFIGI.
@@ -143,6 +144,11 @@ def local_only_identity(withheld: list[str], adapters: dict, publish_params: dic
         info[name] = {"title": a.title if a else src.get("listed_by") or name,
                       "homepage": a.homepage if a else src.get("url")}
     rows = fund_identity.identity_rows(info, cfg.get("registries"), cfg.get("issuer_lists") or [])
+    # The public build has no registries or issuer lists of its own: a local run's identity file stands in.
+    for path in cfg.get("identity_files") or []:
+        extra = fund_identity.read_identity_file(path, set(withheld))
+        extra = extra[~extra["isin"].isin(rows["isin"])] if len(rows) else extra
+        rows = pd.concat([rows, extra], ignore_index=True) if len(rows) else extra
     if cfg.get("openfigi_cache") and len(rows):
         from ...sources.openfigi import OpenFIGI
 
@@ -174,3 +180,13 @@ def parquet_safe(df: pd.DataFrame) -> pd.DataFrame:
     if "portfolio_id" in df:
         df["portfolio_id"] = df["portfolio_id"].map(lambda v: None if v is None or (isinstance(v, float) and pd.isna(v)) else str(v))
     return df
+
+
+def local_only_issuers(issuers_params: dict | None = None) -> tuple[list[str], dict]:
+    """The issuers whose holdings the public build withholds, and every adapter by name."""
+    from ...pipelines.lookthrough.nodes import issuer_adapters
+
+    adapters = issuer_adapters(issuers_params)
+    withheld = [n for n in _BUILTIN if redistribution(n) != issuers.PUBLIC]
+    withheld += [n for n, a in adapters.items() if a.redistribution != issuers.PUBLIC]
+    return withheld, adapters

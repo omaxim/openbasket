@@ -141,6 +141,13 @@ publish:
     # US funds get their US ticker from OpenFIGI (not the issuer), so they
     # still meet their N-PORT series by ticker. null skips it.
     openfigi_cache: data/03_primary/openfigi_cache.parquet
+    # Identity files written by a local run (see identity_file), read when the
+    # registries and issuer lists above are not on this machine.
+    identity_files: [public_aggregates/fund_identity.csv]
+  # Where a local full run writes the identity (ISIN, name, issuer) of every
+  # local_only issuer's fund, committed with the coarse splits (pipeline
+  # "aggregates") so the public build can list those funds.
+  identity_file: public_aggregates/fund_identity.csv
   # The scheduled build passes the tag: --params=publish.release_tag=2026-11.
   # null uses the current UTC year and month.
   release_tag: null

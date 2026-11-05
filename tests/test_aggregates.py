@@ -210,3 +210,32 @@ def test_build_counts_the_unresolved_row_once():
     for d in aggregates.DIMENSIONS:
         assert sum(v for _, v in f[d]) == 100, (d, f[d])
     assert f["asset_class"] == [["Equity", 40], ["Unresolved", 60]]
+
+
+def test_share_commits_the_identity_file_with_the_splits(tmp_path, monkeypatch):
+    from openbasket.sources import fund_identity
+
+    remote, work = tmp_path / "remote.git", tmp_path / "work"
+    _git(tmp_path, "init", "-q", "--bare", "-b", "main", str(remote))
+    _git(tmp_path, "clone", "-q", str(remote), str(work))
+    (work / "README.md").write_text("hi\n")
+    _git(work, "add", "README.md")
+    _git(work, "commit", "-q", "-m", "init")
+    _git(work, "push", "-q", "origin", "HEAD:main")
+    for k, v in {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.org", "GIT_COMMITTER_NAME": "t",
+                 "GIT_COMMITTER_EMAIL": "t@example.org", "HOME": str(tmp_path)}.items():
+        monkeypatch.setenv(k, v)
+    doc = {"version": 1, "computed_at": "2026-11-04T00:00:00Z", "method": "m", "n_funds": 1,
+           "funds": {"IE00B5BMR087": _entry("IE00B5BMR087", "2026-11-04T00:00:00Z")}}
+    (work / "public_aggregates").mkdir()
+    path = work / "public_aggregates" / "aggregates.json"
+    path.write_text(json.dumps(doc))
+    ident = work / "public_aggregates" / "fund_identity.csv"
+    fund_identity.write_identity_file(pd.DataFrame([{
+        "issuer": "ishares", "site": "isin", "portfolio_id": "IE00B5BMR087", "isin": "IE00B5BMR087",
+        "fund_name": "iShares Core S&P 500 UCITS ETF", "ticker": None, "ticker_source": None,
+        "identity_source": "fund_registry", "identity_url": None, "identity_only": True, "listed_on": "2026-11-04"}]), ident)
+    got = aggregates.share(doc, {"share": {"enabled": True, "push": True}}, str(path), [str(ident)])
+    assert got["shared"]
+    assert sorted(_git(remote, "show", "--name-only", "--format=", "main").split()) == [
+        "public_aggregates/aggregates.json", "public_aggregates/fund_identity.csv"]
